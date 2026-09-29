@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────
+#  기본 시나리오: 인증 + 프롬프트 가드 + LLM 프록시
+#  값은 .env 의 DECK_* 변수로 채워진다 (decK 템플릿).
+#  select_tags 때문에 decK 는 kong-poc 태그가 붙은 것만 관리한다.
+#  Kong Manager 에서 직접 만든 설정은 sync 해도 지워지지 않는다.
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+# 모든 요청을 파일로 기록한다 (감사 추적용). 본문은 ai-proxy 의 log_payloads: false 로 제외된다.
+plugins:
+  - name: file-log
+    config:
+      path: /var/log/kong-poc/audit.log
+      reopen: true
+      # LLM 이 돌려준 응답 헤더는 기록하지 않는다 — 업스트림 내부 정보(조직·프로젝트 ID·비용)가
+      # 담기고 로그 용량의 약 75% 를 차지한다. 상태·지연·토큰·모델·캐시 결과는 다른 필드에 남는다.
+      custom_fields_by_lua:
+        response.headers: "return nil"
+
+consumers:
+  - username: poc-client
+    keyauth_credentials:
+      - key: ${{ env "DECK_CLIENT_KEY" }}
+
+services:
+  - name: llm-chat
+    url: ${{ env "DECK_CHAT_URL" }}
+    routes:
+      - name: llm-chat
+        paths:
+          - /v1/chat/completions
+        protocols: [http, https]      # 미지정 시 https 만 허용되어 HTTP 요청이 426 이 된다
+    plugins:
+      - name: key-auth
+        config:
+          key_names: [apikey]
+          hide_credentials: true
+
+      # 정규식 가드 — 한국 개인정보 형식과 프롬프트 주입을 요청 단계에서 차단
+      - name: ai-prompt-guard
+        config:
+          match_all_roles: false
+          deny_patterns:
+            - '\d{6}\s*[-–]\s*[1-8]\d{6}'                                    # 주민·외국인등록번호
+            - '(?:[MSRODmsrod]\d{8}|\d{2}\s*-\s*\d{2}\s*-\s*\d{6}\s*-\s*\d{2})' # 여권·운전면허
+            - '(?:01[016789]|0(?:2|[3-6][1-5]))\s*[-–.]\s*\d{3,4}\s*[-–.]\s*\d{4}' # 전화번호
+            - '(?:\d{4}\s*[-–]\s*){3}\d{4}'                                  # 카드번호
+            - '\b\d{3}\s*-\s*\d{2}\s*-\s*\d{5}\b'                            # 사업자등록번호
+            - '(?:계좌|예금주|account)\D{0,10}\d{2,3}[-\s]\d{2,6}[-\s]\d{2,7}'  # 계좌번호
+            - '\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b'                               # 이메일
+            - '(?i)(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instruction|prompt|rule)'
+            - '(?i)(?:시스템\s*프롬프트|system\s+prompt).{0,20}(?:알려|보여|출력|공개|reveal|show|print)'
+            - 'sk-[A-Za-z0-9_\-]{20,}'                                       # API 키
+
+      - name: ai-proxy
+        config:
+          route_type: llm/v1/chat
+          auth:
+            header_name: Authorization
+            header_value: "{vault://env/llm-auth-header}"
+          logging:
+            log_statistics: true
+            log_payloads: false        # 본문은 기록하지 않음 (개인정보 보호)
+          model:
+            provider: openai
+            name: ${{ env "DECK_CHAT_MODEL" }}
+            options:
+              upstream_url: ${{ env "DECK_CHAT_URL" }}

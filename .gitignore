@@ -1,0 +1,17 @@
+# 시크릿 — 절대 커밋 금지
+.env
+secrets/*
+!secrets/.gitkeep
+
+# 반입 번들·데이터
+images/*.tar
+images/*.tar.gz
+data/
+*.bundle.tar.gz
+
+# 한국어 PII 가드 소스는 별도 전달 (addons/pii-guard/README.md 참조)
+addons/pii-guard/app.py
+
+# 점검·백업 산출물
+.kong-poc-probe/
+conf/backup/
