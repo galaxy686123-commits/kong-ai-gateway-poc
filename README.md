@@ -39,6 +39,9 @@ git clone https://github.com/galaxy686123-commits/kong-ai-gateway-poc.git && cd 
 도커 실행 방식, 외부 접속 범위, 바인드 마운트·포트 연결 여부를 한 번에 확인하고
 어느 경로로 진행할지 알려 줍니다. **결과 전체를 담당자에게 전달해 주세요.**
 
+파드에 **docker 가 없으면** 대신 `bash kong-check.sh` 를 실행합니다. 관리자 권한(sudo)·apt 저장소·
+외부 접속·저장 공간을 보고 Kong·PostgreSQL 을 파드에 직접 설치할 수 있는지 확인합니다.
+
 ### 2. 설정
 
 ```bash
