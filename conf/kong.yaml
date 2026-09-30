@@ -13,7 +13,7 @@ _info:
 plugins:
   - name: file-log
     config:
-      path: /var/log/kong-poc/audit.log
+      path: ${{ env "DECK_AUDIT_LOG" }}
       reopen: true
       # LLM 이 돌려준 응답 헤더는 기록하지 않는다 — 업스트림 내부 정보(조직·프로젝트 ID·비용)가
       # 담기고 로그 용량의 약 75% 를 차지한다. 상태·지연·토큰·모델·캐시 결과는 다른 필드에 남는다.

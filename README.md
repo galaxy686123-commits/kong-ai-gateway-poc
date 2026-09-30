@@ -1,7 +1,12 @@
 # Kong AI Gateway PoC
 
-Kong AI Gateway 를 **컨테이너 실행이 가능한 개발환경 하나**에 올려 검증하기 위한 저장소입니다.
-Kubernetes 권한이 없어도, 파드 안에서 도커를 쓸 수 있으면 됩니다.
+Kong AI Gateway 를 **개발환경 하나**에 올려 검증하기 위한 저장소입니다. Kubernetes 권한이 없어도 됩니다.
+설치 방식은 두 가지입니다.
+
+| 방식 | 조건 | 스크립트 |
+|---|---|---|
+| 컨테이너 | 파드 안에서 docker 를 쓸 수 있음 | `./start.sh` 등 루트의 스크립트 |
+| **직접 설치** | docker 없음 · sudo 와 apt(Ubuntu 22.04) 사용 가능 | `native/*.sh` — 아래 [직접 설치](#직접-설치-docker-없는-파드) |
 
 ```
                  ┌─────────────────────────────────────────────┐
@@ -61,6 +66,59 @@ cp <라이선스> secrets/license.json   # 필수. 없거나 만료되면 설치
 `conf/` 의 설정을 적용합니다. 이후에는 여러 번 실행해도 안전합니다.
 
 ---
+
+## 직접 설치 (docker 없는 파드)
+
+docker 가 없는 주피터 개발환경 파드에 PostgreSQL·pgvector·Kong·decK 를 **패키지로 직접 설치**하고
+세 프로그램(PostgreSQL · Kong · PII 가드)을 파드 안의 프로세스로 실행합니다.
+Kong Manager 는 주피터의 `jupyter-server-proxy` 를 거쳐 브라우저로 엽니다.
+
+| 필요한 것 | 확인 |
+|---|---|
+| Ubuntu 22.04 · sudo(비밀번호 없이) · Ubuntu 기본 apt 저장소 · GitHub | `bash kong-check.sh` |
+| 설치 파일 저장소 `kong-ai-gateway-poc-pkgs` (비공개 — Kong 설치 파일·decK·PII 가드) | 담당자에게 읽기 토큰 요청 |
+| Kong Enterprise 라이선스 | `secrets/license.json` |
+
+```bash
+cd /project/work/Kong                     # 파드를 다시 만들어도 남는 경로
+git clone https://github.com/galaxy686123-commits/kong-ai-gateway-poc.git
+git clone https://github.com/galaxy686123-commits/kong-ai-gateway-poc-pkgs.git   # 토큰 입력
+cd kong-ai-gateway-poc
+cp .env.example .env                      # 값 채우기 — JUPYTER_URL 도 (브라우저 주소창의 https://… 부분)
+cat > secrets/license.json                # 라이선스 붙여넣고 Ctrl+D
+bash native/start.sh                      # 설치 → DB → Kong → 설정 적용 (처음 약 2분)
+bash native/verify.sh                     # 환경·설치·실행·기능·로그 전체 점검 (약 15초)
+```
+
+Kong Manager: **`<JUPYTER_URL>/proxy/absolute/8002/`** — `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`
+
+| 스크립트 | 하는 일 |
+|---|---|
+| `native/start.sh` | 기동. 여러 번 실행해도 안전. 프로그램이 없으면(파드 재생성) 먼저 다시 설치 |
+| `native/verify.sh` | 전체 점검 — 결과를 화면 한 장으로 |
+| `native/status.sh` | 프로세스·라우트 상태 |
+| `native/apply-config.sh` | `conf/` 변경 반영 (decK) |
+| `native/logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
+| `native/stop.sh` | 정지 (데이터는 남김) |
+| `native/install.sh` | 프로그램만 설치 (start.sh 가 필요할 때 부름) |
+
+- **데이터**: DB·요청 로그·pgvector 빌드 결과는 `data/`(`DATA_DIR`)에 둡니다. 파드를 다시 만들면 apt 로 깐
+  프로그램은 사라지지만 `native/start.sh` 한 번이면 다시 설치하고 기존 데이터로 이어서 뜹니다 (약 1분).
+- **포트**: 프록시 `0.0.0.0:8000`, Admin API `127.0.0.1:8001`, Manager `127.0.0.1:8002` — Admin API 와
+  Manager 는 파드 밖에 열지 않고 주피터 프록시로만 들어옵니다. PII 가드는 `18080`.
+- DB 를 NFS 에 만들 수 없으면(소유자·권한 변경 불가) 로컬 디스크로 대체하고 알려 줍니다.
+
+### 검증 (고객 파드와 같은 조건으로 재현)
+
+Ubuntu 22.04 · uid 3000 · sudo · JupyterLab + jupyter-server-proxy · 4 vCPU / 8 GB · 8080 사용 중 ·
+nodesource apt 저장소 실패 · Kong/Release/PGDG/OpenAI 도메인 차단 상태에서:
+
+| 항목 | 결과 |
+|---|---|
+| 처음 설치·기동 | 1분 49초 — 설정 22개 적용 |
+| `native/verify.sh` | OK 20 · 불가 0 (라이선스 만료 임박 주의 1) |
+| 브라우저 | 주피터 프록시 경유 Manager 로그인 · 설정 생성/수정/삭제(201/200/204) |
+| 파드 재생성(강제 종료) | 자동 재설치 후 기존 DB·설정·로그로 기동 — 1분 47초(첫 회, pgvector 빌드) · 1분 1초(이후) |
 
 ## 시나리오
 

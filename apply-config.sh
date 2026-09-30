@@ -12,6 +12,9 @@ else note "PII 가드 미실행 — PII 시나리오 제외"; fi
 
 say "설정 반영: ${files[*]}"
 build kong-poc/deck build/deck.Dockerfile --build-arg DECK_IMAGE="$DECK_IMAGE"
+# 설정 파일 속 주소는 실행 방식마다 다르다 — 컨테이너 방식에서 보이는 값 (직접 설치는 native/apply-config.sh)
+export DECK_AUDIT_LOG=/var/log/kong-poc/audit.log DECK_PG_HOST="$C_PG" DECK_PG_PORT=5432 \
+       DECK_PII_URL="http://$C_PII:8080/check" DECK_KONG_LOOPBACK=http://127.0.0.1:8000
 DECK_VARS=(); while IFS='=' read -r k _; do DECK_VARS+=(-e "$k"); done < <(env | grep '^DECK_')
 docker run --rm --network "$NET" "${DECK_VARS[@]}" kong-poc/deck gateway sync \
   --kong-addr "http://$C_KONG:8001" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" "${files[@]}"

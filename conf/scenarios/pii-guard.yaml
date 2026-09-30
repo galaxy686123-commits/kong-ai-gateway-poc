@@ -30,7 +30,7 @@ services:
           allow_masking: true
           timeout: 10000
           request:
-            url: http://kong-poc-pii:8080/check
+            url: ${{ env "DECK_PII_URL" }}
             headers:
               Content-Type: application/json
             body:
