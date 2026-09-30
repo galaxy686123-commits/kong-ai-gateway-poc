@@ -12,11 +12,11 @@ run() {  # 출력은 install.log 에 남기고, 실패하면 끝부분을 보여
   "$@" >> "$LOG" 2>&1 || { tail -15 "$LOG" | sed 's/^/  | /'; die "실패: $*  (전체 로그 $LOG)"; }
 }
 
-# 설치 파일 저장소 확인 (Kong 은 Kong 패키지 저장소가 막혀 있어 GitHub 비공개 저장소로 받는다)
+# 설치 파일 확인 (Kong 패키지 저장소·GitHub Release 가 막힌 파드를 위해 저장소에 포함해 git 으로 받는다)
 [ -f "$PKGS_DIR/$KONG_DEB" ] || die "Kong 설치 파일이 없습니다: $PKGS_DIR/$KONG_DEB
-  설치 파일 저장소를 이 폴더 옆에 clone 하세요 (README 「직접 설치」 참조)."
+  git pull 로 저장소를 최신으로 받으세요 (pkgs/ 폴더)."
 if [ -f "$PKGS_DIR/SHA256SUMS" ]; then
-  (cd "$PKGS_DIR" && sha256sum -c --quiet SHA256SUMS) || die "설치 파일이 손상되었습니다. 저장소를 다시 받으세요."
+  (cd "$PKGS_DIR" && sha256sum -c --quiet SHA256SUMS) || die "설치 파일이 손상되었습니다 (pkgs/). git pull 로 다시 받으세요."
 fi
 
 apt_ready=0

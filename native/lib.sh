@@ -13,12 +13,13 @@ DECK_VER=1.65.1
 DECK_TGZ=deck_${DECK_VER}_linux_amd64.tar.gz
 
 native_env() {  # load_env 다음에 부른다
-  : "${PKGS_DIR:=$(cd "$ROOT/.." && pwd)/kong-ai-gateway-poc-pkgs}"  # 설치 파일 저장소를 clone 한 곳
+  : "${PKGS_DIR:=$ROOT/pkgs}"               # 설치 파일 (Kong .deb · decK) — 저장소에 포함
   : "${DATA_DIR:=$ROOT/data}"                # DB·로그 — 파드를 다시 만들어도 남는 곳에 둔다
   : "${RUN_DIR:=$HOME/.kong-poc}"            # 실행 중에만 필요한 파일(소켓·pid) — 로컬 디스크
   : "${PG_PORT:=5432}" "${PII_PORT:=18080}" "${KONG_WORKERS:=2}"
   LOGS=$DATA_DIR/logs
   KONG_PREFIX=$RUN_DIR/kong
+  PII_APP=$ROOT/addons/pii-guard/app.py
   mkdir -p "$LOGS" "$RUN_DIR"; chmod 700 "$RUN_DIR"
 
   # 주피터를 거쳐 Kong Manager 를 연다 (jupyter-server-proxy).

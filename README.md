@@ -76,21 +76,33 @@ Kong Manager 는 주피터의 `jupyter-server-proxy` 를 거쳐 브라우저로 
 | 필요한 것 | 확인 |
 |---|---|
 | Ubuntu 22.04 · sudo(비밀번호 없이) · Ubuntu 기본 apt 저장소 · GitHub | `bash kong-check.sh` |
-| 설치 파일 저장소 `kong-ai-gateway-poc-pkgs` (비공개 — Kong 설치 파일·decK·PII 가드) | 담당자에게 읽기 토큰 요청 |
 | Kong Enterprise 라이선스 | `secrets/license.json` |
+
+설치 파일은 저장소의 `pkgs/` 에 들어 있어 `git clone` 만으로 받습니다 (Kong 패키지 저장소·GitHub Release 가
+막힌 파드용). Kong 3.15.0.6 `.deb`(Ubuntu 22.04, 75.5 MB) · decK 1.65.1 — `pkgs/SHA256SUMS` 로 설치 전에 대조합니다.
 
 ```bash
 cd /project/work/Kong                     # 파드를 다시 만들어도 남는 경로
 git clone https://github.com/galaxy686123-commits/kong-ai-gateway-poc.git
-git clone https://github.com/galaxy686123-commits/kong-ai-gateway-poc-pkgs.git   # 토큰 입력
 cd kong-ai-gateway-poc
-cp .env.example .env                      # 값 채우기 — JUPYTER_URL 도 (브라우저 주소창의 https://… 부분)
-cat > secrets/license.json                # 라이선스 붙여넣고 Ctrl+D
+cp .env.example env.txt                   # 주피터에서 env.txt 를 열어 값 채우기 (.env 는 숨김 파일이라 바로 못 엶)
+mv env.txt .env
+cat > secrets/license.json                # 라이선스 붙여넣고 Ctrl+D (또는 주피터로 secrets/ 에 업로드)
 bash native/start.sh                      # 설치 → DB → Kong → 설정 적용 (처음 약 2분)
 bash native/verify.sh                     # 환경·설치·실행·기능·로그 전체 점검 (약 15초)
 ```
 
 Kong Manager: **`<JUPYTER_URL>/proxy/absolute/8002/`** — `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`
+
+**LLM 은 나중에 붙여도 됩니다.** `.env` 의 `DECK_CHAT_URL` 을 예시 주소 그대로 두면 설치·차단·Manager 는 모두
+동작하고, `verify.sh` 는 LLM 항목만 [주의]로 표시합니다. 붙일 때는 `.env` 의 `DECK_CHAT_URL`·`DECK_CHAT_MODEL`·
+`LLM_AUTH_HEADER`(임베딩은 `DECK_EMBED_*`)를 채운 뒤:
+
+```bash
+bash native/stop.sh && bash native/start.sh     # 인증 헤더는 Kong 이 기동할 때 읽는다
+bash native/apply-config.sh                     # 주소·모델 반영 (임베딩을 채웠으면 시맨틱 캐시도 추가)
+bash native/verify.sh
+```
 
 | 스크립트 | 하는 일 |
 |---|---|

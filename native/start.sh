@@ -72,11 +72,11 @@ else
 fi
 
 say "4/6 한국어 PII 가드"
-if [ ! -f "$PKGS_DIR/pii-guard/app.py" ]; then note "소스가 없어 건너뜀 ($PKGS_DIR/pii-guard/app.py)"
+if [ ! -f "$PII_APP" ]; then note "소스가 없어 건너뜀 ($PII_APP)"
 elif pii_running; then note "이미 실행 중 (포트 $PII_PORT)"
 else
   PORT=$PII_PORT LLM_ENABLED="${PII_LLM_ENABLED:-false}" LLM_URL="${PII_LLM_URL:-}" LLM_MODEL="${PII_LLM_MODEL:-}" \
-    setsid nohup python3 "$PKGS_DIR/pii-guard/app.py" >> "$LOGS/pii-guard.log" 2>&1 < /dev/null &
+    setsid nohup python3 "$PII_APP" >> "$LOGS/pii-guard.log" 2>&1 < /dev/null &
   echo $! > "$RUN_DIR/pii.pid"
   for _ in $(seq 1 20); do curl -s -m 2 "http://127.0.0.1:$PII_PORT/healthz" >/dev/null && break; sleep 0.5; done
   pii_running && curl -s -m 2 "http://127.0.0.1:$PII_PORT/healthz" >/dev/null \

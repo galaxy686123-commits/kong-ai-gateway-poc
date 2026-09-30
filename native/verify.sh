@@ -31,10 +31,10 @@ repo=$(grep -hsE '^[[:space:]]*deb[[:space:]]' /etc/apt/sources.list | awk '{for
 c1=$(code "${repo:-http://archive.ubuntu.com/ubuntu/}"); c2=$(code https://github.com)
 if [ "$c1" != 000 ] && [ "$c2" != 000 ]; then ok "외부 접속: Ubuntu 저장소 · GitHub"
 else bad "외부 접속: Ubuntu 저장소 $([ "$c1" = 000 ] && echo 안됨 || echo 됨) · GitHub $([ "$c2" = 000 ] && echo 안됨 || echo 됨) — 재설치에 필요"; fi
-miss=""; for f in "$KONG_DEB" "$DECK_TGZ" pii-guard/app.py; do [ -f "$PKGS_DIR/$f" ] || miss="$miss $f"; done
-if [ -n "$miss" ]; then bad "설치 파일 저장소($PKGS_DIR)에 없음:$miss"
-elif [ -f "$PKGS_DIR/SHA256SUMS" ] && ! (cd "$PKGS_DIR" && sha256sum -c --quiet SHA256SUMS >/dev/null 2>&1); then bad "설치 파일 체크섬 불일치 — 저장소를 다시 받으세요"
-else ok "설치 파일 저장소 (Kong · decK · PII 가드, 체크섬 일치)"; fi
+miss=""; for f in "$PKGS_DIR/$KONG_DEB" "$PKGS_DIR/$DECK_TGZ" "$PII_APP"; do [ -f "$f" ] || miss="$miss ${f#"$ROOT"/}"; done
+if [ -n "$miss" ]; then bad "설치 파일 없음:$miss — git pull"
+elif [ -f "$PKGS_DIR/SHA256SUMS" ] && ! (cd "$PKGS_DIR" && sha256sum -c --quiet SHA256SUMS >/dev/null 2>&1); then bad "설치 파일 체크섬 불일치 — git pull 로 다시 받으세요"
+else ok "설치 파일 (Kong · decK 체크섬 일치 · PII 가드)"; fi
 exp=$(tr -d ' \n' < "$LICENSE_FILE" 2>/dev/null | grep -o '"license_expiration_date":"[0-9-]*"' | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | head -1)
 if [ -z "$exp" ]; then bad "라이선스 없음 ($LICENSE_FILE) — 없으면 설정 변경이 전부 막힘"
 else
@@ -68,7 +68,7 @@ if pg_ready; then
   else bad "PostgreSQL — DB [${dbs:-없음}] vector [${vec:-없음}]$auth"; fi
 else bad "PostgreSQL 멈춤 — native/start.sh"; fi
 if pii_running && [ "$(code "http://127.0.0.1:$PII_PORT/healthz" 3)" = 200 ]; then ok "PII 가드 127.0.0.1:$PII_PORT"
-elif [ -f "$PKGS_DIR/pii-guard/app.py" ]; then bad "PII 가드 멈춤 — native/start.sh"
+elif [ -f "$PII_APP" ]; then bad "PII 가드 멈춤 — native/start.sh"
 else warn "PII 가드 소스 없음 — PII 시나리오 제외"; fi
 if kong_up; then
   c_no=$(code "http://127.0.0.1:$ADMIN_PORT/services")
@@ -115,8 +115,11 @@ if kong_up; then
     [ "$c" = 400 ] && ok "한국어 PII 가드 → 400 차단 ($(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(str(d.get("error",{}).get("message") or d.get("message") or "")[:40])' "$RUN_DIR/gw.out" 2>/dev/null))" \
       || bad "한국어 PII 가드 → $c (400 이어야 함)"
   fi
-  read -r c t <<<"$(gw /v1/chat/completions "한 단어로만 답하세요. 대한민국의 수도는?")"
-  if [ "$c" = 200 ]; then
+  if [[ "$DECK_CHAT_URL" = *example* ]]; then c=skip
+  else read -r c t <<<"$(gw /v1/chat/completions "한 단어로만 답하세요. 대한민국의 수도는?")"; fi
+  if [ "$c" = skip ]; then
+    warn "LLM 아직 연결 안 함 (.env 의 DECK_CHAT_URL 이 예시 주소) — 붙인 뒤 native/apply-config.sh"
+  elif [ "$c" = 200 ]; then
     ans=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["choices"][0]["message"]["content"].strip()[:30])' "$RUN_DIR/gw.out" 2>/dev/null)
     ok "LLM 응답 → 200 (${t}초) \"${ans}\""
   else
