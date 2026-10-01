@@ -66,7 +66,7 @@ DECK_TGZ=deck_${DECK_VER}_linux_amd64.tar.gz
 
 native_env() {  # load_env 다음에 부른다
   : "${PKGS_DIR:=$ROOT/pkgs}"               # 설치 파일 (Kong .deb · decK) — 저장소에 포함
-  : "${DATA_DIR:=$ROOT/data}"                # DB·로그 — 파드를 다시 만들어도 남는 곳에 둔다
+  : "${DATA_DIR:=$ROOT/data}"                # DB·로그 — 파드를 다시 만들어도 남는 곳 (bash set-data-dir.sh <유지 폴더>)
   : "${RUN_DIR:=$HOME/.kong-poc}"            # 실행 중에만 필요한 파일(소켓·pid) — 로컬 디스크
   : "${PG_PORT:=5432}" "${PII_PORT:=18080}" "${MOCK_PORT:=18090}" "${STATUS_PORT:=8100}" "${KONG_WORKERS:=2}"
   LOGS=$DATA_DIR/logs
@@ -74,6 +74,7 @@ native_env() {  # load_env 다음에 부른다
   PII_APP=$ROOT/addons/pii-guard/app.py
   MOCK_APP=$ROOT/addons/mock/app.py
   mkdir -p "$LOGS" "$RUN_DIR"; chmod 700 "$RUN_DIR"
+  persist_sync
 
   # 주피터를 거쳐 Kong Manager 를 연다 (jupyter-server-proxy).
   #   Manager 화면: <주피터>/proxy/absolute/8002  — 경로를 그대로 넘기므로 Kong 이 같은 경로로 서비스
@@ -90,6 +91,19 @@ native_env() {  # load_env 다음에 부른다
     MANAGER_URL=${MANAGER_URL%/}; ADMIN_API_URL=${ADMIN_API_URL%/}
     case "$MANAGER_URL" in http*://localhost*|http*://127.0.0.1*) ;; *) BIND=0.0.0.0 ;; esac
   fi
+}
+
+# ── 유지 폴더 (DATA_DIR 을 저장소 밖 — 쿠버네티스 PV 같은 곳 — 으로 지정했을 때) ──────────
+# DB·로그·설정 백업은 그곳에 바로 쓴다. .env·라이선스는 저장소에서 그대로 고쳐 쓰고, 스크립트를 돌릴 때마다
+# 유지 폴더에 사본을 남긴다 → 파드를 다시 만들어 저장소를 새로 받으면 bash set-data-dir.sh 가 사본에서 되살린다.
+persist_sync() {
+  [ "$DATA_DIR" = "$ROOT/data" ] && return 0
+  local lic="$ROOT/secrets/license.json" keep="$DATA_DIR/secrets/license.json"
+  { mkdir -p "$DATA_DIR/secrets" && chmod 700 "$DATA_DIR/secrets" \
+      && { cmp -s .env "$DATA_DIR/.env" || { cp .env "$DATA_DIR/.env" && chmod 600 "$DATA_DIR/.env"; }; } \
+      && if [ -f "$lic" ]; then cmp -s "$lic" "$keep" || cp "$lic" "$keep"
+         elif [ -f "$keep" ]; then mkdir -p "$ROOT/secrets" && cp "$keep" "$lic"; fi   # 새로 받은 저장소에 되살림
+  } 2>/dev/null || note "⚠ 유지 폴더($DATA_DIR)에 .env·라이선스 사본을 쓰지 못했습니다"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -201,7 +215,9 @@ kong_env() {
   if [ -n "${DECK_OTEL_ENDPOINT:-}" ]; then                          # 3-2 분산 추적을 켰을 때만
     export KONG_TRACING_INSTRUMENTATIONS=all KONG_TRACING_SAMPLING_RATE=1.0
   else unset KONG_TRACING_INSTRUMENTATIONS KONG_TRACING_SAMPLING_RATE; fi
-  export KONG_PROXY_ERROR_LOG="$LOGS/kong-error.log" KONG_ADMIN_ERROR_LOG="$LOGS/kong-error.log"
+  # Kong 로그도 데이터 폴더에 — 파드를 다시 만들어도 남는다
+  export KONG_PROXY_ERROR_LOG="$LOGS/kong-error.log" KONG_ADMIN_ERROR_LOG="$LOGS/kong-error.log" KONG_ADMIN_GUI_ERROR_LOG="$LOGS/kong-error.log" KONG_STATUS_ERROR_LOG="$LOGS/kong-error.log"
+  export KONG_PROXY_ACCESS_LOG="$LOGS/kong-access.log" KONG_ADMIN_ACCESS_LOG="$LOGS/kong-admin-access.log" KONG_ADMIN_GUI_ACCESS_LOG="$LOGS/kong-manager-access.log"
   [ -f "$RUN_DIR/hosts" ] || kong_hosts || true                     # LLM 주소의 IP 에 붙인 이름 (위 kong_hosts)
   export KONG_DNS_HOSTSFILE="$RUN_DIR/hosts" KONG_RESOLVER_HOSTS_FILE="$RUN_DIR/hosts"
   # vault 참조 {vault://env/...} 가 읽는 값

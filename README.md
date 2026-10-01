@@ -59,6 +59,9 @@ bash apply-config.sh   # 요구사항별 설정 적용 (라이선스 필요)
 bash verify.sh         # 요구사항별 점검 — 요약이 「불가 0」이면 됩니다
 ```
 
+파드를 다시 만들어도 남는 **유지 폴더(PV)**가 따로 있으면 `start.sh`·`apply-config.sh` 대신
+`bash set-data-dir.sh <유지 폴더>` 하나로 설치·기동·설정 적용까지 합니다 (아래 「유지 폴더」).
+
 `bash verify.sh --full` 은 70초 장기 연결·긴급 차단 켜고 끄기까지 실제로 해 봅니다 (약 2분).
 항목별로 하나씩 보여 주는 방법과 **파드 밖(PC)에서 외부 주소로 검증하는 방법**은 [VERIFY.md](VERIFY.md) 에 있습니다.
 
@@ -74,11 +77,10 @@ Kong Manager 는 **브라우저가 Admin API(8001)를 직접 부르므로** 8002
 계정은 `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`. 접속 방식을 바꾼 뒤에는 `bash stop.sh && bash start.sh`.
 
 Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바뀌고, 스크립트가 쓰는 Admin API 토큰은 처음 값(`KONG_ADMIN_PASSWORD`)
-그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용). 넣는 법 — 아래를 붙여 넣고 묻는 곳에 새 비밀번호를 입력합니다 (화면에 안 보임).
+그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용). 넣는 법 — 아래 **한 줄만** 붙여 넣고(다른 줄과 같이 붙여 넣으면 그 줄이 비밀번호로 들어감) 묻는 곳에 새 비밀번호를 입력합니다 (화면에 안 보임).
 
 ```bash
-read -rsp 'Manager 비밀번호: ' P; echo
-sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
+read -rsp 'Manager 비밀번호: ' P; echo; sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
 ```
 
 ---
@@ -245,13 +247,37 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 요구사항 점검 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |
 | `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
-| `dump-config.sh` | 지금 설정을 `conf/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
+| `set-data-dir.sh` | **유지 폴더(PV) 지정** — DB·로그·백업·점검 기록을 그 폴더로 옮기고 `.env`·라이선스 사본을 둔다. 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
+| `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
 | `stop.sh` | 정지 (데이터는 남김) |
 | `install.sh` | 프로그램만 설치 (`start.sh` 가 필요할 때 부름) |
 | `kong-check.sh` | 설치 전 환경 점검 |
 
-- DB·로그·pgvector 빌드 결과는 `data/`(`DATA_DIR`)에 둡니다. **파드를 다시 만들어도 남는 경로**여야 합니다.
-  파드를 다시 만들면 `bash start.sh` 한 번으로 다시 설치하고 기존 데이터·설정으로 이어서 뜹니다 (약 1분).
+- 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090`.
+
+### 유지 폴더 (파드를 다시 만들어도 남길 파일)
+
+기본으로는 DB·로그를 저장소 안 `data/` 에 둡니다. 플랫폼에 **파드를 다시 만들어도 남는 폴더(쿠버네티스의 PV 같은 곳)**가
+따로 있으면 그곳을 지정합니다 — 처음 설치할 때든, 이미 쓰던 중이든 같은 명령입니다.
+
+```bash
+bash set-data-dir.sh <유지 폴더>       # 예) bash set-data-dir.sh datasets/DT0000000000/data
+```
+
+| `<유지 폴더>/kong-poc/` | 내용 |
+|---|---|
+| `pgdata/` | DB — Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
+| `logs/` | Kong 로그 전부 (아래 「로그」 표) · PostgreSQL · PII 가드 로그 |
+| `backup/` · `reports/` | 설정 백업(`dump-config.sh`) · 점검 기록(`verify.sh` 를 돌릴 때마다 저장) |
+| `.env` · `secrets/license.json` | 설정·라이선스 **사본** — 저장소의 것을 그대로 고쳐 쓰고, 스크립트를 돌릴 때마다 사본이 갱신됨 |
+| `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
+
+- 상대 경로를 주면 지금 위치 · `/project` · `/` · 홈 순서로 찾습니다. 옮기기 전에 그 폴더가 DB 를 둘 수 있는지(권한 700) 먼저
+  확인하고, 안 되면 아무것도 옮기지 않습니다. 실행 중이면 잠시 내렸다가 옮긴 뒤 다시 띄우고 설정까지 다시 적용합니다.
+- 원래 자리는 지우지 않고 `data.moved-<시각>` 으로 남겨 둡니다 — 확인 후 지워도 됩니다.
+- **파드를 다시 만들었으면**: 저장소를 받고(`git clone`) → `bash set-data-dir.sh <같은 유지 폴더>` 하나로 `.env`·라이선스를
+  되살리고 프로그램을 다시 설치해 기존 DB·설정으로 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 —
+  했더라도 유지 폴더의 설정으로 되살리고 새로 만든 것은 `.env.before-<시각>` 으로 보관합니다).
 - 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090`.
 
 ---
@@ -260,9 +286,12 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 
 | 로그 | 내용 | 저장 위치 | 보관 |
 |---|---|---|---|
-| **요청 로그** | 모든 호출 — 사용자, 경로, 상태, 모델, 토큰 수, 지연, 추적 ID, 마스킹 건수 | `data/logs/audit.log` (+ `DECK_LOG_HTTP_URL`) | 삭제할 때까지 |
-| **관리 감사로그** | Admin API·Kong Manager 로 설정을 바꾼 이력 — 누가, 언제, 무엇을 | PostgreSQL (`audit_requests`) | 30일 후 자동 삭제 |
-| Kong 오류 로그 | 기동·플러그인 오류 | `data/logs/kong-error.log` | 삭제할 때까지 |
+| **요청 상세 로그** | 모든 호출 1건 = JSON 한 줄 — 사용자(부서 키), 경로·서비스, 상태, 단계별 지연(Kong·LLM), 모델, 토큰 수, 추적 ID, 접속 IP, 마스킹 건수, 클라이언트가 보낸 모델 이름 | `logs/audit.log` (+ 중앙 저장소 `DECK_LOG_HTTP_URL`) | 삭제할 때까지 |
+| **관리 감사로그** | Admin API·Kong Manager 로 설정을 바꾼 이력 — 누가, 언제, 무엇을 (비밀번호 변경 포함) | DB (`audit_requests` — `pgdata/` 와 함께 유지) | 30일 후 자동 삭제 |
+| Kong 접속 로그 | 프록시·Admin API·Manager 의 요청 한 줄 기록 (nginx 형식) | `logs/kong-access.log` · `kong-admin-access.log` · `kong-manager-access.log` | 삭제할 때까지 |
+| Kong 오류 로그 | 기동·플러그인 오류·경고 | `logs/kong-error.log` | 삭제할 때까지 |
+
+위치는 데이터 폴더(`DATA_DIR` — 기본 `data/`, 유지 폴더를 지정했으면 `<유지 폴더>/kong-poc/`) 기준입니다.
 
 **기록하지 않는 것**: 요청·응답 본문(`log_payloads: false`), 사용자 키(`hide_credentials`), 업스트림 인증 헤더, LLM 응답 헤더.
 

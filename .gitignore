@@ -1,10 +1,13 @@
 # 시크릿 — 절대 커밋 금지
 .env
+.env.before-*
 secrets/*
 !secrets/.gitkeep
 
-# 실행 데이터 (DB·로그·pgvector 빌드 결과)
+# 실행 데이터 (DB·로그·pgvector 빌드 결과) — set-data-dir.sh 로 옮긴 뒤 남는 원래 자리 포함
 data/
+data.moved-*/
+conf/backup.moved-*/
 
 # 설정 백업 (dump-config.sh)
 conf/backup/

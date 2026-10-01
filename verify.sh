@@ -23,6 +23,13 @@ gw() {
     | awk '{printf "%s %.1f", $1, $2}' || echo "000 0"
 }
 
+# 점검 결과를 데이터 폴더의 reports/ 에도 남긴다 (화면에는 그대로 보임) — 파드를 다시 만들어도 남는 검증 기록
+DD=$( (load_env && native_env && echo "$DATA_DIR") 2>/dev/null | tail -1 )
+if [ -n "$DD" ] && mkdir -p "$DD/reports" 2>/dev/null; then
+  REPORT="$DD/reports/verify-$(date +%Y%m%d-%H%M%S).txt"
+  exec > >(tee "$REPORT") 2>&1; TEE_PID=$!
+fi
+
 echo "Kong AI Gateway PoC 전체 점검 (직접 설치) — $(date '+%F %T')"
 
 sec "1. 환경"
@@ -46,8 +53,13 @@ case "$LIC_STATE" in
 esac
 PGD=$(pg_datadir)
 where=$(df -PT "$PGD" 2>/dev/null | awk 'NR==2{print $7" ("$2")"}')
-case "$where" in *overlay*|"") warn "데이터 위치 $PGD — $where : 파드를 다시 만들면 사라질 수 있음";;
-                 *)          ok "데이터 위치 $DATA_DIR — $where";; esac
+if [ "$DATA_DIR" != "$ROOT/data" ]; then   # 유지 폴더(bash set-data-dir.sh)를 쓰는 중 — .env·라이선스 사본도 있는지
+  kept=""; [ -f "$DATA_DIR/.env" ] && kept=" · .env 사본"; [ -f "$DATA_DIR/secrets/license.json" ] && kept="$kept · 라이선스 사본"
+else kept=""; fi
+if [ "$PGD" != "$DATA_DIR/pgdata" ]; then warn "DB 위치 $PGD — 데이터 폴더($DATA_DIR)에 DB 를 만들 수 없어 로컬 디스크를 씀 : 파드를 다시 만들면 사라짐"
+else case "$where" in *overlay*|"") warn "데이터 위치 $PGD — $where : 파드를 다시 만들면 사라질 수 있음";;
+                      *)          ok "데이터 위치 $DATA_DIR — $where (DB·로그·백업·점검 기록$kept)";; esac
+fi
 
 sec "2. 설치"
 v_pg=$("$PG_BIN/postgres" --version 2>/dev/null | awk '{print $3}')
@@ -340,10 +352,11 @@ sec "요약"
 printf '  OK %d · 주의 %d · 불가 %d\n' "$PASS" "$WARN" "$FAIL"
 if [ "${MGR_PW_HINT:-0}" = 1 ]; then
   cat <<'HINT'
-  ※ Manager 비밀번호를 .env 에 넣는 법 — 아래 세 줄을 붙여 넣고, 묻는 곳에 Manager 비밀번호를 입력 (화면에 안 보임)
-     read -rsp 'Manager 비밀번호: ' P; echo
-     sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
-     bash verify.sh
+  ※ Manager 비밀번호를 .env 에 넣는 법 — 아래 한 줄만 붙여 넣고(다른 줄과 같이 붙여 넣지 말 것), 묻는 곳에
+    Manager 비밀번호를 입력하고 Enter (화면에 안 보임). 그다음 bash verify.sh
+    read -rsp 'Manager 비밀번호: ' P; echo; sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
 HINT
 fi
 [ "$FAIL" = 0 ] && echo "  → 이상 없음." || echo "  → [불가] 항목을 먼저 해결하세요. 이 화면을 담당자에게 보내 주세요."
+[ -n "${REPORT:-}" ] && echo "  점검 기록: $REPORT"
+if [ -n "${TEE_PID:-}" ]; then exec >&- 2>&-; wait "$TEE_PID" 2>/dev/null; fi   # 기록을 다 쓴 뒤 끝낸다
