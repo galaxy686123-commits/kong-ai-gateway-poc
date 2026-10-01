@@ -72,15 +72,20 @@ if ! { mkdir "$t" && chmod 700 "$t" && echo ok > "$t/f"; } 2>/dev/null \
 fi
 rm -rf "$t"
 T="$base/kong-poc"
+mnt=$(df -P "$base" 2>/dev/null | awk 'NR==2 {print $6}')
 if [ "$CHECK" = 1 ]; then
-  note "확인 완료 — $base ($fstype, $avail 남음): DB·로그를 둘 수 있습니다$([ -d "$T/pgdata" ] && echo " · 이미 kong-poc/ 에 DB 있음")"
+  note "확인 완료 — $base ($fstype · 마운트 $mnt · $avail 남음): DB·로그를 둘 수 있습니다$([ -d "$T/pgdata" ] && echo " · 이미 kong-poc/ 에 DB 있음")"
+  # 지금 데이터 폴더와 같은 저장소인지 — 다른 마운트(PV)면 파드를 다시 만들어도 남는 곳이 따로 있다는 뜻
+  cur=$(grep -s '^DATA_DIR=' .env | tail -1 | cut -d= -f2-); cur=${cur:-$PWD/data}
+  cmnt=$(df -P "$cur" 2>/dev/null | awk 'NR==2 {print $6}')
+  note "지금 데이터 폴더 $cur — 마운트 ${cmnt:-?}$([ -n "$cmnt" ] && { [ "$cmnt" = "$mnt" ] && echo ' (같은 저장소)' || echo ' (다른 저장소)'; })"
   note "옮기려면:  bash set-data-dir.sh $want"
   exit 0
 fi
 
 say "1/4 유지 폴더 — $T"
 mkdir -p "$T" && chmod 700 "$T" 2>/dev/null || true
-note "쓰기·권한 확인 — $fstype, $avail 남음"
+note "쓰기·권한 확인 — $fstype · 마운트 $mnt · $avail 남음"
 
 say "2/4 설정 (.env · 라이선스)"
 if [ -f "$T/.env" ]; then
