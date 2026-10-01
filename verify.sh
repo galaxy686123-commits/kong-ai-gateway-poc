@@ -81,10 +81,14 @@ if kong_up; then
   c_px=$(code "http://127.0.0.1:$PROXY_PORT/")   # 라우트가 없으면 404 "no Route matched" 가 정상 응답
   if [ "$c_px" != 000 ]; then ok "게이트웨이 프록시 :$PROXY_PORT 응답 (HTTP $c_px$([ "$c_px" = 404 ] && echo ' — 루트 경로엔 라우트가 없어 정상'))"
   else bad "게이트웨이 프록시 :$PROXY_PORT 응답 없음"; fi
-  c_login=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:$KONG_ADMIN_PASSWORD" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
+  # Manager 화면에서 비밀번호를 바꾸면 로그인 비밀번호만 바뀌고 Admin API 토큰(KONG_ADMIN_PASSWORD)은 그대로다
+  mpw=${KONG_MANAGER_PASSWORD:-$KONG_ADMIN_PASSWORD}
+  c_login=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:$mpw" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_bad=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:x-wrong" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_gui=$(code "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/")
   if [ "$c_login" = 200 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ]; then ok "Kong Manager 화면 200 · 로그인 kong_admin 성공 · 틀린 비밀번호 401"
+  elif [ "$c_login" = 401 ] && [ -z "${KONG_MANAGER_PASSWORD:-}" ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ] && [ "$c_tok" = 200 ]; then
+    warn "Kong Manager 화면 200 · 로그인 비밀번호가 .env 와 다름 (Manager 에서 바꿨다면 정상 — 새 비밀번호를 .env 의 KONG_MANAGER_PASSWORD 에 적으면 로그인까지 점검)"
   else bad "Kong Manager — 화면 $c_gui · 로그인 $c_login · 틀린 비밀번호 $c_bad (200 · 200 · 401 이어야 함)"; fi
 else bad "Kong 멈춤 — start.sh ($LOGS/kong-error.log)"; fi
 # 브라우저가 쓰는 길(주피터 프록시)을 파드 안에서 그대로 따라가 본다

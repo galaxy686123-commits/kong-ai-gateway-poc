@@ -153,7 +153,7 @@ bash logs.sh            # 최근 요청 20건 요약
 bash logs.sh admin      # 관리 작업 이력 — Kong Manager·Admin API 로 설정을 바꾼 사람·시각·대상
 ```
 → 요청마다 한 줄씩 사용자·경로·상태·지연·모델·토큰·추적 ID 가 남고, **사용자 키는 남지 않습니다**(`False`).
-요청·응답 본문도 남기지 않습니다. Kong Manager 에서 설정을 하나 바꾼 뒤 `bash logs.sh admin` 을 보면 그 변경이 보입니다.
+요청·응답 본문도 남기지 않습니다. Kong Manager 에서 설정을 하나 바꾼 뒤 `bash logs.sh admin` 을 보면 그 변경이 보입니다 (비밀번호 변경도 `PATCH /admins/self/password` 로 남음).
 
 **위변조 방지**: `.env` 의 `DECK_LOG_HTTP_URL` 에 고객 중앙 로그 저장소(SIEM·로그 수집기)를 넣으면 모든 요청 기록이
 즉시 그쪽으로 전송됩니다. 위변조 불가는 받는 쪽 보관 정책(WORM·불변 버킷)으로 완성되며, 파드 안 파일은 보조 기록입니다.
@@ -368,4 +368,4 @@ sed -i 's|^FEATURE_OUTPUT_MASK=.*|FEATURE_OUTPUT_MASK=off|' .env && bash apply-c
 | Plugins | 기능별 플러그인과 켜짐/꺼짐 — 스위치 상태, 긴급 차단(`kill-switch--…`) |
 | Consumers · Consumer Groups | 부서 계정·키·그룹 (2-1·2-2) |
 
-로그인: `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`.
+로그인: `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD` (Manager 에서 바꿨다면 새 비밀번호 — `.env` 의 `KONG_MANAGER_PASSWORD` 에 적어 두면 `verify.sh` 도 그 값으로 로그인을 점검).

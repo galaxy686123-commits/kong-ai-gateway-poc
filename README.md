@@ -73,6 +73,9 @@ Kong Manager 는 **브라우저가 Admin API(8001)를 직접 부르므로** 8002
 
 계정은 `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`. 접속 방식을 바꾼 뒤에는 `bash stop.sh && bash start.sh`.
 
+Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바뀌고, 스크립트가 쓰는 Admin API 토큰은 처음 값(`KONG_ADMIN_PASSWORD`)
+그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용).
+
 ---
 
 ## 요구사항 → 설정
@@ -301,6 +304,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 외부 Manager 주소가 `upstream connect error … Connection refused` | Kong 이 8001·8002 를 파드 안에서만 받는 중 — `.env` 에 `MANAGER_URL`·`ADMIN_API_URL` 외부 주소, `JUPYTER_URL` 비움 → `bash stop.sh && bash start.sh` |
 | Manager 로그인 후 목록이 비거나 401 | `MANAGER_URL`·`ADMIN_API_URL` 이 브라우저 접속 주소와 다름 |
 | 비밀번호가 맞는데 로그인이 안 됨 | `.env` 값 뒤에 설명(`# …`)이 붙어 비밀번호의 일부로 읽힘 — 값 뒤 주석 제거 |
+| `verify.sh` 가 Kong Manager 로그인 401 | Manager 에서 비밀번호를 바꿈 — `.env` 의 `KONG_MANAGER_PASSWORD` 에 새 비밀번호 (`KONG_ADMIN_PASSWORD` 는 그대로) |
 | `apply-config.sh` 가 라이선스 때문에 멈춤 / 설정 변경 403 | 라이선스가 없거나 유예 기간도 끝남 — `secrets/license.json` 확인 후 `bash stop.sh && bash start.sh` |
 | 통합 경로에 `"stream": true` 요청이 400 `response streaming is not enabled` | 답변 검사(`FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK`)가 켜져 있음 — 정상 동작 |
 | LLM 호출이 503 `name resolution failed` | LLM 주소의 호스트 이름을 파드에서 찾을 수 없음 — 주소 확인. IP 를 바꿨다면 `bash apply-config.sh` 가 Kong 에 새 이름을 반영 |
