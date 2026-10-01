@@ -261,7 +261,8 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 확인한 동작 | 대응 |
 |---|---|
 | AI 플러그인의 LLM 주소(`upstream_url`)가 **IP 면** 장애 대체가 되지 않고, 서비스 주소와 다른 호스트로 보내지도 못함. 이름 주소는 정상 | IP 에 이름(`ip-a-b-c-d.kong-poc`)을 붙여 넘기고, 그 이름은 Kong 만 읽는 hosts 파일(`~/.kong-poc/hosts`)에 적음. 시스템 `/etc/hosts` 는 그대로 |
-| 경로 기본값(`response_buffering: true`)이면 SSE 응답을 **다 모아 한 번에** 보냄 — 첫 토큰이 마지막 토큰과 같이 도착 | 채팅·Agent 경로는 `response_buffering: false`. 첫 조각 지연 2~7ms |
+| 경로 기본값(`response_buffering: true`)이면 SSE 응답을 **다 모아 한 번에** 보냄 — 첫 토큰이 마지막 토큰과 같이 도착 | 채팅·Agent 경로는 `response_buffering: false`. 첫 조각 지연 2ms 안팎 |
+| Kong 기동 직후 처음 20~30번 요청은 몇 ms 더 느림 (워커가 코드를 데우는 중 — 쉬기만 해서는 안 풀리고 요청이 지나가야 풀림) | `verify.sh` 는 지연을 재기 전에 30번 먼저 보낸다 |
 | 의미 기반 가드(`ai-semantic-prompt-guard`)가 vault 로 넣은 벡터 DB 비밀번호를 읽지 못함 (`missing password`) | 벡터 DB(`kong-pgvector`)만 파드 안(127.0.0.1)에서 비밀번호 없이 접속. Kong DB 는 계속 비밀번호 |
 | Kong 기본 PII 서비스(`ai-sanitizer` + PII 컨테이너)는 한국 개인정보 형식을 거의 못 잡고 컨테이너가 필요 | 4-1 은 `pre-function`(정규식), 문맥 판정은 PII 가드(`addons/pii-guard`) |
 | `ai-custom-guardrail` 은 차단(block)만 하고 문장 일부를 바꾸지 못함 | 4-4 는 표준 문구로 대체, 4-5 는 `post-function` 으로 마스킹 |
@@ -276,7 +277,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 항목 | 결과 |
 |---|---|
 | `verify.sh --full` (라이선스·사내 LLM·외부 LLM·임베딩 연결) | **OK 38 · 주의 2 · 불가 0** — 주의는 라이선스 만료 유예·AI Gateway 권한 없음 |
-| 1-2 첫 토큰 지연 (게이트웨이가 더한 것, 5회 중앙값) | 6.9ms |
+| 1-2 첫 토큰 지연 (게이트웨이가 더한 것, 10회 중앙값) | 1.5~2.3ms · Kong 재기동 직후 5~6ms |
 | 1-4 장애 대체 | 주 모델 503·연결 거부 → 보조 모델 응답 (같은 호스트·다른 호스트의 실제 LLM 모두) |
 | 통합 경로 스위치 | 답변 마스킹 켬·호출 한도 끔 → 적용 → 실제 LLM 답변 마스킹 확인 → 되돌림 |
 | 3.15.0.6 → 3.16.0.0 업그레이드 | 설치 파일 교체 후 `stop.sh`·`start.sh` — DB 자동 마이그레이션, 약 40초 |

@@ -95,6 +95,9 @@ class Handler(BaseHTTPRequestHandler):
         if "down" in model:   # 모델 이름에 down 이 들어 있으면 장애 — 장애 대체(1-4) 시험용 주 모델
             return self._json(503, {"error": {"message": "mock model %s is down" % model}})
         p_tok, c_tok = max(1, len(text) // 2), max(1, len(answer) // 2)
+        # 요청 헤더로 지연을 바꿀 수 있다 (verify.sh 가 지연 측정 전 Kong 을 빨리 데울 때 0 으로)
+        first_delay = float(self.headers.get("X-Mock-First-Delay", FIRST_TOKEN_DELAY))
+        stream_delay = float(self.headers.get("X-Mock-Stream-Delay", STREAM_DELAY))
         if body.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -107,11 +110,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
                 self.wfile.flush()
 
-            time.sleep(FIRST_TOKEN_DELAY)
+            time.sleep(first_delay)
             pieces = [answer[i:i + 8] for i in range(0, len(answer), 8)] or [""]
             for i, piece in enumerate(pieces):
                 if i:
-                    time.sleep(STREAM_DELAY)
+                    time.sleep(stream_delay)
                 chunk({"id": "mock", "object": "chat.completion.chunk", "model": model,
                        "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}]})
             chunk({"id": "mock", "object": "chat.completion.chunk", "model": model,
@@ -120,7 +123,7 @@ class Handler(BaseHTTPRequestHandler):
             chunk("[DONE]")
             self.wfile.write(b"0\r\n\r\n")
             return
-        time.sleep(FIRST_TOKEN_DELAY)
+        time.sleep(first_delay)
         self._json(200, {
             "id": "mock", "object": "chat.completion", "created": int(time.time()), "model": model,
             "choices": [{"index": 0, "message": {"role": "assistant", "content": answer}, "finish_reason": "stop"}],

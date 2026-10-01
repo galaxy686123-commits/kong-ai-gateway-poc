@@ -194,6 +194,7 @@ kong_env() {
   export KONG_ADMIN_GUI_URL="$MANAGER_URL" KONG_ADMIN_GUI_API_URL="$ADMIN_API_URL"
   if [ -n "$GUI_PATH" ]; then export KONG_ADMIN_GUI_PATH="$GUI_PATH"; else unset KONG_ADMIN_GUI_PATH; fi
   export KONG_NGINX_WORKER_PROCESSES="$KONG_WORKERS"
+  ulimit -n "$(ulimit -Hn)" 2>/dev/null || true                   # 열 수 있는 파일 수를 허용된 최대로 (기본 1024 — 동시 연결 수 상한)
   export KONG_STATUS_LISTEN="0.0.0.0:$STATUS_PORT"                  # 3-3 지표 /metrics
   export KONG_NGINX_HTTP_CLIENT_MAX_BODY_SIZE="${MAX_BODY_MB:-100}m"  # 1-3 대용량 업로드 상한 (경로별 상한은 설정에서)
   export KONG_NGINX_HTTP_CLIENT_BODY_BUFFER_SIZE=8m                  # AI 요청 본문을 메모리에 담을 크기

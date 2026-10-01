@@ -138,6 +138,8 @@ elif ! has llm; then warn "설정 적용 전 — 설치·접속까지만 한 상
 else
   T=0; has feature-stream && T=1
   [ "$T" = 0 ] && warn "기능별 경로(/features)가 없어 일부 항목은 건너뜀 — bash apply-config.sh (--no-features 없이)"
+  MOCK=1; [ "${FEATURE_UPSTREAM:-mock}" = llm ] && MOCK=0
+  [ "$T" = 1 ] && [ "$MOCK" = 0 ] && warn "기능별 경로가 사내 LLM 으로 설정됨(FEATURE_UPSTREAM=llm) — 아래 점검은 모의 LLM(받은 질문을 그대로 답함) 기준이라 일부가 [불가]로 보일 수 있음"
   # 통합 경로에 지금 켜져 있는 기능 (스위치 상태)
   on=$(admin "/services/llm/plugins?size=100" | python3 -c 'import json,sys
 names = {"acl": "접근통제", "rate-limiting": "호출한도", "ai-rate-limiting-advanced": "토큰한도", "ai-prompt-guard": "인젝션·기밀가드",
@@ -160,15 +162,16 @@ print(" · ".join(names[p["name"]] for p in d if p["enabled"] and p["name"] in n
   else
     warn "1-1 단일 주소 — LLM 미연결(DECK_CHAT_URL 이 예시 주소)이라 실제 모델 호출은 건너뜀"
   fi
-  if [ "$T" = 1 ]; then
-    # 첫 데이터 조각(data:)이 도착한 시각을 LLM 직접 호출과 게이트웨이 경유로 5번씩 재서 중앙값을 비교한다
+  if [ "$T" = 1 ] && [ "$MOCK" = 1 ]; then
+    # 첫 데이터 조각(data:)이 도착한 시각을 LLM 직접 호출과 게이트웨이 경유로 번갈아 10번 재서, 차이의 중앙값을 본다.
+    # Kong 은 기동 직후 처음 20~30번은 느리다(워커가 코드를 데우는 중) → 지연 없는 요청 30번으로 먼저 데운다.
     read -r ov n < <(python3 - "$DECK_MOCK_URL/v1/chat/completions" "$P/features/stream/v1/chat/completions" "$DECK_CLIENT_KEY" <<'PYT'
 import http.client, json, statistics, sys, time, urllib.parse
 body = json.dumps({"messages": [{"role": "user", "content": "스트리밍 지연 측정용 문장입니다 하나 둘 셋 넷 다섯"}], "stream": True})
-def first(url, key=None):
+def first(url, key=None, extra=None):
     u = urllib.parse.urlparse(url)
     c = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
-    h = {"Content-Type": "application/json"}
+    h = {"Content-Type": "application/json", **(extra or {})}
     if key: h["apikey"] = key
     t0 = time.perf_counter(); c.request("POST", u.path, body, h); r = c.getresponse()
     t, n = None, 0
@@ -177,12 +180,15 @@ def first(url, key=None):
             n += 1
             if t is None: t = time.perf_counter() - t0
     c.close(); return t, n
-d = statistics.median(first(sys.argv[1])[0] for _ in range(5))
-g = [first(sys.argv[2], sys.argv[3]) for _ in range(5)]
-print("%.1f %d" % ((statistics.median(x[0] for x in g) - d) * 1000, g[-1][1]))
+for _ in range(30): first(sys.argv[2], sys.argv[3], {"X-Mock-First-Delay": "0", "X-Mock-Stream-Delay": "0"})
+diffs, n = [], 0
+for _ in range(10):
+    d = first(sys.argv[1])[0]; g, n = first(sys.argv[2], sys.argv[3])
+    diffs.append(g - d)
+print("%.1f %d" % (statistics.median(diffs) * 1000, n))
 PYT
 )
-    if [ "$n" -gt 2 ] && awk -v o="$ov" 'BEGIN{exit !(o <= 10)}'; then ok "1-2 스트리밍 — SSE ${n}조각 그대로 전달 · 게이트웨이가 더한 첫 토큰 지연 ${ov}ms (기준 10ms, 5회 중앙값)"
+    if [ "$n" -gt 2 ] && awk -v o="$ov" 'BEGIN{exit !(o <= 10)}'; then ok "1-2 스트리밍 — SSE ${n}조각 그대로 전달 · 게이트웨이가 더한 첫 토큰 지연 ${ov}ms (기준 10ms, 10회 중앙값)"
     else warn "1-2 스트리밍 — SSE ${n}조각 · 게이트웨이가 더한 첫 토큰 지연 ${ov}ms (기준 10ms)"; fi
   fi
   if has ocr; then
