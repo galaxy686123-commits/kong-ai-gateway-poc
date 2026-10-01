@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# native/install.sh — docker 없이 이 파드에 PostgreSQL·pgvector·Kong·decK 를 설치한다.
+# install.sh — docker 없이 이 파드에 PostgreSQL·pgvector·Kong·decK 를 설치한다.
 #   여러 번 실행해도 안전하다 (있는 것은 건너뜀).
-#   파드를 다시 만들면 apt 로 깐 프로그램이 사라지는데, native/start.sh 가 알아서 이것을 다시 부른다.
+#   파드를 다시 만들면 apt 로 깐 프로그램이 사라지는데, start.sh 가 알아서 이것을 다시 부른다.
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
 

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# dump-config.sh — 현재 Kong 설정 전체를 파일로 백업한다.
-#   Kong Manager 에서 바꾼 내용도 포함된다. 데이터가 날아갔을 때 복원 근거가 된다.
+# dump-config.sh — 지금 Kong 에 들어 있는 설정을 파일로 받는다 (Kong Manager 에서 바꾼 것 포함, 백업·비교용)
 source "$(dirname "$0")/lib.sh"
-load_env
-mkdir -p conf/backup
-out="conf/backup/kong-dump-$(date +%Y%m%d-%H%M%S).yaml"
-docker run --rm --network "$NET" kong-poc/deck gateway dump -o - \
-  --kong-addr "http://$C_KONG:8001" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" > "$out"
-note "저장: $out ($(du -h "$out" | cut -f1), 최상위 항목 $(grep -c "^- " "$out")개)"
+load_env; native_env
+kong_up || die "Kong 이 실행 중이 아닙니다 — bash start.sh"
+mkdir -p conf/backup; out="conf/backup/kong-dump-$(date +%Y%m%d-%H%M%S).yaml"
+deck gateway dump --yes -o "$out" --kong-addr "http://127.0.0.1:$ADMIN_PORT" \
+  --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" >/dev/null
+note "저장: $out ($(du -h "$out" | cut -f1))"

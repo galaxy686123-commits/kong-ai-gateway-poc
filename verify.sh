@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# native/verify.sh — 직접 설치한 Kong AI Gateway PoC 를 처음부터 끝까지 다시 점검한다.
+# verify.sh — 직접 설치한 Kong AI Gateway PoC 를 처음부터 끝까지 다시 점검한다.
 #   환경 → 설치 → 실행 → 게이트웨이 기능 → 로그 순서. 결과는 화면 한 장 분량.
 #   설정은 바꾸지 않는다. 기능 점검을 위해 게이트웨이에 시험 요청 몇 건을 보낸다(로그에 남음).
 source "$(dirname "$0")/lib.sh"
@@ -54,7 +54,7 @@ v_deck=$(deck version 2>/dev/null | grep -o 'v[0-9.]*' | head -1)
 v_py=$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null)
 line="PostgreSQL ${v_pg:-없음} · pgvector ${v_vec:-없음} · Kong ${v_kong:-없음} · decK ${v_deck:-없음} · python3 ${v_py:-없음}"
 if [ -n "$v_pg" ] && [ -n "$v_vec" ] && [ "$v_kong" = "$KONG_VER" ] && [ -n "$v_deck" ] && [ -n "$v_py" ]; then ok "$line"
-else bad "$line — native/install.sh 로 설치"; fi
+else bad "$line — install.sh 로 설치"; fi
 
 sec "3. 실행"
 if pg_ready; then
@@ -64,9 +64,9 @@ if pg_ready; then
   else auth=" · kong 계정 접속 실패"; fi
   if [ "$dbs" = "kong · kong-pgvector" ] && [ -n "$vec" ] && [[ "$auth" = *OK ]]; then ok "PostgreSQL 127.0.0.1:$PG_PORT — DB $dbs (vector $vec)$auth"
   else bad "PostgreSQL — DB [${dbs:-없음}] vector [${vec:-없음}]$auth"; fi
-else bad "PostgreSQL 멈춤 — native/start.sh"; fi
+else bad "PostgreSQL 멈춤 — start.sh"; fi
 if pii_running && [ "$(code "http://127.0.0.1:$PII_PORT/healthz" 3)" = 200 ]; then ok "PII 가드 127.0.0.1:$PII_PORT"
-elif [ -f "$PII_APP" ]; then bad "PII 가드 멈춤 — native/start.sh"
+elif [ -f "$PII_APP" ]; then bad "PII 가드 멈춤 — start.sh"
 else warn "PII 가드 소스 없음 — PII 시나리오 제외"; fi
 if kong_up; then
   c_no=$(code "http://127.0.0.1:$ADMIN_PORT/services")
@@ -74,14 +74,14 @@ if kong_up; then
   if [ "$c_no" = 401 ] && [ "$c_tok" = 200 ]; then ok "Kong $(admin / | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null) — Admin API 는 토큰 없으면 401, 있으면 200 (RBAC)"
   else bad "Kong Admin API — 토큰 없이 $c_no · 토큰으로 $c_tok (401 · 200 이어야 함)"; fi
   c_px=$(code "http://127.0.0.1:$PROXY_PORT/")   # 라우트가 없으면 404 "no Route matched" 가 정상 응답
-  if [ "$c_px" != 000 ]; then ok "게이트웨이 프록시 :$PROXY_PORT 응답 (HTTP $c_px$([ "$c_px" = 404 ] && echo ' — 라우트 없음, 정상'))"
+  if [ "$c_px" != 000 ]; then ok "게이트웨이 프록시 :$PROXY_PORT 응답 (HTTP $c_px$([ "$c_px" = 404 ] && echo ' — 루트 경로엔 라우트가 없어 정상'))"
   else bad "게이트웨이 프록시 :$PROXY_PORT 응답 없음"; fi
   c_login=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:$KONG_ADMIN_PASSWORD" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_bad=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:x-wrong" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_gui=$(code "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/")
   if [ "$c_login" = 200 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ]; then ok "Kong Manager 화면 200 · 로그인 kong_admin 성공 · 틀린 비밀번호 401"
   else bad "Kong Manager — 화면 $c_gui · 로그인 $c_login · 틀린 비밀번호 $c_bad (200 · 200 · 401 이어야 함)"; fi
-else bad "Kong 멈춤 — native/start.sh ($LOGS/kong-error.log)"; fi
+else bad "Kong 멈춤 — start.sh ($LOGS/kong-error.log)"; fi
 # 브라우저가 쓰는 길(주피터 프록시)을 파드 안에서 그대로 따라가 본다
 if ! kong_up; then :
 elif [ -n "${JUPYTER_URL:-}" ]; then
@@ -115,7 +115,7 @@ fi
 CONFIGURED=0; [[ " ${routes:-} " = *" llm-chat "* ]] && CONFIGURED=1
 if ! kong_up; then bad "Kong 이 멈춰 있어 기능 점검을 건너뜀"
 elif [ "$CONFIGURED" = 0 ]; then
-  warn "설정 적용 전 — 설치·접속 시험만 한 상태라 기능 점검은 건너뜀 (라이선스를 넣은 뒤 native/apply-config.sh)"
+  warn "설정 적용 전 — 설치·접속 시험만 한 상태라 기능 점검은 건너뜀 (라이선스를 넣고 bash stop.sh && bash start.sh)"
 else
   ok "라우트: $routes"
   read -r c _ <<<"$(gw /v1/chat/completions "안녕하세요" 0)"
@@ -132,7 +132,7 @@ else
   if [[ "$DECK_CHAT_URL" = *example* ]]; then c=skip
   else read -r c t <<<"$(gw /v1/chat/completions "한 단어로만 답하세요. 대한민국의 수도는?")"; fi
   if [ "$c" = skip ]; then
-    warn "LLM 아직 연결 안 함 (.env 의 DECK_CHAT_URL 이 예시 주소) — 붙인 뒤 native/apply-config.sh"
+    warn "LLM 아직 연결 안 함 (.env 의 DECK_CHAT_URL 이 예시 주소) — 붙인 뒤 apply-config.sh"
   elif [ "$c" = 200 ]; then
     ans=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["choices"][0]["message"]["content"].strip()[:30])' "$RUN_DIR/gw.out" 2>/dev/null)
     ok "LLM 응답 → 200 (${t}초) \"${ans}\""
@@ -159,7 +159,7 @@ elif [ -s "$AUD" ]; then
 else bad "요청 로그가 없습니다 ($AUD) — 설정 적용 여부 확인"; fi
 if pg_ready; then
   na=$(psql_su -d kong -c "select count(*) from audit_requests" 2>/dev/null)
-  [ "${na:-0}" -gt 0 ] 2>/dev/null && ok "관리 작업 감사로그 (DB) ${na}건 — native/logs.sh admin" || warn "관리 작업 감사로그 0건"
+  [ "${na:-0}" -gt 0 ] 2>/dev/null && ok "관리 작업 감사로그 (DB) ${na}건 — logs.sh admin" || warn "관리 작업 감사로그 0건"
 fi
 
 sec "요약"

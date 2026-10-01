@@ -3,14 +3,10 @@
 secrets/*
 !secrets/.gitkeep
 
-# 반입 번들·데이터
-images/*.tar
-images/*.tar.gz
+# 실행 데이터 (DB·로그·pgvector 빌드 결과)
 data/
-*.bundle.tar.gz
 
-# 점검·백업 산출물
-.kong-poc-probe/
+# 설정 백업 (dump-config.sh)
 conf/backup/
 
 # 파이썬 캐시

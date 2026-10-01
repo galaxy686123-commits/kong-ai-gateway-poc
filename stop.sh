@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# stop.sh — 컨테이너를 내린다. 데이터는 남긴다.
-#   ./stop.sh --purge   데이터(도커 볼륨)까지 삭제 — 되돌릴 수 없음
+# stop.sh — Kong·PII 가드·PostgreSQL 을 내린다. 데이터(DATA_DIR)는 남긴다.
 source "$(dirname "$0")/lib.sh"
-say "컨테이너 정지"
-for c in "$C_KONG" "$C_PII" "$C_PG"; do docker rm -f "$c" >/dev/null 2>&1 && note "$c 정지" || true; done
-if [ "${1:-}" = "--purge" ]; then
-  say "데이터 삭제"
-  for v in "$PG_VOLUME" "$LOG_VOLUME"; do
-    docker volume rm "$v" >/dev/null 2>&1 && note "볼륨 $v 삭제" || true
-  done
-  docker network rm "$NET" >/dev/null 2>&1 || true
-fi
+load_env; native_env
+say "정지"
+if kong_up; then kong stop -p "$KONG_PREFIX" >/dev/null 2>&1 && note "Kong 정지"; fi
+if pii_running; then kill "$(pii_pid)" && note "PII 가드 정지"; fi
+rm -f "$RUN_DIR/pii.pid"
+PGD=$(pg_datadir)
+if pg_ready; then "$PG_BIN/pg_ctl" -D "$PGD" -m fast -w stop >/dev/null && note "PostgreSQL 정지"; fi
+note "데이터는 그대로: $DATA_DIR"

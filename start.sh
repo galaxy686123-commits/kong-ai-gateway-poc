@@ -1,109 +1,129 @@
 #!/usr/bin/env bash
-# start.sh — Kong AI Gateway PoC 기동. 여러 번 실행해도 안전하다(이미 떠 있으면 건너뜀).
+# start.sh — 직접 설치 방식 기동. 여러 번 실행해도 안전하다 (떠 있는 것은 건너뜀).
+#   파드를 다시 만들어 프로그램이 사라졌으면 먼저 다시 설치한다.
+#   start.sh --no-config   설치·기동까지만 (설정 적용 안 함). 라이선스가 없어도 이렇게 동작한다.
 source "$(dirname "$0")/lib.sh"
-load_env
+load_env; native_env
+APPLY=1; [ "${1:-}" = "--no-config" ] && APPLY=0
 
 say "0/6 라이선스 확인"
-check_license
+license_state
+case "$LIC_STATE" in
+  valid) if [ "$LIC_DAYS" -le 30 ]; then note "⚠ 라이선스 만료 임박: $LIC_MSG"; else note "라이선스 $LIC_MSG"; fi ;;
+  grace) note "⚠ 라이선스 $LIC_MSG" ;;
+  *)     note "⚠ $LIC_MSG — Kong 은 읽기 전용 모드로 뜹니다. 설치·기동까지만 하고 설정 적용은 건너뜁니다."
+         APPLY=0 ;;
+esac
 
-say "1/6 이미지 준비"
-ensure_image "$KONG_IMAGE"; ensure_image "$PG_IMAGE"; ensure_image "$DECK_IMAGE"
-HAS_PII=0; [ -f addons/pii-guard/app.py ] && HAS_PII=1
-[ "$HAS_PII" = 1 ] && ensure_image "$PY_IMAGE"
+say "1/6 프로그램 확인"
+if installed; then note "PostgreSQL·pgvector·Kong·decK 모두 있음"
+else note "빠진 프로그램이 있어 설치합니다"; "$ROOT/install.sh"; fi
 
-say "2/6 설정을 담은 이미지 빌드 (바인드 마운트 없이 동작)"
-build kong-poc/postgres build/postgres.Dockerfile --build-arg PG_IMAGE="$PG_IMAGE"
-build kong-poc/deck     build/deck.Dockerfile     --build-arg DECK_IMAGE="$DECK_IMAGE"
-[ "$HAS_PII" = 1 ] && build kong-poc/pii-guard build/pii-guard.Dockerfile --build-arg PY_IMAGE="$PY_IMAGE"
-note "kong-poc/postgres · kong-poc/deck$([ "$HAS_PII" = 1 ] && echo ' · kong-poc/pii-guard')"
-
-docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-
-say "3/6 PostgreSQL"
-if running "$C_PG"; then note "이미 실행 중"
+say "2/6 PostgreSQL"
+PGD=$(pg_datadir)
+if pg_ready; then note "이미 실행 중 ($PGD)"
 else
-  docker rm -f "$C_PG" >/dev/null 2>&1 || true
-  if [ -n "${PG_DATA_DIR:-}" ]; then mkdir -p "$PG_DATA_DIR"; DATA_MOUNT="$PG_DATA_DIR:/var/lib/postgresql/data"
-  else DATA_MOUNT="$PG_VOLUME:/var/lib/postgresql/data"; fi
-  docker run -d --name "$C_PG" --network "$NET" --restart unless-stopped --memory 1g \
-    -e POSTGRES_DB=kong -e POSTGRES_USER=kong -e POSTGRES_PASSWORD="$KONG_PG_PASSWORD" \
-    -v "$DATA_MOUNT" kong-poc/postgres postgres -c max_connections=200 >/dev/null
-  note "데이터: ${PG_DATA_DIR:-도커 볼륨 $PG_VOLUME}"
-fi
-for i in $(seq 1 60); do
-  docker exec "$C_PG" pg_isready -U kong -d kong >/dev/null 2>&1 && break
-  [ "$i" = 60 ] && die "PostgreSQL 이 준비되지 않습니다.  docker logs $C_PG"
-  sleep 2
-done
-# 초기화 스크립트가 벡터 DB 를 만들 때까지 대기
-for i in $(seq 1 30); do
-  docker exec "$C_PG" psql -U kong -d kong-pgvector -tAc "select 1 from pg_extension where extname='vector'" 2>/dev/null | grep -q 1 && break
-  [ "$i" = 30 ] && die "벡터 DB(kong-pgvector) 초기화 실패.  docker logs $C_PG"
-  sleep 2
-done
-note "준비됨 (DB: kong · kong-pgvector)"
+  if [ ! -f "$PGD/PG_VERSION" ]; then
+    # 슈퍼유저는 이 파드의 사용자만 쓰는 소켓으로만 접속(trust), TCP 접속은 비밀번호(scram)
+    if ! "$PG_BIN/initdb" -D "$PGD" -U postgres -E UTF8 --locale=C.UTF-8 \
+         --auth-local=trust --auth-host=scram-sha-256 \
+         --pwfile=<(printf '%s\n' "$KONG_PG_PASSWORD") > "$LOGS/initdb.log" 2>&1; then
+      tail -5 "$LOGS/initdb.log" | sed 's/^/  | /'
+      if [ "$PGD" = "$DATA_DIR/pgdata" ]; then
+        note "⚠ $DATA_DIR 에 DB 를 만들 수 없어 로컬 디스크로 대체합니다"
+        rm -rf "$PGD"; PGD="$RUN_DIR/pgdata"
+        "$PG_BIN/initdb" -D "$PGD" -U postgres -E UTF8 --locale=C.UTF-8 \
+          --auth-local=trust --auth-host=scram-sha-256 \
+          --pwfile=<(printf '%s\n' "$KONG_PG_PASSWORD") > "$LOGS/initdb.log" 2>&1 \
+          || die "PostgreSQL 초기화 실패 ($LOGS/initdb.log)"
+      else die "PostgreSQL 초기화 실패 ($LOGS/initdb.log)"; fi
+    fi
+    cat >> "$PGD/postgresql.conf" <<CONF
 
-say "4/6 Kong DB 마이그레이션"
+# ── kong-poc (start.sh) ──
+listen_addresses = '127.0.0.1'
+port = $PG_PORT
+unix_socket_directories = '$RUN_DIR'
+max_connections = 200
+CONF
+    note "초기화 완료 ($PGD)"
+  fi
+  # 파드를 다시 만들면 예전 pid 가 남아 있을 수 있다 — 그 번호를 다른 프로세스가 쓰고 있으면 기동이 막힌다
+  if [ -f "$PGD/postmaster.pid" ]; then
+    old=$(head -1 "$PGD/postmaster.pid")
+    [ "$(cat "/proc/$old/comm" 2>/dev/null)" = postgres ] || rm -f "$PGD/postmaster.pid"
+  fi
+  "$PG_BIN/pg_ctl" -D "$PGD" -l "$LOGS/postgres.log" -w -t 60 start >/dev/null \
+    || { tail -5 "$LOGS/postgres.log" | sed 's/^/  | /'; die "PostgreSQL 기동 실패 ($LOGS/postgres.log)"; }
+  note "시작됨 ($PGD)"
+fi
+[ "$PGD" = "$RUN_DIR/pgdata" ] && note "⚠ DB 가 로컬 디스크에 있어 파드를 다시 만들면 사라집니다"
+psql_su -d postgres -v pw="$KONG_PG_PASSWORD" <<'SQL'
+SELECT format('CREATE ROLE kong LOGIN PASSWORD %L', :'pw') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kong') \gexec
+SELECT format('ALTER ROLE kong PASSWORD %L', :'pw') \gexec
+SELECT 'CREATE DATABASE kong OWNER kong' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'kong') \gexec
+SELECT 'CREATE DATABASE "kong-pgvector" OWNER kong' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'kong-pgvector') \gexec
+SQL
+psql_su -d kong-pgvector -c 'CREATE EXTENSION IF NOT EXISTS vector'
+note "DB 준비됨 (kong · kong-pgvector + vector)"
+
+say "3/6 Kong DB 마이그레이션"
 kong_env
-out=$(docker run --rm --network "$NET" "${KONG_ENV[@]}" "$KONG_IMAGE" kong migrations bootstrap 2>&1) || true
-if echo "$out" | grep -qi "already bootstrapped"; then
-  docker run --rm --network "$NET" "${KONG_ENV[@]}" "$KONG_IMAGE" sh -c 'kong migrations up && kong migrations finish' >/dev/null 2>&1 || true
+out=$(kong migrations bootstrap 2>&1) || true
+if grep -qi "already bootstrapped" <<<"$out"; then
+  kong migrations up >/dev/null 2>&1 || true; kong migrations finish >/dev/null 2>&1 || true
   note "기존 DB — 필요한 마이그레이션만 적용"
-elif echo "$out" | grep -qiE "complete|executed"; then
+elif grep -qiE "complete|executed" <<<"$out"; then
   note "최초 초기화 완료 (관리자 계정 kong_admin 생성)"
 else
   echo "$out" | tail -5; die "마이그레이션 실패"
 fi
 
-if [ "$HAS_PII" = 1 ]; then
-  say "5/6 한국어 PII 가드"
-  if running "$C_PII"; then note "이미 실행 중"
-  else
-    docker rm -f "$C_PII" >/dev/null 2>&1 || true
-    docker run -d --name "$C_PII" --network "$NET" --restart unless-stopped --memory 256m \
-      -e LLM_ENABLED="${PII_LLM_ENABLED:-false}" -e LLM_URL="${PII_LLM_URL:-}" -e LLM_MODEL="${PII_LLM_MODEL:-}" \
-      kong-poc/pii-guard >/dev/null
-    note "시작됨 (문맥 판정 LLM: ${PII_LLM_ENABLED:-false})"
-  fi
+say "4/6 한국어 PII 가드"
+if [ ! -f "$PII_APP" ]; then note "소스가 없어 건너뜀 ($PII_APP)"
+elif pii_running; then note "이미 실행 중 (포트 $PII_PORT)"
 else
-  say "5/6 한국어 PII 가드 — addons/pii-guard/app.py 가 없어 건너뜀"
+  PORT=$PII_PORT LLM_ENABLED="${PII_LLM_ENABLED:-false}" LLM_URL="${PII_LLM_URL:-}" LLM_MODEL="${PII_LLM_MODEL:-}" \
+    setsid nohup python3 "$PII_APP" >> "$LOGS/pii-guard.log" 2>&1 < /dev/null &
+  echo $! > "$RUN_DIR/pii.pid"
+  for _ in $(seq 1 20); do curl -s -m 2 "http://127.0.0.1:$PII_PORT/healthz" >/dev/null && break; sleep 0.5; done
+  pii_running && curl -s -m 2 "http://127.0.0.1:$PII_PORT/healthz" >/dev/null \
+    || { tail -5 "$LOGS/pii-guard.log" | sed 's/^/  | /'; die "PII 가드 기동 실패 ($LOGS/pii-guard.log)"; }
+  note "시작됨 (포트 $PII_PORT, 문맥 판정 LLM: ${PII_LLM_ENABLED:-false})"
 fi
 
-say "6/6 Kong Gateway"
-if running "$C_KONG"; then note "이미 실행 중"
+say "5/6 Kong Gateway"
+if kong_up; then note "이미 실행 중"
 else
-  docker rm -f "$C_KONG" >/dev/null 2>&1 || true
-  # 요청 로그 저장소: LOG_DIR 을 지정하면 그 경로, 아니면 도커 볼륨
-  if [ -n "${LOG_DIR:-}" ]; then mkdir -p "$LOG_DIR"; LOG_MOUNT="$LOG_DIR:/var/log/kong-poc"
-  else LOG_MOUNT="$LOG_VOLUME:/var/log/kong-poc"; fi
-  # Kong 은 kong 사용자로 실행되므로 로그 디렉토리 소유자를 맞춘다
-  docker run --rm -u 0 -v "$LOG_MOUNT" --entrypoint chown "$KONG_IMAGE" kong:kong /var/log/kong-poc
-  docker run -d --name "$C_KONG" --network "$NET" --restart unless-stopped --memory 2g \
-    -p "$PROXY_PORT:8000" -p "$ADMIN_PORT:8001" -p "$MANAGER_PORT:8002" \
-    -v "$LOG_MOUNT" "${KONG_ENV[@]}" "$KONG_IMAGE" >/dev/null
-  note "요청 로그: ${LOG_DIR:-도커 볼륨 $LOG_VOLUME}"
+  kong start -p "$KONG_PREFIX" > "$RUN_DIR/kong-start.log" 2>&1 \
+    || { tail -8 "$RUN_DIR/kong-start.log" | sed 's/^/  | /'; die "Kong 기동 실패 ($LOGS/kong-error.log)"; }
+  for _ in $(seq 1 30); do kong_up && break; sleep 1; done
+  kong_up || die "Kong 이 준비되지 않습니다 ($LOGS/kong-error.log)"
+  note "시작됨"
 fi
-for i in $(seq 1 60); do
-  docker exec "$C_KONG" kong health >/dev/null 2>&1 && break
-  [ "$i" = 60 ] && die "Kong 이 준비되지 않습니다.  docker logs $C_KONG"
-  sleep 2
-done
-note "준비됨"
 
-# 최초 기동이면 설정 적용 (이후 변경은 ./apply-config.sh)
-if ! docker run --rm --network "$NET" kong-poc/deck gateway dump -o - --select-tag kong-poc \
-      --kong-addr "http://$C_KONG:8001" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" 2>/dev/null \
-      | grep -q 'name: llm-chat'; then
+say "6/6 설정"
+if [ "$APPLY" = 0 ]; then
+  note "건너뜀 — 설치 시험만. 설정은 라이선스를 secrets/license.json 에 넣고 bash stop.sh && bash start.sh"
+else
+dump=$(deck gateway dump -o - --select-tag kong-poc --kong-addr "http://127.0.0.1:$ADMIN_PORT" \
+          --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" 2>/dev/null) || true
+if grep -q 'name: llm-chat' <<<"$dump"; then
+  note "이미 적용돼 있음 (바꾼 뒤에는 apply-config.sh)"
+else
   "$ROOT/apply-config.sh"
+fi
 fi
 
 cat <<MSG
 
 ──────────────────────────────────────────────
- Kong AI Gateway PoC 기동 완료
+ Kong AI Gateway PoC 기동 완료 (직접 설치)
 ──────────────────────────────────────────────
- 프록시        http://localhost:$PROXY_PORT
- Kong Manager  $MANAGER_URL   (kong_admin / .env 의 KONG_ADMIN_PASSWORD)
- 상태 확인     ./status.sh
+ 프록시        http://127.0.0.1:$PROXY_PORT   (파드 안) · http://<파드 IP>:$PROXY_PORT
+ Kong Manager  $MANAGER_URL/
+               kong_admin / .env 의 KONG_ADMIN_PASSWORD
+ 데이터·로그   $DATA_DIR
+ 전체 점검     verify.sh
 ──────────────────────────────────────────────
 MSG

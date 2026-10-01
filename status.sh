@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# status.sh — 컨테이너·라우트 상태를 보여준다.
+# status.sh — 프로세스·라우트 상태 (직접 설치 방식). 자세한 점검은 verify.sh
 source "$(dirname "$0")/lib.sh"
-load_env
-say "컨테이너"
-docker ps -a --filter "name=kong-poc-" --format 'table {{.Names}}\t{{.Status}}' | sed 's/^/  /'
-say "Kong"
-if running "$C_KONG"; then
-  docker exec "$C_KONG" kong health 2>&1 | sed 's/^/  /' | tail -3
-  say "라우트"
-  docker run --rm --network "$NET" kong-poc/deck gateway dump -o - \
-    --kong-addr "http://$C_KONG:8001" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" 2>/dev/null \
-    | awk '/^  routes:/{r=1} /paths:/{p=1;next} p&&/- \//{print "  " $2; p=0}'
-else note "실행 중 아님"; fi
+load_env; native_env
+say "프로세스"
+if pg_ready; then note "PostgreSQL   실행 중 (127.0.0.1:$PG_PORT, $(pg_datadir))"; else note "PostgreSQL   멈춤"; fi
+if pii_running; then note "PII 가드     실행 중 (127.0.0.1:$PII_PORT)"; else note "PII 가드     멈춤"; fi
+if kong_up; then note "Kong         실행 중 (프록시 :$PROXY_PORT · Admin 127.0.0.1:$ADMIN_PORT · Manager 127.0.0.1:$MANAGER_PORT)"
+else note "Kong         멈춤"; exit 0; fi
+say "라우트"
+admin /routes | python3 -c '
+import json, sys
+for r in sorted(json.load(sys.stdin).get("data", []), key=lambda r: r.get("name") or ""):
+    print("  %-26s %s" % (r.get("name"), ", ".join(r.get("paths") or [])))'
