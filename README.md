@@ -94,6 +94,10 @@ bash native/verify.sh                     # 환경·설치·실행·기능·로�
 
 Kong Manager: **`<JUPYTER_URL>/proxy/absolute/8002/`** — `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`
 
+**플랫폼이 8000·8001·8002 포트를 밖으로 열어 준 경우**에는 주피터 프록시 대신 그 주소를 씁니다. `.env` 에서
+`JUPYTER_URL` 을 비우고 `MANAGER_URL`(8002 주소)·`ADMIN_API_URL`(8001 주소)을 넣은 뒤 `native/stop.sh && native/start.sh`.
+그러면 Admin API·Manager 가 파드 바깥 연결도 받습니다(0.0.0.0). 브라우저가 Admin API 를 직접 부르므로 8001 도 꼭 열려 있어야 합니다.
+
 **라이선스 없이 설치·접속 시험만** 할 수도 있습니다. `secrets/license.json` 이 없으면 `native/start.sh` 가 설치와 기동까지만
 하고 설정 적용은 건너뜁니다 (일부러 건너뛰려면 `native/start.sh --no-config`). Kong 은 읽기 전용 모드로 떠서
 Manager 로그인·조회는 되지만 설정은 바꿀 수 없습니다. 라이선스를 넣은 뒤 `native/stop.sh && native/start.sh` 로

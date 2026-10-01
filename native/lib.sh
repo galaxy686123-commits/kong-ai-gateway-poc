@@ -25,12 +25,17 @@ native_env() {  # load_env 다음에 부른다
   # 주피터를 거쳐 Kong Manager 를 연다 (jupyter-server-proxy).
   #   Manager 화면: <주피터>/proxy/absolute/8002  — 경로를 그대로 넘기므로 Kong 이 같은 경로로 서비스
   #   Admin API   : <주피터>/proxy/8001           — 앞 경로를 떼고 넘기므로 Admin API 경로 그대로
-  GUI_PATH=""
+  #   플랫폼이 포트를 밖으로 열어 주는 경우엔 JUPYTER_URL 을 비우고 MANAGER_URL·ADMIN_API_URL 에 그 주소를 넣는다.
+  #   바깥 연결은 파드 IP 로 들어오므로 그때는 Admin API·Manager 를 모든 주소(0.0.0.0)에서 받는다.
+  GUI_PATH=""; BIND=127.0.0.1
   if [ -n "${JUPYTER_URL:-}" ]; then
     JUPYTER_URL=${JUPYTER_URL%/}
     GUI_PATH="/proxy/absolute/$MANAGER_PORT"
     MANAGER_URL="$JUPYTER_URL$GUI_PATH"
     ADMIN_API_URL="$JUPYTER_URL/proxy/$ADMIN_PORT"
+  else
+    MANAGER_URL=${MANAGER_URL%/}; ADMIN_API_URL=${ADMIN_API_URL%/}
+    case "$MANAGER_URL" in http*://localhost*|http*://127.0.0.1*) ;; *) BIND=0.0.0.0 ;; esac
   fi
 }
 
@@ -71,9 +76,9 @@ kong_native_env() {
   export KONG_ADMIN_GUI_AUTH=basic-auth
   export KONG_ADMIN_GUI_SESSION_CONF="{\"secret\":\"$KONG_SESSION_SECRET\",\"cookie_secure\":$secure}"
   export KONG_PROXY_LISTEN="0.0.0.0:$PROXY_PORT"
-  # Admin API·Manager 는 파드 안에서만 연다 — 브라우저는 주피터 프록시를 거쳐 들어온다
-  export KONG_ADMIN_LISTEN="127.0.0.1:$ADMIN_PORT"
-  export KONG_ADMIN_GUI_LISTEN="127.0.0.1:$MANAGER_PORT"
+  # Admin API·Manager — 주피터 프록시 경유면 파드 안(127.0.0.1)만, 플랫폼 포트 노출이면 모든 주소
+  export KONG_ADMIN_LISTEN="$BIND:$ADMIN_PORT"
+  export KONG_ADMIN_GUI_LISTEN="$BIND:$MANAGER_PORT"
   export KONG_ADMIN_GUI_URL="$MANAGER_URL" KONG_ADMIN_GUI_API_URL="$ADMIN_API_URL"
   if [ -n "$GUI_PATH" ]; then export KONG_ADMIN_GUI_PATH="$GUI_PATH"; else unset KONG_ADMIN_GUI_PATH; fi
   export KONG_NGINX_WORKER_PROCESSES="$KONG_WORKERS"

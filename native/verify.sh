@@ -99,7 +99,14 @@ elif [ -n "${JUPYTER_URL:-}" ]; then
     if [ "$p_gui" = 200 ] && [ "$p_api" = 200 ]; then ok "주피터 프록시 경유 — Manager 화면 200 · Admin API 200 → 브라우저: $MANAGER_URL/"
     else bad "주피터 프록시 경유 — Manager 화면 $p_gui · Admin API $p_api (둘 다 200 이어야 함)"; fi
   fi
-else warn "JUPYTER_URL 미지정 — 브라우저에서 Kong Manager 를 열 주소가 없음 (.env)"; fi
+elif [ "$BIND" = 0.0.0.0 ]; then
+  # 플랫폼이 연 주소 — 파드 안에서 그 주소가 안 보이는 플랫폼도 있어 실패해도 [주의]
+  e_gui=$(code "$MANAGER_URL/")
+  e_api=$(curl -sk -m 8 -o /dev/null -w '%{http_code}' -H "Kong-Admin-Token: $KONG_ADMIN_PASSWORD" "$ADMIN_API_URL/services")
+  if [ "$e_gui" = 200 ] && [ "$e_api" = 200 ]; then ok "외부 주소 — Manager 200 ($MANAGER_URL) · Admin API 200 ($ADMIN_API_URL)"
+  else warn "외부 주소 — Manager $e_gui · Admin API $e_api (파드 안에서 외부 주소가 안 보일 수 있음 — 브라우저로 $MANAGER_URL/ 확인)"; fi
+  ok "Admin API·Manager 가 파드 바깥 연결도 받음 (0.0.0.0:$ADMIN_PORT · 0.0.0.0:$MANAGER_PORT)"
+else warn "브라우저에서 Kong Manager 를 열 주소가 없음 — .env 에 JUPYTER_URL, 또는 MANAGER_URL·ADMIN_API_URL"; fi
 
 sec "4. 게이트웨이 기능"
 if kong_up; then
