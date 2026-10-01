@@ -23,7 +23,10 @@ case "${1:-}" in
   *)      [ -s "$LOG" ] || { note "아직 기록된 요청이 없습니다."; exit 0; }
           python3 - "$LOG" <<'PY'
 import json, sys, time
-rows = open(sys.argv[1], encoding="utf-8").read().splitlines()[-20:]
+from collections import deque
+# 깨진 바이트가 든 줄도 있다(잘못된 요청은 요청 줄이 그대로 기록됨) → 바꿔 읽고, 파일 전체를 메모리에 올리지 않는다
+with open(sys.argv[1], encoding="utf-8", errors="replace") as f:
+    rows = deque(f, maxlen=20)
 print("  %-14s %-12s %4s  %-34s %-14s %6s  %s" % ("시각(KST)", "사용자", "상태", "경로", "모델", "토큰", "캐시"))
 for line in rows:
     try: d = json.loads(line)

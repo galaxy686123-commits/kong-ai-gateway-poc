@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 #  공통 — 사용자·키·그룹(2-1·2-2), 요청 로그(3-1), 추적 ID(3-2), 지표(3-3), 계정 긴급 차단(3-4),
-#         개인정보 마스킹(4-1, 모든 채팅 경로 — FEATURE_MASKING 으로 켜고 끔)
+#         채팅 요청 공통 전처리(클라이언트 model 무시 · 4-1 개인정보 마스킹 — FEATURE_MASKING 으로 켜고 끔)
 #  값은 .env 의 DECK_* 로 채워진다 (apply-config.sh 가 적용).
 #  select_tags 때문에 kong-poc 태그가 붙은 것만 관리한다 — Kong Manager 에서 직접 만든 것은 건드리지 않는다.
 # ─────────────────────────────────────────────────────────────
@@ -75,52 +75,70 @@ plugins:
       bandwidth_metrics: true
       ai_metrics: true
 
-  # 4-1 개인정보 마스킹 — LLM 으로 보내기 전에 프롬프트 속 개인정보를 라벨로 바꾼다
+  # 채팅 요청 공통 전처리 (항상 켬 — 끄지 마세요)
+  #  ① 1-1·1-4 모델은 게이트웨이가 정한다 — 클라이언트가 보낸 model 은 지운다.
+  #     남겨 두면 설정과 다른 이름은 400("cannot use own model"), 같은 이름이어도 장애 대체가 일어나지 않는다
+  #     (Kong 3.16 실측). OpenAI SDK 등은 model 을 항상 보내므로 필요하다. 대상은 헤더 x-ai-target 으로 고른다.
+  #     실제로 답한 모델은 응답 헤더 X-Kong-LLM-Model, 클라이언트가 보낸 이름은 요청 로그의 client_model.
+  #  ② 4-1 개인정보 마스킹 (FEATURE_MASKING) — LLM 으로 보내기 전에 프롬프트 속 개인정보를 라벨로 바꾼다
   #     예) "주민번호 900101-1234567" → "주민번호 [주민등록번호]". 무엇을 가렸는지는 X-PII-Masked 헤더·요청 로그에.
   - name: pre-function
-    instance_name: pii-masking
-    enabled: ${{ env "DECK_ON_MASKING" }}   # FEATURE_MASKING — 4-1 개인정보 마스킹 (모든 채팅 경로)
+    instance_name: chat-preprocess
     config:
       access:
         - |
+          local MASKING = ${{ env "DECK_ON_MASKING" }}   -- FEATURE_MASKING (4-1)
           local path = kong.request.get_path()
           if not path:find("/chat/completions$") then return end
           local body = kong.request.get_body("application/json")
-          if type(body) ~= "table" or type(body.messages) ~= "table" then return end
+          if type(body) ~= "table" then return end
+          local changed = false
 
-          -- 순서가 중요하다: 긴 형식(주민번호·카드)을 먼저 가려야 짧은 형식(계좌)에 잘못 걸리지 않는다
-          local RULES = {
-            { "rrn",      "[주민등록번호]", "%d%d%d%d%d%d%s*%-%s*[1-8]%d%d%d%d%d%d" },
-            { "card",     "[카드번호]",     "%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d" },
-            { "mobile",   "[휴대전화]",     "01[016789][%-%. ]?%d%d%d%d?[%-%. ]?%d%d%d%d" },
-            { "landline", "[전화번호]",     "0[2-6]%d?[%-%. ]%d%d%d%d?[%-%. ]%d%d%d%d" },
-            -- 계좌: 숫자 묶음 3개(2~6 · 2~6 · 4~7자리). 날짜(2026-10-01)는 마지막 묶음이 짧아 걸리지 않는다
-            { "account",  "[계좌번호]",     "%d%d%d?%d?%d?%d?%-%d%d%d?%d?%d?%d?%-%d%d%d%d%d?%d?%d?" },
-            { "email",    "[이메일]",       "[%w%.%+%-_]+@[%w%-]+%.[%w%.%-]+" },
-          }
-          local total, seen, kinds = 0, {}, {}
-          local function mask(s)
-            for _, r in ipairs(RULES) do
-              local n
-              s, n = s:gsub(r[3], r[2])
-              if n > 0 then
-                total = total + n
-                if not seen[r[1]] then seen[r[1]] = true; kinds[#kinds + 1] = r[1] end
+          -- ① 클라이언트가 보낸 모델 이름은 지운다
+          if body.model ~= nil then
+            kong.log.set_serialize_value("client_model", tostring(body.model))
+            body.model = nil
+            changed = true
+          end
+
+          -- ② 개인정보 마스킹
+          if MASKING and type(body.messages) == "table" then
+            -- 순서가 중요하다: 긴 형식(주민번호·카드)을 먼저 가려야 짧은 형식(계좌)에 잘못 걸리지 않는다
+            local RULES = {
+              { "rrn",      "[주민등록번호]", "%d%d%d%d%d%d%s*%-%s*[1-8]%d%d%d%d%d%d" },
+              { "card",     "[카드번호]",     "%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d" },
+              { "mobile",   "[휴대전화]",     "01[016789][%-%. ]?%d%d%d%d?[%-%. ]?%d%d%d%d" },
+              { "landline", "[전화번호]",     "0[2-6]%d?[%-%. ]%d%d%d%d?[%-%. ]%d%d%d%d" },
+              -- 계좌: 숫자 묶음 3개(2~6 · 2~6 · 4~7자리). 날짜(2026-10-01)는 마지막 묶음이 짧아 걸리지 않는다
+              { "account",  "[계좌번호]",     "%d%d%d?%d?%d?%d?%-%d%d%d?%d?%d?%d?%-%d%d%d%d%d?%d?%d?" },
+              { "email",    "[이메일]",       "[%w%.%+%-_]+@[%w%-]+%.[%w%.%-]+" },
+            }
+            local total, seen, kinds = 0, {}, {}
+            local function mask(s)
+              for _, r in ipairs(RULES) do
+                local n
+                s, n = s:gsub(r[3], r[2])
+                if n > 0 then
+                  total = total + n
+                  if not seen[r[1]] then seen[r[1]] = true; kinds[#kinds + 1] = r[1] end
+                end
+              end
+              return s
+            end
+            for _, m in ipairs(body.messages) do
+              if type(m.content) == "string" then
+                m.content = mask(m.content)
+              elseif type(m.content) == "table" then      -- 멀티모달: 글자 부분만
+                for _, part in ipairs(m.content) do
+                  if type(part) == "table" and type(part.text) == "string" then part.text = mask(part.text) end
+                end
               end
             end
-            return s
-          end
-          for _, m in ipairs(body.messages) do
-            if type(m.content) == "string" then
-              m.content = mask(m.content)
-            elseif type(m.content) == "table" then      -- 멀티모달: 글자 부분만
-              for _, part in ipairs(m.content) do
-                if type(part) == "table" and type(part.text) == "string" then part.text = mask(part.text) end
-              end
+            if total > 0 then
+              changed = true
+              kong.response.set_header("X-PII-Masked", table.concat(kinds, ","))
+              kong.log.set_serialize_value("pii_masked", { count = total, types = table.concat(kinds, ",") })
             end
           end
-          if total > 0 then
-            kong.service.request.set_body(body, "application/json")
-            kong.response.set_header("X-PII-Masked", table.concat(kinds, ","))
-            kong.log.set_serialize_value("pii_masked", { count = total, types = table.concat(kinds, ",") })
-          end
+
+          if changed then kong.service.request.set_body(body, "application/json") end

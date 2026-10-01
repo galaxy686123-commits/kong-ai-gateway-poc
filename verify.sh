@@ -120,9 +120,9 @@ has() { [[ " $routes " = *" $1 "* ]]; }
 P="http://127.0.0.1:$PROXY_PORT"
 KA=(-H "apikey: $DECK_CLIENT_KEY"); KB=(-H "apikey: ${DECK_CLIENT_KEY_B:-none}")
 # req <경로> <질문> [curl 인자...] → "상태 초" · 본문 r.out · 헤더 r.hdr
-req() {
+req() {  # OpenAI SDK 처럼 model 을 넣어 보낸다 — 게이트웨이가 지우고 설정된 모델을 쓴다 (00-base.yaml)
   local path=$1 msg=$2; shift 2
-  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"messages":[{"role":"user","content":sys.argv[1]}],"max_tokens":40}))' "$msg")
+  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"model":"gpt-4o","messages":[{"role":"user","content":sys.argv[1]}],"max_tokens":40}))' "$msg")
   curl -s -m 120 -o "$RUN_DIR/r.out" -D "$RUN_DIR/r.hdr" -w '%{http_code} %{time_total}' \
     -H 'Content-Type: application/json' "$@" -d "$body" "$P$path" 2>/dev/null | awk '{printf "%s %.2f", $1, $2}'
 }
@@ -146,8 +146,7 @@ names = {"acl": "접근통제", "rate-limiting": "호출한도", "ai-rate-limiti
          "ai-custom-guardrail": "유해답변", "post-function": "답변마스킹", "ai-semantic-prompt-guard": "의미가드", "ai-semantic-cache": "시맨틱캐시"}
 d = json.load(sys.stdin)["data"]
 print(" · ".join(names[p["name"]] for p in d if p["enabled"] and p["name"] in names) or "없음")' 2>/dev/null)
-  mk=$(admin "/plugins?size=1000" | python3 -c 'import json,sys; print(any(p.get("instance_name") == "pii-masking" and p["enabled"] for p in json.load(sys.stdin)["data"]))' 2>/dev/null)
-  ok "통합 경로 /v1/chat/completions — 켜진 기능: $([ "$mk" = True ] && echo '마스킹 · ')${on:-없음}  (.env 의 FEATURE_… 로 바꿈)"
+  ok "통합 경로 /v1/chat/completions — 켜진 기능: $([ "$DECK_ON_MASKING" = true ] && echo '마스킹 · ')${on:-없음}  (.env 의 FEATURE_… 로 바꿈)"
   LLM=1; [[ "$DECK_CHAT_URL" = *example* ]] && LLM=0
 
   # ── 1. 서비스 등록·연동 ─────────────────────────────────
@@ -208,7 +207,7 @@ PYT
   fi
   if has feature-failover; then
     read -r c _ <<<"$(req /features/failover/v1/chat/completions "장애 대체 시험" "${KA[@]}")"; m=$(hdr X-Kong-LLM-Model)
-    [ "$c" = 200 ] && [[ "$m" = *backup-model* ]] && ok "1-4 장애 대체 — 주 모델 503 → 보조 모델이 응답 ($m)" || bad "1-4 장애 대체 — $c · 응답 모델 ${m:-없음}"
+    [ "$c" = 200 ] && [[ "$m" = *backup-model* ]] && ok "1-4 장애 대체 — 주 모델 503 → 보조 모델이 응답 ($m · 요청에 model 이 있어도)" || bad "1-4 장애 대체 — $c · 응답 모델 ${m:-없음}"
   fi
 
   # ── 2. 접근·사용량 제어 ───────────────────────────────────

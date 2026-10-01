@@ -31,7 +31,8 @@ esac
 # 2-2 접근 통제를 보려면 부서 키가 둘 필요하다 — 두 번째 키가 없으면 만들어 .env 에 적는다
 if [ -z "${DECK_CLIENT_KEY_B:-}" ]; then
   DECK_CLIENT_KEY_B=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(24)))')
-  printf '\n# apply-config.sh 가 만든 team-b 사용자 키\nDECK_CLIENT_KEY_B=%s\n' "$DECK_CLIENT_KEY_B" >> .env
+  if grep -q '^DECK_CLIENT_KEY_B=' .env; then sed -i "s|^DECK_CLIENT_KEY_B=.*|DECK_CLIENT_KEY_B=$DECK_CLIENT_KEY_B|" .env   # 빈 줄을 그 자리에서 채운다
+  else printf '\n# apply-config.sh 가 만든 team-b 사용자 키\nDECK_CLIENT_KEY_B=%s\n' "$DECK_CLIENT_KEY_B" >> .env; fi
   note "team-b 사용자 키를 만들어 .env 에 적었습니다 (DECK_CLIENT_KEY_B)"
 fi
 deck_env

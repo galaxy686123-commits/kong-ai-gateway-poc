@@ -60,6 +60,7 @@ bash verify.sh         # 요구사항별 점검 — 요약이 「불가 0」이�
 ```
 
 `bash verify.sh --full` 은 70초 장기 연결·긴급 차단 켜고 끄기까지 실제로 해 봅니다 (약 2분).
+항목별로 하나씩 보여 주는 방법과 **파드 밖(PC)에서 외부 주소로 검증하는 방법**은 [VERIFY.md](VERIFY.md) 에 있습니다.
 
 ### Kong Manager 접속
 
@@ -125,6 +126,9 @@ Kong Manager 는 **브라우저가 Admin API(8001)를 직접 부르므로** 8002
 않습니다** — 조각으로 나뉜 답은 검사할 수 없어서입니다 (`"stream": true` 요청은 400).
 Kong Manager 에서 플러그인을 직접 켜고 꺼도 되지만, 다음 `apply-config.sh` 때 `.env` 값으로 돌아갑니다.
 
+**요청 본문의 `model` 은 게이트웨이가 지우고 설정된 모델을 씁니다** — OpenAI SDK 처럼 `model` 을 항상 보내는 앱도
+그대로 붙고, 대상은 헤더 `x-ai-target` 으로 고릅니다. 클라이언트가 보낸 이름은 요청 로그의 `client_model` 에 남습니다.
+
 통합 경로의 LLM: 사내 LLM(`DECK_CHAT_URL`) → 실패하면(503·429·5xx·연결 실패·시간 초과) 외부 LLM(`DECK_EXT_URL`, 또는
 `FALLBACK=azure` 면 Azure)으로 같은 요청을 다시 보냅니다. 클라이언트는 응답 헤더 `X-Kong-LLM-Model` 로 실제 모델을 봅니다.
 
@@ -174,6 +178,7 @@ OpenAI SDK 는 `base_url` 을 게이트웨이로 두고 사용자 키를 헤더�
 ```python
 from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused", default_headers={"apikey": "<사용자 키>"})
+r = client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "안녕"}])   # model 은 아무 값이나
 ```
 
 **3-4 긴급 차단**: Kong Manager → Plugins → `kill-switch--<계정 또는 서비스>` 를 켜면 몇 초 안에 그 계정·서비스의 모든
@@ -229,6 +234,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
 | `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기 · `--no-features` 기능별 경로 빼기. `kong-poc` 태그가 붙은 것만 관리 |
 | `verify.sh` | 환경·설치·접속·요구사항별 점검. `--full` 은 장기 연결·긴급 차단까지 실제로 |
+| `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 요구사항 점검 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |
 | `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
 | `dump-config.sh` | 지금 설정을 `conf/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
@@ -266,6 +272,8 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 의미 기반 가드(`ai-semantic-prompt-guard`)가 vault 로 넣은 벡터 DB 비밀번호를 읽지 못함 (`missing password`) | 벡터 DB(`kong-pgvector`)만 파드 안(127.0.0.1)에서 비밀번호 없이 접속. Kong DB 는 계속 비밀번호 |
 | Kong 기본 PII 서비스(`ai-sanitizer` + PII 컨테이너)는 한국 개인정보 형식을 거의 못 잡고 컨테이너가 필요 | 4-1 은 `pre-function`(정규식), 문맥 판정은 PII 가드(`addons/pii-guard`) |
 | `ai-custom-guardrail` 은 차단(block)만 하고 문장 일부를 바꾸지 못함 | 4-4 는 표준 문구로 대체, 4-5 는 `post-function` 으로 마스킹 |
+| 요청 본문에 `model` 이 있으면 설정과 다른 이름은 400(`cannot use own model`), **같은 이름이어도 장애 대체가 일어나지 않음** (OpenAI SDK 는 항상 보냄) | 채팅 요청 공통 전처리(`00-base.yaml` 의 `chat-preprocess`)가 `model` 을 지움 — 끄지 말 것 |
+| curl 로 큰 파일을 보내면 `Expect: 100-continue` 때문에 상한 초과가 413 이 아니라 417(화면엔 400)로 보임 | 정상 거절. 확인할 때는 `-H 'Expect:'` |
 
 ---
 
@@ -280,6 +288,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 1-2 첫 토큰 지연 (게이트웨이가 더한 것, 10회 중앙값) | 1.5~2.3ms · Kong 재기동 직후 5~6ms |
 | 1-4 장애 대체 | 주 모델 503·연결 거부 → 보조 모델 응답 (같은 호스트·다른 호스트의 실제 LLM 모두) |
 | 통합 경로 스위치 | 답변 마스킹 켬·호출 한도 끔 → 적용 → 실제 LLM 답변 마스킹 확인 → 되돌림 |
+| 파드 밖 PC 에서 `verify-remote.py --full` | **OK 21 · 주의 0 · 불가 0** — OpenAI SDK(일반·스트리밍·`x-ai-target`·차단 예외)도 확인 |
 | 3.15.0.6 → 3.16.0.0 업그레이드 | 설치 파일 교체 후 `stop.sh`·`start.sh` — DB 자동 마이그레이션, 약 40초 |
 | 파드 강제 재생성 | `start.sh` 한 번에 재설치 후 기존 DB·설정·로그로 기동 (약 1분) |
 
