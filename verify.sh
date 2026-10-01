@@ -87,8 +87,17 @@ if kong_up; then
   c_bad=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:x-wrong" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_gui=$(code "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/")
   if [ "$c_login" = 200 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ]; then ok "Kong Manager 화면 200 · 로그인 kong_admin 성공 · 틀린 비밀번호 401"
-  elif [ "$c_login" = 401 ] && [ -z "${KONG_MANAGER_PASSWORD:-}" ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ] && [ "$c_tok" = 200 ]; then
-    warn "Kong Manager 화면 200 · 로그인 비밀번호가 .env 와 다름 (Manager 에서 바꿨다면 정상 — 새 비밀번호를 .env 의 KONG_MANAGER_PASSWORD 에 적으면 로그인까지 점검)"
+  elif [ "$c_login" = 401 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ] && [ "$c_tok" = 200 ]; then
+    # 로그인 자체는 동작한다(틀린 비밀번호를 401 로 거절) — .env 에 적힌 비밀번호가 실제와 다른 경우
+    fix="bash verify.sh 맨 아래 안내대로 KONG_MANAGER_PASSWORD 를 다시 넣으세요"
+    if [ -z "${KONG_MANAGER_PASSWORD:-}" ]; then
+      warn "Kong Manager 화면 200 · 로그인 비밀번호가 .env 와 다름 (Manager 에서 바꿨다면 정상) — 새 비밀번호를 .env 의 KONG_MANAGER_PASSWORD 에 넣으면 로그인까지 점검"
+    elif [[ "$KONG_MANAGER_PASSWORD" == \<* ]]; then
+      warn "Kong Manager 화면 200 · .env 의 KONG_MANAGER_PASSWORD 에 예시 문구(<…>)가 그대로 있음 — $fix"
+    else
+      warn "Kong Manager 화면 200 · .env 의 KONG_MANAGER_PASSWORD 로 로그인 401 — Manager 에서 쓰는 비밀번호와 다름 (오타·띄어쓰기·# 확인) — $fix"
+    fi
+    MGR_PW_HINT=1
   else bad "Kong Manager — 화면 $c_gui · 로그인 $c_login · 틀린 비밀번호 $c_bad (200 · 200 · 401 이어야 함)"; fi
 else bad "Kong 멈춤 — start.sh ($LOGS/kong-error.log)"; fi
 # 브라우저가 쓰는 길(주피터 프록시)을 파드 안에서 그대로 따라가 본다
@@ -329,4 +338,12 @@ fi
 
 sec "요약"
 printf '  OK %d · 주의 %d · 불가 %d\n' "$PASS" "$WARN" "$FAIL"
+if [ "${MGR_PW_HINT:-0}" = 1 ]; then
+  cat <<'HINT'
+  ※ Manager 비밀번호를 .env 에 넣는 법 — 아래 세 줄을 붙여 넣고, 묻는 곳에 Manager 비밀번호를 입력 (화면에 안 보임)
+     read -rsp 'Manager 비밀번호: ' P; echo
+     sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
+     bash verify.sh
+HINT
+fi
 [ "$FAIL" = 0 ] && echo "  → 이상 없음." || echo "  → [불가] 항목을 먼저 해결하세요. 이 화면을 담당자에게 보내 주세요."

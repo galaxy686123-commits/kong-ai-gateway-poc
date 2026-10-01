@@ -74,7 +74,12 @@ Kong Manager 는 **브라우저가 Admin API(8001)를 직접 부르므로** 8002
 계정은 `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`. 접속 방식을 바꾼 뒤에는 `bash stop.sh && bash start.sh`.
 
 Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바뀌고, 스크립트가 쓰는 Admin API 토큰은 처음 값(`KONG_ADMIN_PASSWORD`)
-그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용).
+그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용). 넣는 법 — 아래를 붙여 넣고 묻는 곳에 새 비밀번호를 입력합니다 (화면에 안 보임).
+
+```bash
+read -rsp 'Manager 비밀번호: ' P; echo
+sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
+```
 
 ---
 
