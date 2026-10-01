@@ -1,43 +1,71 @@
 #!/usr/bin/env bash
 # set-data-dir.sh — 파드를 다시 만들어도 남아야 하는 파일을 유지 폴더(쿠버네티스의 PV 같은 곳)에 둔다.
-#   bash set-data-dir.sh <유지 폴더>        예) bash set-data-dir.sh datasets/DT0000000000/data
+#   bash set-data-dir.sh <유지 폴더>           예) bash set-data-dir.sh /datasets/DT0000000000/data
+#   bash set-data-dir.sh --check <유지 폴더>   옮기지 않고 위치·적합성만 확인
 #
+#   주피터 탐색기에 보이는 경로(/datasets/…)를 그대로 줘도 된다 — 주피터 최상위 폴더·/project·홈 아래에서 실제 위치를 찾는다.
 #   <유지 폴더>/kong-poc/ 에 DB(Kong 설정·관리 감사로그·벡터 DB)·요청 로그·Kong 로그·pgvector 빌드 결과·
 #   설정 백업·점검 기록을 둔다 (.env 의 DATA_DIR). .env·라이선스는 저장소에서 그대로 고쳐 쓰고,
 #   스크립트를 돌릴 때마다 유지 폴더에 사본이 남는다.
 #   파드를 다시 만들어 저장소를 새로 받았으면 같은 명령을 한 번 더 — 사본에서 .env·라이선스를 되살리고 기동한다.
 #   여러 번 실행해도 안전하다. 옮기기 전 자리는 지우지 않고 이름만 바꿔 둔다 (<원래 이름>.moved-<시각>).
 set -euo pipefail
+ORIG_PWD=$PWD
 cd "$(dirname "$0")"
 say()  { printf '\n▶ %s\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 die()  { printf '\n✘ %s\n' "$*" >&2; exit 1; }
 now=$(date +%Y%m%d-%H%M%S)
 
-[ $# -eq 1 ] || die "유지 폴더를 지정하세요.  예) bash set-data-dir.sh datasets/DT0000000000/data"
-want=${1%/}; base=""
-if [[ "$want" = /* ]]; then
-  [ -d "$want" ] && base=$want
-else   # 상대 경로면 지금 위치 · /project · / · 홈 순서로 찾는다
-  for c in "$PWD/$want" "/project/$want" "/$want" "$HOME/$want"; do
-    if [ -d "$c" ]; then base=$(cd "$c" && pwd); break; fi
-  done
-fi
-[ -n "$base" ] || die "폴더를 찾을 수 없습니다: $want"
-T="$base/kong-poc"
+CHECK=0; if [ "${1:-}" = --check ]; then CHECK=1; shift; fi
+[ $# -eq 1 ] || die "유지 폴더를 지정하세요.  예) bash set-data-dir.sh /datasets/DT0000000000/data   (옮기지 않고 확인만: --check)"
 
-say "1/4 유지 폴더 — $T"
-mkdir -p "$T" 2>/dev/null || die "폴더를 만들 수 없습니다 (쓰기 권한 확인): $T"
-chmod 700 "$T" 2>/dev/null || true
-# PostgreSQL 은 데이터 폴더의 소유자가 자신이고 권한이 700 이어야 뜬다 — 옮기기 전에 확인한다
-t="$T/.check-$$"
-if ! { mkdir -p "$t" && chmod 700 "$t" && echo ok > "$t/f"; } 2>/dev/null \
+# 실제 위치 찾기 — 주피터 탐색기의 경로는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와 다를 수 있다
+find_dir() {
+  local w=$1 rel=${1#/} c p roots=()
+  if [[ "$w" = /* ]]; then [ -d "$w" ] && { (cd "$w" && pwd); return 0; }
+  elif [ -d "$ORIG_PWD/$w" ]; then (cd "$ORIG_PWD/$w" && pwd); return 0; fi
+  for p in $(pgrep -u "$(id -u)" -f jupyter 2>/dev/null); do    # 주피터가 띄워진 폴더 = 탐색기의 최상위
+    c=$(ps -o args= -p "$p" 2>/dev/null | grep -oE -- '--(ServerApp\.root_dir|NotebookApp\.notebook_dir|notebook-dir)[= ][^ ]+' | head -1 | sed -E 's/^--[^= ]+[= ]//') || true
+    [ -n "$c" ] && roots+=("$c")
+    c=$(readlink "/proc/$p/cwd" 2>/dev/null) && roots+=("$c")
+  done
+  roots+=("$ORIG_PWD" /project "$HOME" /mnt /data /workspace)
+  for c in "${roots[@]}"; do [ -d "$c/$rel" ] && { (cd "$c/$rel" && pwd); return 0; }; done
+  c=$(timeout 60 find / -maxdepth 6 -type d -path "*/$rel" -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -1) || true
+  [ -n "$c" ] && { echo "$c"; return 0; }
+  return 1
+}
+want=${1%/}
+base=$(find_dir "$want") || die "폴더를 찾을 수 없습니다: $want
+  파드 안의 실제 위치를 확인해 보세요:  df -h | grep -i datasets"
+[ "$base" = "$want" ] || note "찾은 위치: $base"
+
+fstype=$(df -PT "$base" 2>/dev/null | awk 'NR==2 {print $2}')
+avail=$(df -Ph "$base" 2>/dev/null | awk 'NR==2 {print $4}')
+case "$fstype" in
+  overlay|tmpfs) die "$base 는 파드를 다시 만들면 사라지는 곳입니다 ($fstype) — PV 로 연결된 폴더를 지정하세요" ;;
+  fuse*|*s3*|cifs|smb*|9p)
+    die "$base ($fstype) 에는 DB 를 두면 위험합니다 — 오브젝트 스토리지·네트워크 공유는 DB 가 필요한 파일 잠금·동기화를 보장하지 않습니다. 아무것도 옮기지 않았습니다. 이 화면을 담당자에게 보내 주세요" ;;
+esac
+# DB(PostgreSQL)는 소유자가 자신이고 권한이 700 인 폴더에서만 뜬다 — 옮기기 전에 시험 폴더로 확인한다
+t="$base/.kong-poc-check-$$"
+if ! { mkdir "$t" && chmod 700 "$t" && echo ok > "$t/f"; } 2>/dev/null \
    || [ "$(stat -c '%u %a' "$t" 2>/dev/null)" != "$(id -u) 700" ]; then
-  rm -rf "$t"
-  die "이 폴더에는 DB 를 둘 수 없습니다 (소유자·권한 700 을 지정할 수 없음) — 아무것도 옮기지 않았습니다. 이 화면을 담당자에게 보내 주세요"
+  rm -rf "$t" 2>/dev/null || true
+  die "이 폴더에는 DB 를 둘 수 없습니다 (쓰기 권한 또는 소유자·권한 700 지정 불가 · $fstype) — 아무것도 옮기지 않았습니다. 이 화면을 담당자에게 보내 주세요"
 fi
 rm -rf "$t"
-note "쓰기·권한 확인 — $(df -PhT "$T" | awk 'NR==2 {print $2 ", " $5 " 남음"}')"
+T="$base/kong-poc"
+if [ "$CHECK" = 1 ]; then
+  note "확인 완료 — $base ($fstype, $avail 남음): DB·로그를 둘 수 있습니다$([ -d "$T/pgdata" ] && echo " · 이미 kong-poc/ 에 DB 있음")"
+  note "옮기려면:  bash set-data-dir.sh $want"
+  exit 0
+fi
+
+say "1/4 유지 폴더 — $T"
+mkdir -p "$T" && chmod 700 "$T" 2>/dev/null || true
+note "쓰기·권한 확인 — $fstype, $avail 남음"
 
 say "2/4 설정 (.env · 라이선스)"
 if [ -f "$T/.env" ]; then

@@ -261,7 +261,8 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 따로 있으면 그곳을 지정합니다 — 처음 설치할 때든, 이미 쓰던 중이든 같은 명령입니다.
 
 ```bash
-bash set-data-dir.sh <유지 폴더>       # 예) bash set-data-dir.sh datasets/DT0000000000/data
+bash set-data-dir.sh --check <유지 폴더>   # 먼저 확인만 — 실제 위치·DB 를 둘 수 있는 저장소인지 (아무것도 바꾸지 않음)
+bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /datasets/DT0000000000/data
 ```
 
 | `<유지 폴더>/kong-poc/` | 내용 |
@@ -272,8 +273,10 @@ bash set-data-dir.sh <유지 폴더>       # 예) bash set-data-dir.sh datasets/
 | `.env` · `secrets/license.json` | 설정·라이선스 **사본** — 저장소의 것을 그대로 고쳐 쓰고, 스크립트를 돌릴 때마다 사본이 갱신됨 |
 | `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
 
-- 상대 경로를 주면 지금 위치 · `/project` · `/` · 홈 순서로 찾습니다. 옮기기 전에 그 폴더가 DB 를 둘 수 있는지(권한 700) 먼저
-  확인하고, 안 되면 아무것도 옮기지 않습니다. 실행 중이면 잠시 내렸다가 옮긴 뒤 다시 띄우고 설정까지 다시 적용합니다.
+- **주피터 탐색기에 보이는 경로를 그대로 줘도 됩니다.** 탐색기의 `/datasets/…` 는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와
+  다를 수 있어, 주피터 최상위 폴더 · `/project` · 홈 아래에서 찾고 없으면 깊이 6 까지 검색합니다 (찾은 위치를 알려 줌).
+- 옮기기 전에 그 폴더가 DB 를 둘 수 있는지 확인하고(권한 700 · 파드와 함께 사라지는 overlay 나 오브젝트 스토리지(FUSE)·네트워크 공유가
+  아닌지), 안 되면 아무것도 옮기지 않습니다. 실행 중이면 잠시 내렸다가 옮긴 뒤 다시 띄우고 설정까지 다시 적용합니다.
 - 원래 자리는 지우지 않고 `data.moved-<시각>` 으로 남겨 둡니다 — 확인 후 지워도 됩니다.
 - **파드를 다시 만들었으면**: 저장소를 받고(`git clone`) → `bash set-data-dir.sh <같은 유지 폴더>` 하나로 `.env`·라이선스를
   되살리고 프로그램을 다시 설치해 기존 DB·설정으로 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 —
