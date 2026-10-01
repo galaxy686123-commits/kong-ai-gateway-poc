@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────
+#  3-2 분산 추적 — 모든 요청을 OpenTelemetry 스팬으로 추적 백엔드(OTLP/HTTP)에 보낸다.
+#  DECK_OTEL_ENDPOINT 가 있을 때 적용 (예: http://<수집기>:4318/v1/traces).
+#  W3C traceparent 를 받아 이어 쓰고 백엔드로 넘기므로, Agent 가 이 헤더를 다음 호출에 붙이면
+#  사용자 질문 하나가 거친 Agent·LLM 호출이 하나의 트레이스로 묶인다.
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+plugins:
+  - name: opentelemetry
+    config:
+      traces_endpoint: ${{ env "DECK_OTEL_ENDPOINT" }}
+      resource_attributes:
+        service.name: kong-ai-gateway-poc
+      propagation:
+        default_format: w3c
+        extract: [w3c, b3, jaeger]
+        inject: [preserve, w3c]

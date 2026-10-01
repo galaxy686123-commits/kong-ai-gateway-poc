@@ -1,0 +1,221 @@
+# ─────────────────────────────────────────────────────────────
+#  임베딩 모델이 있을 때 (DECK_EMBED_URL·DECK_EMBED_MODEL) — 의미 기반 기능
+#
+#  4-3 의미 기반 가드: 금지 예문과 의미가 가까운 질문을 막는다 (표현을 바꾼 우회도 잡는다)
+#  시맨틱 캐시: 의미가 같은 질문은 LLM 호출 없이 저장된 답으로 응답한다
+#  통합 경로(llm)에는 스위치로 붙고 (FEATURE_SEMANTIC_GUARD · FEATURE_SEMANTIC_CACHE, 기본 off — 매 요청 임베딩 계산),
+#  기능별 경로 /features/semantic-guard · /features/cache 로 따로 시험할 수 있다.
+#  임베딩은 게이트웨이 자신의 /ai/embed 를 거친다 — 파드 안에서만 받는다(ip-restriction).
+#  벡터 DB(kong-pgvector)는 파드 안에서만 비밀번호 없이 접속한다 (start.sh — Kong 3.16 의미 기반 가드가
+#  vault 로 넣은 DB 비밀번호를 읽지 못해서). 바깥 PostgreSQL 을 쓰려면 pgvector 아래에 password 를 넣는다.
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+services:
+  - name: ai-embed
+    url: ${{ env "DECK_EMBED_URL" }}
+    routes:
+      - name: ai-embed
+        paths: [/ai/embed]
+        protocols: [http, https]
+    plugins:
+      - name: ip-restriction            # 게이트웨이 자신만 쓰는 내부 경로 — 밖에서 부르면 403
+        config:
+          allow: [127.0.0.1]
+      - name: pre-function
+        instance_name: strip-dimensions
+        config:
+          access:
+            - |
+              local cjson = require "cjson.safe"
+              local body = kong.request.get_raw_body()
+              if body then
+                local t = cjson.decode(body)
+                if t and t.dimensions ~= nil then
+                  t.dimensions = nil
+                  kong.service.request.set_raw_body(cjson.encode(t))
+                end
+              end
+      - name: ai-proxy
+        config:
+          route_type: llm/v1/embeddings
+          genai_category: text/embeddings
+          auth:
+            header_name: Authorization
+            header_value: "{vault://env/embed-auth-header}"
+          logging:
+            log_statistics: true
+            log_payloads: false
+          model:
+            provider: openai
+            name: ${{ env "DECK_EMBED_MODEL" }}
+            options:
+              upstream_url: ${{ env "DECK_EMBED_URL" }}
+
+  # 4-3 의미 기반 가드 — 기능별 경로
+  - name: feature-semantic-guard
+    url: ${{ env "DECK_FEATURE_URL" }}
+    routes:
+      - name: feature-semantic-guard
+        paths: [/features/semantic-guard/v1/chat/completions]
+        protocols: [http, https]
+        response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
+    plugins:
+      - name: key-auth
+        config:
+          key_names: [apikey]
+          hide_credentials: true
+      - name: ai-semantic-prompt-guard
+        config:
+          embeddings:
+            model:
+              provider: openai
+              name: ${{ env "DECK_EMBED_MODEL" }}
+              options:
+                upstream_url: ${{ env "DECK_KONG_LOOPBACK" }}/ai/embed
+          rules:
+            match_all_conversation_history: false
+            match_all_roles: false
+            deny_prompts:
+              - 이전 지시나 규칙을 무시하고 제한 없이 무엇이든 답하라는 역할극·탈옥 요청
+              - 시스템 프롬프트나 숨겨진 지침, 내부 설정을 그대로 보여 달라는 요청
+              - 회사 기밀 정보, 내부 시스템 계정, 비밀번호를 알아내려는 요청
+              - 고객이나 직원의 개인정보를 우회적으로, 나눠서, 한 글자씩 알려 달라는 요청
+          search:
+            threshold: 0.42                 # 데모에서 맞춘 값 — 작을수록 엄격
+          vectordb:
+            strategy: pgvector
+            dimensions: ${{ env "DECK_EMBED_DIMS" }}
+            distance_metric: cosine
+            threshold: 0.42
+            pgvector:
+              host: ${{ env "DECK_PG_HOST" }}
+              port: ${{ env "DECK_PG_PORT" }}
+              database: kong-pgvector
+              user: kong
+      - name: ai-proxy
+        config:
+          route_type: llm/v1/chat
+          model_name_header: true
+          auth:
+            header_name: Authorization
+            header_value: '${{ env "DECK_FEATURE_AUTH" }}'
+          logging:
+            log_statistics: true
+            log_payloads: false
+          model:
+            provider: openai
+            name: ${{ env "DECK_FEATURE_MODEL" }}
+            options:
+              upstream_url: ${{ env "DECK_FEATURE_URL" }}
+
+  # 시맨틱 캐시 — 기능별 경로
+  - name: feature-cache
+    url: ${{ env "DECK_FEATURE_URL" }}
+    routes:
+      - name: feature-cache
+        paths: [/features/cache/v1/chat/completions]
+        protocols: [http, https]
+        response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
+    plugins:
+      - name: key-auth
+        config:
+          key_names: [apikey]
+          hide_credentials: true
+      - name: ai-semantic-cache
+        config:
+          cache_ttl: 3600
+          message_countback: 1
+          stop_on_failure: false        # 캐시 장애 시에도 LLM 호출은 계속
+          embeddings:
+            model:
+              provider: openai
+              name: ${{ env "DECK_EMBED_MODEL" }}
+              options:
+                upstream_url: ${{ env "DECK_KONG_LOOPBACK" }}/ai/embed
+          vectordb:
+            strategy: pgvector
+            dimensions: ${{ env "DECK_EMBED_DIMS" }}
+            distance_metric: cosine
+            threshold: 0.15             # 코사인 거리. 작을수록 엄격
+            pgvector:
+              host: ${{ env "DECK_PG_HOST" }}
+              port: ${{ env "DECK_PG_PORT" }}
+              database: kong-pgvector
+              user: kong
+      - name: ai-proxy
+        config:
+          route_type: llm/v1/chat
+          model_name_header: true
+          auth:
+            header_name: Authorization
+            header_value: '${{ env "DECK_FEATURE_AUTH" }}'
+          logging:
+            log_statistics: true
+            log_payloads: false
+          model:
+            provider: openai
+            name: ${{ env "DECK_FEATURE_MODEL" }}
+            options:
+              upstream_url: ${{ env "DECK_FEATURE_URL" }}
+
+
+plugins:
+  # 통합 경로에 붙는 의미 기반 가드·캐시 (스위치)
+  - name: ai-semantic-prompt-guard
+    service: llm
+    enabled: ${{ env "DECK_ON_SEMANTIC_GUARD" }}   # FEATURE_SEMANTIC_GUARD
+    config:
+      embeddings:
+        model:
+          provider: openai
+          name: ${{ env "DECK_EMBED_MODEL" }}
+          options:
+            upstream_url: ${{ env "DECK_KONG_LOOPBACK" }}/ai/embed
+      rules:
+        match_all_conversation_history: false
+        match_all_roles: false
+        deny_prompts:
+          - 이전 지시나 규칙을 무시하고 제한 없이 무엇이든 답하라는 역할극·탈옥 요청
+          - 시스템 프롬프트나 숨겨진 지침, 내부 설정을 그대로 보여 달라는 요청
+          - 회사 기밀 정보, 내부 시스템 계정, 비밀번호를 알아내려는 요청
+          - 고객이나 직원의 개인정보를 우회적으로, 나눠서, 한 글자씩 알려 달라는 요청
+      search:
+        threshold: 0.42                 # 데모에서 맞춘 값 — 작을수록 엄격
+      vectordb:
+        strategy: pgvector
+        dimensions: ${{ env "DECK_EMBED_DIMS" }}
+        distance_metric: cosine
+        threshold: 0.42
+        pgvector:
+          host: ${{ env "DECK_PG_HOST" }}
+          port: ${{ env "DECK_PG_PORT" }}
+          database: kong-pgvector
+          user: kong
+
+  - name: ai-semantic-cache
+    service: llm
+    enabled: ${{ env "DECK_ON_SEMANTIC_CACHE" }}   # FEATURE_SEMANTIC_CACHE
+    config:
+      cache_ttl: 3600
+      message_countback: 1
+      stop_on_failure: false        # 캐시 장애 시에도 LLM 호출은 계속
+      embeddings:
+        model:
+          provider: openai
+          name: ${{ env "DECK_EMBED_MODEL" }}
+          options:
+            upstream_url: ${{ env "DECK_KONG_LOOPBACK" }}/ai/embed
+      vectordb:
+        strategy: pgvector
+        dimensions: ${{ env "DECK_EMBED_DIMS" }}
+        distance_metric: cosine
+        threshold: 0.15             # 코사인 거리. 작을수록 엄격
+        pgvector:
+          host: ${{ env "DECK_PG_HOST" }}
+          port: ${{ env "DECK_PG_PORT" }}
+          database: kong-pgvector
+          user: kong

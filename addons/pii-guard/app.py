@@ -25,6 +25,11 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "8"))
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true" and bool(LLM_URL)
 PORT = int(os.getenv("PORT", "8080"))
+# 답변 검사(OUTPUT)에서 막을 유해 표현 — 쉼표로 구분. 고객 정책 목록으로 바꿔 쓴다.
+HARMFUL_WORDS = [w.strip() for w in os.getenv(
+    "HARMFUL_WORDS",
+    "폭탄 제조,폭발물 제조,마약 제조,살인 청부,자살 방법,인종 차별,혐오 발언,테러 계획"
+).split(",") if w.strip()]
 
 # ── 1계층: 정규식 ────────────────────────────────────────────────
 # (이름, 사유코드, 정규식, 처리). Kong 의 10개 제한과 무관하게 얼마든지 늘릴 수 있다.
@@ -248,6 +253,15 @@ def inspect(text: str):
             "layer": "regex", "masked": False}
 
 
+def inspect_output(text: str):
+    found = [w for w in HARMFUL_WORDS if w in text]
+    if found:
+        return {"block": True, "reason": "harmful_output",
+                "detail": f"유해 표현 탐지({len(found)}종): {', '.join(found)}",
+                "layer": "output", "masked": False}
+    return {"block": False, "reason": "clean", "detail": "탐지 없음", "layer": "output", "masked": False}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -305,7 +319,9 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(text, str):
             text = str(text)
         _t0 = _time.time_ns()
-        _verdict = inspect(text)
+        # Kong ai-custom-guardrail 이 답변을 검사할 때는 source=OUTPUT 을 보낸다 → 유해 표현만 본다
+        # (답변 속 시스템 정보는 게이트웨이의 post-function 이 마스킹한다)
+        _verdict = inspect_output(text) if data.get("source") == "OUTPUT" else inspect(text)
         _t1 = _time.time_ns()
         self._send(200, _verdict)
         # 왕복 원문을 게이트웨이 트레이스에 자식 스팬으로 (비동기 — 응답 지연 0)

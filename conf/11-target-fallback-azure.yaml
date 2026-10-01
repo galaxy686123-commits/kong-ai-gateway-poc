@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────
+#  통합 경로(llm)가 부를 LLM — 사내 LLM → Azure OpenAI 장애 대체
+#  apply-config.sh 가 11-target-*.yaml 중 하나만 고른다. FALLBACK=azure 이고 Azure 값이 있을 때.
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+plugins:
+  - name: ai-proxy-advanced
+    route: llm
+    config:
+      response_streaming: ${{ env "DECK_LLM_STREAMING" }}   # 답변 검사(FEATURE_OUTPUT_GUARD·OUTPUT_MASK)를 켜면 deny
+      max_request_body_size: 8388608
+      model_name_header: true           # 응답 헤더 X-Kong-LLM-Model 로 실제 응답한 모델을 알려 준다
+      balancer:
+        algorithm: priority             # weight 가 큰 대상부터. 실패하면 다음 순위로 (1-4)
+        # POST 는 원래 다시 보내지 않는다 → non_idempotent 를 넣어야 장애 시 다른 모델로 넘어간다
+        failover_criteria: [error, timeout, non_idempotent, http_429, http_500, http_502, http_503, http_504]
+        retries: 2
+        connect_timeout: 5000
+        read_timeout: 300000
+        write_timeout: 60000
+      targets:
+            - description: 사내 LLM (1순위)
+              weight: 100
+              route_type: llm/v1/chat
+              auth:
+                header_name: Authorization
+                header_value: "{vault://env/llm-auth-header}"
+              logging:
+                log_statistics: true
+                log_payloads: false     # 본문은 로그에 남기지 않는다
+              model:
+                provider: openai
+                name: ${{ env "DECK_CHAT_MODEL" }}
+                options:
+                  upstream_url: ${{ env "DECK_CHAT_URL" }}
+            - description: Azure OpenAI (2순위 — 사내 LLM 장애 시)
+              weight: 10
+              route_type: llm/v1/chat
+              auth:
+                header_name: api-key
+                header_value: "{vault://env/azure-api-key}"
+              logging:
+                log_statistics: true
+                log_payloads: false
+              model:
+                provider: azure
+                name: ${{ env "DECK_AZURE_DEPLOYMENT" }}
+                options:
+                  azure_instance: ${{ env "DECK_AZURE_INSTANCE" }}
+                  azure_deployment_id: ${{ env "DECK_AZURE_DEPLOYMENT" }}
+                  azure_api_version: ${{ env "DECK_AZURE_API_VERSION" }}

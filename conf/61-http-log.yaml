@@ -1,0 +1,18 @@
+# ─────────────────────────────────────────────────────────────
+#  3-1 중앙 로그 저장소 전송 — 요청 로그를 파일과 별도로 중앙 저장소에 HTTP 로 보낸다.
+#  DECK_LOG_HTTP_URL 이 있을 때 적용 (ELK·Splunk HEC·로그 수집기의 HTTP 입력 등).
+#  위변조 방지는 받는 저장소의 기능(WORM·불변 버킷·SIEM 보존 정책)으로 보장한다.
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+plugins:
+  - name: http-log
+    config:
+      http_endpoint: ${{ env "DECK_LOG_HTTP_URL" }}
+      method: POST
+      content_type: application/json
+      custom_fields_by_lua:
+        response.headers: "return nil"

@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────
+#  3-3 이상 징후 경보 — Prometheus 경보 규칙 예시 (고객 Prometheus·Alertmanager 에 넣어 쓴다)
+#  수집 대상: http://<Kong 파드>:8100/metrics  (Kong prometheus 플러그인 — 사용자·라우트별 지표)
+#  임계값은 PoC 예시다. 평소 사용량을 보고 조정한다.
+# ─────────────────────────────────────────────────────────────
+groups:
+  - name: kong-ai-gateway
+    rules:
+      # 무한 루프·비정상 반복 호출 — 한 사용자(키)가 1분 동안 평소보다 훨씬 많이 부른다
+      - alert: KongConsumerRequestSpike
+        expr: sum by (consumer) (rate(kong_http_requests_total{consumer!=""}[1m])) * 60 > 120
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.consumer }} 가 분당 {{ $value | humanize }}회 호출 중 (반복 호출 의심)"
+
+      # 토큰 사용 급증 — 비용 폭탄 징후
+      - alert: KongConsumerTokenSpike
+        expr: sum by (consumer) (rate(kong_ai_llm_tokens_total[5m])) * 60 > 50000
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.consumer }} 의 토큰 사용이 분당 {{ $value | humanize }}"
+
+      # 한도 초과가 계속된다 — 자원 고갈 시도 또는 한도 재조정 필요
+      - alert: KongRateLimited
+        expr: sum by (consumer, route) (rate(kong_http_requests_total{code="429"}[5m])) * 60 > 10
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.consumer }} → {{ $labels.route }} 에서 분당 {{ $value | humanize }}건이 429"
+
+      # 가드레일 차단이 몰린다 — 공격 시도 의심 (프롬프트 가드·기밀 키워드·유해 답변은 400)
+      - alert: KongGuardrailBlocks
+        expr: sum by (consumer) (rate(kong_http_requests_total{code="400"}[5m])) * 60 > 20
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.consumer }} 의 요청이 분당 {{ $value | humanize }}건 차단됨 (공격 시도 의심 — 긴급 차단 검토)"
+
+      # LLM 장애 — 게이트웨이 뒤 모델이 5xx 를 낸다 (장애 대체가 동작하는지 확인)
+      - alert: KongUpstreamErrors
+        expr: sum by (service) (rate(kong_http_requests_total{code=~"5.."}[5m])) / sum by (service) (rate(kong_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.service }} 오류율 {{ $value | humanizePercentage }}"
