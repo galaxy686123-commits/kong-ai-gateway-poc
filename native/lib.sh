@@ -82,7 +82,8 @@ kong_native_env() {
   export LLM_AUTH_HEADER="${LLM_AUTH_HEADER:-Bearer none}"
   export EMBED_AUTH_HEADER="${EMBED_AUTH_HEADER:-Bearer none}"
   export PGVECTOR_PASSWORD="$KONG_PG_PASSWORD"
-  KONG_LICENSE_DATA="$(license_data)"; export KONG_LICENSE_DATA
+  KONG_LICENSE_DATA="$(license_data)"
+  if [ -n "$KONG_LICENSE_DATA" ]; then export KONG_LICENSE_DATA; else unset KONG_LICENSE_DATA; fi
 }
 kong_up() { kong health -p "$KONG_PREFIX" >/dev/null 2>&1; }
 admin() {  # admin <경로> [curl 옵션...] — RBAC 토큰으로 Admin API 호출

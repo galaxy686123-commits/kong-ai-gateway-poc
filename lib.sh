@@ -60,19 +60,32 @@ build() {  # 이름 Dockerfile [build-arg...] — 실패할 때만 출력을 보
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
 
-check_license() {  # 없거나 만료면 중단, 30일 이내면 경고. python·jq 없이 동작한다.
-  [ -f "$LICENSE_FILE" ] || die "Kong Enterprise 라이선스가 없습니다 ($LICENSE_FILE).
-  라이선스 없이는 Admin API 쓰기가 막혀 설정을 하나도 적용할 수 없습니다."
-  local exp today days
+# 라이선스 상태 → LIC_STATE(valid|grace|expired|missing), LIC_MSG, LIC_DAYS(남은 날, 만료면 음수)
+# Kong 은 만료일 자정에 만료되고, 그 뒤 유예 기간(Kong 로그 기준 약 30일) 동안은 모든 기능이 그대로 동작한다.
+# 라이선스가 없거나 유예 기간도 지나면 읽기 전용 — 기존 설정으로 프록시는 되지만 설정을 바꿀 수 없다.
+LIC_GRACE_DAYS=30
+license_state() {  # python·jq 없이 동작한다
+  LIC_STATE=missing; LIC_DAYS=""; LIC_MSG="라이선스 없음 ($LICENSE_FILE)"
+  [ -f "$LICENSE_FILE" ] || return 0
+  local exp end
   exp=$(tr -d ' \n' < "$LICENSE_FILE" | grep -o '"license_expiration_date":"[0-9-]*"' | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | head -1)
-  [ -n "$exp" ] || die "라이선스 파일 형식을 읽을 수 없습니다 ($LICENSE_FILE)."
-  today=$(date +%Y-%m-%d)
-  [[ "$exp" < "$today" ]] && die "Kong Enterprise 라이선스가 만료되었습니다 (만료일 $exp)."
-  if days=$(( ( $(date -d "$exp" +%s 2>/dev/null) - $(date +%s) ) / 86400 )) 2>/dev/null && [ "$days" -ge 0 ]; then
-    if [ "$days" -le 30 ]; then note "⚠ 라이선스 만료 임박: $exp (D-$days)"; else note "라이선스 만료일 $exp (D-$days)"; fi
-  else
-    note "라이선스 만료일 $exp"
-  fi
+  if [ -z "$exp" ]; then LIC_MSG="라이선스 파일 형식을 읽을 수 없음 ($LICENSE_FILE)"; return 0; fi
+  LIC_DAYS=$(( ( $(date -d "$exp" +%s) - $(date -d "$(date +%F)" +%s) ) / 86400 ))
+  end=$(date -d "$exp + $LIC_GRACE_DAYS days" +%F)
+  if [ "$LIC_DAYS" -ge 0 ]; then LIC_STATE=valid; LIC_MSG="만료일 $exp (D-$LIC_DAYS)"
+  elif [ $(( -LIC_DAYS )) -le "$LIC_GRACE_DAYS" ]; then
+    LIC_STATE=grace; LIC_MSG="만료됨 ($exp) — 유예 기간이라 $end 까지는 모두 동작, 그 뒤 읽기 전용"
+  else LIC_STATE=expired; LIC_MSG="만료됨 ($exp, 유예 기간도 $end 에 끝남) — 읽기 전용"; fi
+}
+
+check_license() {  # 컨테이너 방식: 설정을 적용해야 하므로 읽기 전용이 될 상태면 멈춘다
+  license_state
+  case "$LIC_STATE" in
+    valid) if [ "$LIC_DAYS" -le 30 ]; then note "⚠ 라이선스 만료 임박: $LIC_MSG"; else note "라이선스 $LIC_MSG"; fi ;;
+    grace) note "⚠ 라이선스 $LIC_MSG" ;;
+    *)     die "Kong Enterprise $LIC_MSG.
+  라이선스 없이는 Admin API 쓰기가 막혀 설정을 하나도 적용할 수 없습니다." ;;
+  esac
 }
 
 license_data() {

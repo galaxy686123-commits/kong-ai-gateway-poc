@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # native/start.sh — 직접 설치 방식 기동. 여러 번 실행해도 안전하다 (떠 있는 것은 건너뜀).
 #   파드를 다시 만들어 프로그램이 사라졌으면 먼저 다시 설치한다.
+#   native/start.sh --no-config   설치·기동까지만 (설정 적용 안 함). 라이선스가 없어도 이렇게 동작한다.
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
+APPLY=1; [ "${1:-}" = "--no-config" ] && APPLY=0
 
 say "0/6 라이선스 확인"
-check_license
+license_state
+case "$LIC_STATE" in
+  valid) if [ "$LIC_DAYS" -le 30 ]; then note "⚠ 라이선스 만료 임박: $LIC_MSG"; else note "라이선스 $LIC_MSG"; fi ;;
+  grace) note "⚠ 라이선스 $LIC_MSG" ;;
+  *)     note "⚠ $LIC_MSG — Kong 은 읽기 전용 모드로 뜹니다. 설치·기동까지만 하고 설정 적용은 건너뜁니다."
+         APPLY=0 ;;
+esac
 
 say "1/6 프로그램 확인"
 if installed; then note "PostgreSQL·pgvector·Kong·decK 모두 있음"
@@ -95,12 +103,16 @@ else
 fi
 
 say "6/6 설정"
+if [ "$APPLY" = 0 ]; then
+  note "건너뜀 — 설치 시험만. 설정은 유효한 라이선스를 넣은 뒤 native/apply-config.sh"
+else
 dump=$(deck gateway dump -o - --select-tag kong-poc --kong-addr "http://127.0.0.1:$ADMIN_PORT" \
           --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD" 2>/dev/null) || true
 if grep -q 'name: llm-chat' <<<"$dump"; then
   note "이미 적용돼 있음 (바꾼 뒤에는 native/apply-config.sh)"
 else
   "$ROOT/native/apply-config.sh"
+fi
 fi
 
 cat <<MSG

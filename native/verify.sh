@@ -35,14 +35,12 @@ miss=""; for f in "$PKGS_DIR/$KONG_DEB" "$PKGS_DIR/$DECK_TGZ" "$PII_APP"; do [ -
 if [ -n "$miss" ]; then bad "설치 파일 없음:$miss — git pull"
 elif [ -f "$PKGS_DIR/SHA256SUMS" ] && ! (cd "$PKGS_DIR" && sha256sum -c --quiet SHA256SUMS >/dev/null 2>&1); then bad "설치 파일 체크섬 불일치 — git pull 로 다시 받으세요"
 else ok "설치 파일 (Kong · decK 체크섬 일치 · PII 가드)"; fi
-exp=$(tr -d ' \n' < "$LICENSE_FILE" 2>/dev/null | grep -o '"license_expiration_date":"[0-9-]*"' | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | head -1)
-if [ -z "$exp" ]; then bad "라이선스 없음 ($LICENSE_FILE) — 없으면 설정 변경이 전부 막힘"
-else
-  days=$(( ( $(date -d "$exp" +%s) - $(date -d "$(date +%F)" +%s) ) / 86400 ))
-  if [ "$days" -lt 0 ]; then bad "라이선스 만료됨 ($exp)"
-  elif [ "$days" -le 30 ]; then warn "라이선스 만료 임박 ($exp, D-$days)"
-  else ok "라이선스 만료일 $exp (D-$days)"; fi
-fi
+license_state
+case "$LIC_STATE" in
+  valid) if [ "$LIC_DAYS" -le 30 ]; then warn "라이선스 만료 임박 — $LIC_MSG"; else ok "라이선스 $LIC_MSG"; fi ;;
+  grace) warn "라이선스 $LIC_MSG" ;;
+  *)     warn "$LIC_MSG — Kong 읽기 전용 모드 (설치·접속 시험은 가능, 설정 적용에는 유효한 라이선스 필요)" ;;
+esac
 PGD=$(pg_datadir)
 where=$(df -PT "$PGD" 2>/dev/null | awk 'NR==2{print $7" ("$2")"}')
 case "$where" in *overlay*|"") warn "데이터 위치 $PGD — $where : 파드를 다시 만들면 사라질 수 있음";;
@@ -75,6 +73,9 @@ if kong_up; then
   c_tok=$(admin /services -o /dev/null -w '%{http_code}')
   if [ "$c_no" = 401 ] && [ "$c_tok" = 200 ]; then ok "Kong $(admin / | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null) — Admin API 는 토큰 없으면 401, 있으면 200 (RBAC)"
   else bad "Kong Admin API — 토큰 없이 $c_no · 토큰으로 $c_tok (401 · 200 이어야 함)"; fi
+  c_px=$(code "http://127.0.0.1:$PROXY_PORT/")   # 라우트가 없으면 404 "no Route matched" 가 정상 응답
+  if [ "$c_px" != 000 ]; then ok "게이트웨이 프록시 :$PROXY_PORT 응답 (HTTP $c_px$([ "$c_px" = 404 ] && echo ' — 라우트 없음, 정상'))"
+  else bad "게이트웨이 프록시 :$PROXY_PORT 응답 없음"; fi
   c_login=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:$KONG_ADMIN_PASSWORD" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_bad=$(curl -s -m 8 -o /dev/null -w '%{http_code}' -u "kong_admin:x-wrong" -H 'Kong-Admin-User: kong_admin' "http://127.0.0.1:$ADMIN_PORT/auth")
   c_gui=$(code "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/")
@@ -103,7 +104,13 @@ else warn "JUPYTER_URL 미지정 — 브라우저에서 Kong Manager 를 열 주
 sec "4. 게이트웨이 기능"
 if kong_up; then
   routes=$(admin /routes | python3 -c 'import json,sys; print(" ".join(sorted(r["name"] for r in json.load(sys.stdin)["data"])))' 2>/dev/null)
-  [[ " $routes " = *" llm-chat "* ]] && ok "라우트: $routes" || bad "설정이 적용되지 않음 — native/apply-config.sh (라우트: ${routes:-없음})"
+fi
+CONFIGURED=0; [[ " ${routes:-} " = *" llm-chat "* ]] && CONFIGURED=1
+if ! kong_up; then bad "Kong 이 멈춰 있어 기능 점검을 건너뜀"
+elif [ "$CONFIGURED" = 0 ]; then
+  warn "설정 적용 전 — 설치·접속 시험만 한 상태라 기능 점검은 건너뜀 (라이선스를 넣은 뒤 native/apply-config.sh)"
+else
+  ok "라우트: $routes"
   read -r c _ <<<"$(gw /v1/chat/completions "안녕하세요" 0)"
   [ "$c" = 401 ] && ok "키 없이 호출 → 401 차단" || bad "키 없이 호출 → $c (401 이어야 함)"
   read -r c _ <<<"$(gw /v1/chat/completions "제 주민번호는 900101-1234567 입니다")"
@@ -133,11 +140,12 @@ if kong_up; then
     if [ "$c1" = 200 ] && [ "$s2" = Hit ]; then ok "시맨틱 캐시 → 첫 요청 ${s1:-?} ${t1}초 · 같은 질문 ${s2} ${t2}초"
     else warn "시맨틱 캐시 → 첫 요청 $c1 ${s1:-?} · 두 번째 $c2 ${s2:-?} (두 번째가 Hit 여야 함 — 임베딩 모델 접속 확인)"; fi
   fi
-else bad "Kong 이 멈춰 있어 기능 점검을 건너뜀"; fi
+fi
 
 sec "5. 로그"
 AUD="$LOGS/audit.log"
-if [ -s "$AUD" ]; then
+if [ "$CONFIGURED" = 0 ]; then :   # 요청 로그 플러그인은 설정과 함께 들어간다
+elif [ -s "$AUD" ]; then
   n=$(wc -l < "$AUD"); size=$(du -h "$AUD" | cut -f1)
   if grep -qF "$DECK_CLIENT_KEY" "$AUD"; then bad "요청 로그에 사용자 키 원문이 남아 있음 ($AUD)"
   else ok "요청 로그 $AUD — ${n}건 ${size} · 사용자 키 원문 없음"; fi

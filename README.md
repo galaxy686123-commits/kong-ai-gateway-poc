@@ -94,6 +94,17 @@ bash native/verify.sh                     # 환경·설치·실행·기능·로�
 
 Kong Manager: **`<JUPYTER_URL>/proxy/absolute/8002/`** — `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`
 
+**라이선스 없이 설치·접속 시험만** 할 수도 있습니다. `secrets/license.json` 이 없으면 `native/start.sh` 가 설치와 기동까지만
+하고 설정 적용은 건너뜁니다 (일부러 건너뛰려면 `native/start.sh --no-config`). Kong 은 읽기 전용 모드로 떠서
+Manager 로그인·조회는 되지만 설정은 바꿀 수 없습니다. 라이선스를 넣은 뒤 `native/stop.sh && native/start.sh` 로
+다시 띄우면 설정이 적용됩니다.
+
+| 라이선스 상태 | Kong 동작 (실측) |
+|---|---|
+| 유효 | 전부 동작 |
+| 만료 후 유예 기간 (Kong 로그 기준 약 30일) | 전부 동작 — 설정 변경·로그인·Enterprise 플러그인 포함 |
+| 없음 · 유예 종료 | 읽기 전용 — 설정 쓰기 403. 기존 설정으로 프록시·가드는 계속 처리, Manager 로그인·조회 가능 |
+
 **LLM 은 나중에 붙여도 됩니다.** `.env` 의 `DECK_CHAT_URL` 을 예시 주소 그대로 두면 설치·차단·Manager 는 모두
 동작하고, `verify.sh` 는 LLM 항목만 [주의]로 표시합니다. 붙일 때는 `.env` 의 `DECK_CHAT_URL`·`DECK_CHAT_MODEL`·
 `LLM_AUTH_HEADER`(임베딩은 `DECK_EMBED_*`)를 채운 뒤:
