@@ -21,7 +21,7 @@ CHECK=0; if [ "${1:-}" = --check ]; then CHECK=1; shift; fi
 [ $# -eq 1 ] || die "유지 폴더를 지정하세요.  예) bash set-data-dir.sh /datasets/DT0000000000/data   (옮기지 않고 확인만: --check)"
 
 # 실제 위치 찾기 — 주피터 탐색기의 경로는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와 다를 수 있다
-find_dir() {
+find_dir() {  # find_dir <경로> [noscan]
   local w=$1 rel=${1#/} c p roots=()
   if [[ "$w" = /* ]]; then [ -d "$w" ] && { (cd "$w" && pwd); return 0; }
   elif [ -d "$ORIG_PWD/$w" ]; then (cd "$ORIG_PWD/$w" && pwd); return 0; fi
@@ -32,13 +32,28 @@ find_dir() {
   done
   roots+=("$ORIG_PWD" /project "$HOME" /mnt /data /workspace)
   for c in "${roots[@]}"; do [ -d "$c/$rel" ] && { (cd "$c/$rel" && pwd); return 0; }; done
+  [ "${2:-}" = noscan ] && return 1
   c=$(timeout 60 find / -maxdepth 6 -type d -path "*/$rel" -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -1) || true
   [ -n "$c" ] && { echo "$c"; return 0; }
   return 1
 }
 want=${1%/}
-base=$(find_dir "$want") || die "폴더를 찾을 수 없습니다: $want
-  파드 안의 실제 위치를 확인해 보세요:  df -h | grep -i datasets"
+if ! base=$(find_dir "$want"); then
+  # 이름을 잘못 쳤을 때가 많다 — 있는 상위 폴더까지 거슬러 올라가 그 안의 실제 이름을 보여 준다
+  hint=""; p=${want%/*}
+  while [ -n "$p" ] && [ "$p" != "$want" ]; do
+    if pb=$(find_dir "$p" noscan); then
+      names=$(find "$pb" -mindepth 1 -maxdepth 1 -type d -printf '%f  ' 2>/dev/null | head -c 300)
+      hint="
+  가장 가까운 폴더 $pb 안에 있는 것: ${names:-(비어 있음)}— 이름(글자)을 확인하세요"
+      break
+    fi
+    [ "$p" = "${p%/*}" ] && break
+    p=${p%/*}
+  done
+  die "폴더를 찾을 수 없습니다: $want$hint
+  파드 안의 실제 위치 확인:  df -h | grep -i datasets"
+fi
 [ "$base" = "$want" ] || note "찾은 위치: $base"
 
 fstype=$(df -PT "$base" 2>/dev/null | awk 'NR==2 {print $2}')
