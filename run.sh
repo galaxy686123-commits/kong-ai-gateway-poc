@@ -27,6 +27,15 @@ if [ "$n" = 0 ]; then
     *) note "라이선스가 없어 설정 적용은 건너뜀 — bash set-license.sh 로 넣은 뒤 bash remote.sh restart · bash remote.sh apply" ;;
   esac
 fi
+# 유지 폴더가 개발 파드와 다른 경로로 붙었으면(바로가기 없음) Kong 설정 속 요청 로그 위치를 이 환경의 경로로 맞춘다
+lp=$(admin '/plugins?name=file-log' | python3 -c 'import json, sys; d = json.load(sys.stdin).get("data") or []; print(d[0]["config"]["path"] if d else "")' 2>/dev/null)
+if [ "$n" != 0 ] && [ -n "$lp" ] && [ ! -d "$(dirname "$lp")" ]; then
+  license_state
+  case "$LIC_STATE" in
+    valid|grace) say "요청 로그 위치($lp)가 이 환경에 없어 설정을 다시 적용합니다 → $LOGS/audit.log"; bash "$ROOT/apply-config.sh" ;;
+    *) note "⚠ 요청 로그 위치($lp)가 이 환경에 없는데 라이선스가 없어 설정을 다시 적용하지 못했습니다" ;;
+  esac
+fi
 
 REQ="$DATA_DIR/requests"
 mkdir -p "$REQ/done"

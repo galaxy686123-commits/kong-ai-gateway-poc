@@ -21,16 +21,15 @@ CHECK=0; if [ "${1:-}" = --check ]; then CHECK=1; shift; fi
 # 실제 위치 찾기 — 주피터 탐색기의 경로는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와 다를 수 있다
 find_dir() {  # find_dir <경로> [noscan]
   local w=$1 rel=${1#/} c p roots=()
-  # 찾은 곳은 실제 위치(바로가기·심볼릭 링크를 풀어 둔 마운트 경로)로 돌려준다 — 빌드한 새 환경에는 바로가기가 없을 수 있다
-  if [[ "$w" = /* ]]; then [ -d "$w" ] && { (cd "$w" && pwd -P); return 0; }
-  elif [ -d "$ORIG_PWD/$w" ]; then (cd "$ORIG_PWD/$w" && pwd -P); return 0; fi
+  if [[ "$w" = /* ]]; then [ -d "$w" ] && { (cd "$w" && pwd); return 0; }
+  elif [ -d "$ORIG_PWD/$w" ]; then (cd "$ORIG_PWD/$w" && pwd); return 0; fi
   for p in $(pgrep -u "$(id -u)" -f jupyter 2>/dev/null); do    # 주피터가 띄워진 폴더 = 탐색기의 최상위
     c=$(ps -o args= -p "$p" 2>/dev/null | grep -oE -- '--(ServerApp\.root_dir|NotebookApp\.notebook_dir|notebook-dir)[= ][^ ]+' | head -1 | sed -E 's/^--[^= ]+[= ]//') || true
     [ -n "$c" ] && roots+=("$c")
     c=$(readlink "/proc/$p/cwd" 2>/dev/null) && roots+=("$c")
   done
   roots+=("$ORIG_PWD" /project "$HOME" /mnt /data /workspace)
-  for c in "${roots[@]}"; do [ -d "$c/$rel" ] && { (cd "$c/$rel" && pwd -P); return 0; }; done
+  for c in "${roots[@]}"; do [ -d "$c/$rel" ] && { (cd "$c/$rel" && pwd); return 0; }; done
   [ "${2:-}" = noscan ] && return 1
   c=$(timeout 60 find / -maxdepth 6 -type d -path "*/$rel" -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -1) || true
   [ -n "$c" ] && { echo "$c"; return 0; }
@@ -53,7 +52,7 @@ if ! base=$(find_dir "$want"); then
   die "폴더를 찾을 수 없습니다: $want$hint
   파드 안의 실제 위치 확인:  df -h | grep -i datasets"
 fi
-[ "$base" = "$want" ] || note "찾은 위치: $base (실제 위치 — 주피터 바로가기는 풀어서 씀)"
+[ "$base" = "$want" ] || note "찾은 위치: $base"
 
 fstype=$(df -PT "$base" 2>/dev/null | awk 'NR==2 {print $2}')
 avail=$(df -Ph "$base" 2>/dev/null | awk 'NR==2 {print $4}')

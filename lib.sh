@@ -31,7 +31,7 @@ read_env() {  # read_env <파일> — 실행하지 않고 KEY=VALUE 로만 읽�
 env_get() { [ -f "$2" ] && ( unset "$1"; read_env "$2"; printf '%s' "${!1:-}" ); return 0; }   # env_get <키> <파일>
 env_full() {  # 위치(DATA_DIR) 말고 다른 설정도 들어 있는 파일인지
   local keys
-  keys=$(grep -E '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | grep -vE '^[[:space:]]*DATA_DIR=') || true
+  keys=$(grep -E '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | grep -vE '^[[:space:]]*DATA_DIR(_REAL)?=') || true
   [ -n "$keys" ]
 }
 env_set() {  # env_set <키> <값> <파일> — 그 줄을 제자리에서 바꾸고(없으면 끝에 추가) 같은 키가 또 있으면 지운다
@@ -46,10 +46,23 @@ env_set() {  # env_set <키> <값> <파일> — 그 줄을 제자리에서 바�
 write_pointer() {  # write_pointer <유지 폴더> — 저장소 .env 를 위치 한 줄짜리로 (저장소 폴더에 쓸 수 있을 때만)
   local tmp
   tmp=$(mktemp "$ROOT/.env.XXXXXX" 2>/dev/null) || return 1
+  local real; real=$(cd "$1" 2>/dev/null && pwd -P) || real=$1
   if { echo "# kong-poc — 설정은 유지 폴더에 있습니다: $1/settings.env"
        echo "#   이 파일에는 그 위치만 둡니다. 값 바꾸기: bash set-env.sh <키> <값>"
-       echo "DATA_DIR=$1"; } > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$ROOT/.env"; then return 0; fi
+       echo "DATA_DIR=$1"
+       if [ "$real" != "$1" ]; then
+         echo "# 위 경로가 바로가기(심볼릭 링크)를 거칠 때의 실제 위치 — 빌드한 새 환경에 바로가기가 없으면 이쪽을 쓴다"
+         echo "DATA_DIR_REAL=$real"
+       fi; } > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$ROOT/.env"; then return 0; fi
   rm -f "$tmp"; return 1
+}
+remember_real() {  # remember_real <유지 폴더> — 바로가기를 거치는 경로면 실제 위치를 저장소 .env 에 함께 적어 둔다
+  local real
+  real=$(cd "$1" 2>/dev/null && pwd -P) || return 0
+  [ "$real" != "$1" ] || return 0
+  [ "$(env_get DATA_DIR_REAL "$ROOT/.env")" != "$real" ] || return 0
+  if env_full "$ROOT/.env" || [ ! -w "$ROOT" ]; then return 0; fi    # 전체 설정이면 settings_to_data 가 위치 파일을 새로 쓴다
+  env_set DATA_DIR_REAL "$real" "$ROOT/.env" 2>/dev/null || true
 }
 settings_to_data() {  # settings_to_data <유지 폴더> — 저장소 .env 에 아직 전체 설정이 있으면 유지 폴더(settings.env)로 옮긴다
   local d=$1 repo="$ROOT/.env" dst="$1/settings.env" keep=""
@@ -97,15 +110,22 @@ repo_leftovers() {  # 저장소 폴더에 남은 DB 사본·설정 백업·비�
 
 load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너뛴다 (set-env.sh 로 빈 값을 채울 때)
   # 유지 폴더 위치 — 저장소 .env 의 DATA_DIR. 저장소에 .env 없이 빌드했다면 환경변수 KONG_POC_DATA_DIR 로 줄 수 있다
-  local d=${KONG_POC_DATA_DIR:-} v val check=1
+  local d=${KONG_POC_DATA_DIR:-} r v val check=1
   if [ "${1:-}" = --no-check ]; then check=0; fi
   [ -n "$d" ] || d=$(env_get DATA_DIR "$ROOT/.env")
   d=${d%/}
   if [ -n "$d" ] && [ "$d" != "$ROOT/data" ]; then
-    [ -d "$d" ] || die "유지 폴더가 없습니다: $d
+    if [ ! -d "$d" ]; then
+      # 빌드한 새 환경에는 주피터용 바로가기(예: /project/work/datasets)가 없을 수 있다 — 적어 둔 실제 위치로 간다
+      r=$(env_get DATA_DIR_REAL "$ROOT/.env"); r=${r%/}
+      if [ -n "$r" ] && [ -d "$r" ]; then
+        note "유지 폴더 $d 가 이 환경에는 없어 실제 위치 $r 를 씁니다"; d=$r
+        export KONG_POC_DATA_DIR=$d          # 이 스크립트가 부르는 다른 스크립트도 같은 위치를 쓴다 (안내는 한 번만)
+      else die "유지 폴더가 없습니다: $d${r:+ (실제 위치 $r 도 없음)}
   이 환경에 유지 폴더(PV)가 붙어 있는지, 경로가 같은지 확인하세요.
-  다른 경로로 붙었다면 명령 앞에 위치를 주세요:  KONG_POC_DATA_DIR=<그 경로>/kong-poc bash run.sh
-  (경로가 바뀌면 요청 로그 위치도 바뀌므로 뜬 뒤 bash apply-config.sh 한 번)"
+  다른 경로로 붙었다면 명령 앞에 위치를 주세요:  KONG_POC_DATA_DIR=<그 경로>/kong-poc bash run.sh"; fi
+    fi
+    remember_real "$d"
     settings_to_data "$d"
     if [ -f "$d/settings.env" ]; then ENV_FILE="$d/settings.env"; fi
   fi
