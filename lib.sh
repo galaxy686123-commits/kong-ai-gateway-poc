@@ -103,7 +103,9 @@ load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너
   d=${d%/}
   if [ -n "$d" ] && [ "$d" != "$ROOT/data" ]; then
     [ -d "$d" ] || die "유지 폴더가 없습니다: $d
-  이 환경에 유지 폴더(PV)가 붙어 있는지, 경로가 같은지 확인하세요."
+  이 환경에 유지 폴더(PV)가 붙어 있는지, 경로가 같은지 확인하세요.
+  다른 경로로 붙었다면 명령 앞에 위치를 주세요:  KONG_POC_DATA_DIR=<그 경로>/kong-poc bash run.sh
+  (경로가 바뀌면 요청 로그 위치도 바뀌므로 뜬 뒤 bash apply-config.sh 한 번)"
     settings_to_data "$d"
     if [ -f "$d/settings.env" ]; then ENV_FILE="$d/settings.env"; fi
   fi
