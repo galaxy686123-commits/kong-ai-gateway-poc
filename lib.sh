@@ -9,9 +9,13 @@ say()  { printf '\n▶ %s\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 die()  { printf '\n✘ %s\n' "$*" >&2; exit 1; }
 
-load_env() {
-  [ -f .env ] || die ".env 가 없습니다.  cp .env.example .env  후 값을 채우세요."
-  # .env 를 실행하지 않고 KEY=VALUE 로만 읽는다 (공백·따옴표·줄끝 주석 허용)
+# ── 설정 파일 ─────────────────────────────────────────────────
+# 처음에는 저장소의 .env 에 모든 설정을 둔다. 유지 폴더(DATA_DIR — bash set-data-dir.sh)를 정하면 설정의 원본은
+# 유지 폴더의 settings.env 로 옮겨지고, 저장소의 .env 에는 그 위치(DATA_DIR) 한 줄만 남는다.
+# 빌드하면 저장소 폴더는 스냅샷(읽기 전용)이 되므로, 바꿀 수 있어야 하는 것(설정·라이선스·DB·로그)은 전부 유지 폴더에 둔다.
+ENV_FILE="$ROOT/.env"
+
+read_env() {  # read_env <파일> — 실행하지 않고 KEY=VALUE 로만 읽는다 (공백·따옴표·줄끝 주석 허용)
   local line k v
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
@@ -22,14 +26,107 @@ load_env() {
     v="${v%"${v##*[![:space:]]}"}"                # 끝 공백 제거
     if [[ "$v" =~ ^\"(.*)\"$ ]] || [[ "$v" =~ ^\'(.*)\'$ ]]; then v="${BASH_REMATCH[1]}"; fi
     export "$k=$v"
-  done < .env
+  done < "$1"
+}
+env_get() { [ -f "$2" ] && ( unset "$1"; read_env "$2"; printf '%s' "${!1:-}" ); return 0; }   # env_get <키> <파일>
+env_full() {  # 위치(DATA_DIR) 말고 다른 설정도 들어 있는 파일인지
+  local keys
+  keys=$(grep -E '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | grep -vE '^[[:space:]]*DATA_DIR=') || true
+  [ -n "$keys" ]
+}
+env_set() {  # env_set <키> <값> <파일> — 그 줄을 제자리에서 바꾸고(없으면 끝에 추가) 같은 키가 또 있으면 지운다
+  local tmp
+  tmp=$(mktemp "$3.XXXXXX") || return 1
+  if K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"] }
+       $0 ~ "^[[:space:]]*" k "=" { if (!done) { print k "=" v; done = 1 }; next }
+       { print }
+       END { if (!done) print k "=" v }' "$3" > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$3"; then return 0; fi
+  rm -f "$tmp"; return 1
+}
+write_pointer() {  # write_pointer <유지 폴더> — 저장소 .env 를 위치 한 줄짜리로 (저장소 폴더에 쓸 수 있을 때만)
+  local tmp
+  tmp=$(mktemp "$ROOT/.env.XXXXXX" 2>/dev/null) || return 1
+  if { echo "# kong-poc — 설정은 유지 폴더에 있습니다: $1/settings.env"
+       echo "#   이 파일에는 그 위치만 둡니다. 값 바꾸기: bash set-env.sh <키> <값>"
+       echo "DATA_DIR=$1"; } > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$ROOT/.env"; then return 0; fi
+  rm -f "$tmp"; return 1
+}
+settings_to_data() {  # settings_to_data <유지 폴더> — 저장소 .env 에 아직 전체 설정이 있으면 유지 폴더(settings.env)로 옮긴다
+  local d=$1 repo="$ROOT/.env" dst="$1/settings.env" keep=""
+  # 이전 방식(저장소 .env 가 원본이고 유지 폴더엔 .env 사본)에서 넘어올 때 — 사본은 이름만 바꾼다
+  if [ ! -f "$dst" ] && [ -f "$d/.env" ]; then mv -f "$d/.env" "$dst" 2>/dev/null || true; fi
+  env_full "$repo" || return 0                          # 저장소 .env 가 이미 위치 한 줄짜리
+  if [ ! -f "$dst" ] || [ "$repo" -nt "$dst" ]; then   # 처음 옮기거나, 저장소 쪽을 더 최근에 고쳤으면 그것을 원본으로
+    if [ -f "$dst" ] && ! cmp -s "$repo" "$dst"; then keep="$dst.before-$(date +%Y%m%d-%H%M%S)"; cp -p "$dst" "$keep" 2>/dev/null || keep=""; fi
+    if ! (umask 077; cp "$repo" "$dst.tmp" && mv -f "$dst.tmp" "$dst") 2>/dev/null; then
+      note "⚠ 유지 폴더($d)에 설정 파일을 쓰지 못해 저장소의 .env 를 그대로 씁니다"; return 0
+    fi
+  elif ! cmp -s "$repo" "$dst"; then                   # 유지 폴더 쪽이 더 최근 — 그것을 쓰고 저장소 쪽 내용은 보관만
+    keep="$d/settings.env.from-repo-$(date +%Y%m%d-%H%M%S)"; (umask 077; cp "$repo" "$keep") 2>/dev/null || keep=""
+  fi
+  if write_pointer "$d"; then
+    note "설정 파일을 유지 폴더로 옮겼습니다 → $dst  (저장소 .env 에는 위치만 남김 · 값 바꾸기: bash set-env.sh)"
+  else note "⚠ 저장소 폴더에 쓸 수 없어 .env 를 그대로 둡니다 — 설정은 $dst 를 씁니다"; fi
+  if [ -n "$keep" ]; then note "  내용이 달랐던 쪽은 보관해 둠: $keep"; fi
+  return 0
+}
+license_to_data() {  # license_to_data <유지 폴더> — 라이선스의 원본도 유지 폴더로 (저장소에는 남기지 않는다 — 스냅샷에 들어가지 않게)
+  local d=$1 repo="$ROOT/secrets/license.json" dst="$1/secrets/license.json"
+  [ -f "$repo" ] || return 0
+  if [ ! -f "$dst" ] || { ! cmp -s "$repo" "$dst" && [ "$repo" -nt "$dst" ]; }; then
+    if ! { mkdir -p "$d/secrets" && chmod 700 "$d/secrets" && cp "$repo" "$dst.tmp" && chmod 600 "$dst.tmp" && mv -f "$dst.tmp" "$dst"; } 2>/dev/null; then
+      note "⚠ 유지 폴더에 라이선스를 쓰지 못해 저장소의 secrets/license.json 을 씁니다"; return 0
+    fi
+    note "라이선스를 유지 폴더로 옮겼습니다 → $dst"
+  fi
+  if cmp -s "$repo" "$dst"; then rm -f "$repo" 2>/dev/null || true; fi
+  return 0
+}
+
+repo_leftovers() {  # 저장소 폴더에 남은 DB 사본·설정 백업·비밀값 — 빌드하면 스냅샷에 그대로 들어간다
+  local f out=""
+  for f in "$ROOT"/data "$ROOT"/data.moved-* "$ROOT"/conf/backup "$ROOT"/conf/backup.moved-* "$ROOT"/.env.before-* "$ROOT"/secrets/*.json; do
+    [ -e "$f" ] || continue
+    [ "$f" != "${DATA_DIR:-}" ] || continue
+    if [ -d "$f" ] && [ -z "$(ls -A "$f" 2>/dev/null)" ]; then continue; fi
+    out="$out ${f#"$ROOT"/}"
+  done
+  if env_full "$ROOT/.env"; then out="$out .env(전체 설정)"; fi
+  printf '%s' "${out# }"
+}
+
+load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너뛴다 (set-env.sh 로 빈 값을 채울 때)
+  # 유지 폴더 위치 — 저장소 .env 의 DATA_DIR. 저장소에 .env 없이 빌드했다면 환경변수 KONG_POC_DATA_DIR 로 줄 수 있다
+  local d=${KONG_POC_DATA_DIR:-} v val check=1
+  if [ "${1:-}" = --no-check ]; then check=0; fi
+  [ -n "$d" ] || d=$(env_get DATA_DIR "$ROOT/.env")
+  d=${d%/}
+  if [ -n "$d" ] && [ "$d" != "$ROOT/data" ]; then
+    [ -d "$d" ] || die "유지 폴더가 없습니다: $d
+  이 환경에 유지 폴더(PV)가 붙어 있는지, 경로가 같은지 확인하세요."
+    settings_to_data "$d"
+    if [ -f "$d/settings.env" ]; then ENV_FILE="$d/settings.env"; fi
+  fi
+  [ -f "$ENV_FILE" ] || die "설정 파일이 없습니다 ($ENV_FILE).  cp .env.example .env  후 값을 채우세요."
+  read_env "$ENV_FILE"
+  if [ -n "$d" ]; then export DATA_DIR="$d"; fi    # 위치는 저장소 .env(또는 환경변수)가 정한다
+  export ENV_FILE
   : "${PROXY_PORT:=8000}" "${ADMIN_PORT:=8001}" "${MANAGER_PORT:=8002}"
   : "${MANAGER_URL:=http://localhost:${MANAGER_PORT}}" "${ADMIN_API_URL:=http://localhost:${ADMIN_PORT}}"
-  : "${LICENSE_FILE:=./secrets/license.json}"
+  # 라이선스 — 따로 정하지 않았으면, 유지 폴더를 쓸 때는 그곳의 secrets/license.json
+  case "${LICENSE_FILE:-}" in
+    ""|./secrets/license.json|secrets/license.json|"$ROOT/secrets/license.json")
+      LICENSE_FILE="$ROOT/secrets/license.json"
+      if [ -n "$d" ] && [ "$d" != "$ROOT/data" ]; then
+        license_to_data "$d"
+        if [ -f "$d/secrets/license.json" ] || [ ! -f "$LICENSE_FILE" ]; then LICENSE_FILE="$d/secrets/license.json"; fi
+      fi ;;
+  esac
+  [ "$check" = 1 ] || return 0
   for v in KONG_PG_PASSWORD KONG_ADMIN_PASSWORD KONG_SESSION_SECRET DECK_CHAT_URL DECK_CHAT_MODEL DECK_CLIENT_KEY; do
     val="${!v:-}"
-    [ -n "$val" ] || die ".env 의 $v 가 비어 있습니다."
-    case "$val" in change-me*) die ".env 의 $v 를 기본값에서 바꿔 주세요.";; esac
+    [ -n "$val" ] || die "설정 파일($ENV_FILE)의 $v 가 비어 있습니다."
+    case "$val" in change-me*) die "설정 파일($ENV_FILE)의 $v 를 기본값에서 바꿔 주세요.";; esac
   done
 }
 
@@ -74,7 +171,6 @@ native_env() {  # load_env 다음에 부른다
   PII_APP=$ROOT/addons/pii-guard/app.py
   MOCK_APP=$ROOT/addons/mock/app.py
   mkdir -p "$LOGS" "$RUN_DIR"; chmod 700 "$RUN_DIR"
-  persist_sync
 
   # 주피터를 거쳐 Kong Manager 를 연다 (jupyter-server-proxy).
   #   Manager 화면: <주피터>/proxy/absolute/8002  — 경로를 그대로 넘기므로 Kong 이 같은 경로로 서비스
@@ -91,19 +187,6 @@ native_env() {  # load_env 다음에 부른다
     MANAGER_URL=${MANAGER_URL%/}; ADMIN_API_URL=${ADMIN_API_URL%/}
     case "$MANAGER_URL" in http*://localhost*|http*://127.0.0.1*) ;; *) BIND=0.0.0.0 ;; esac
   fi
-}
-
-# ── 유지 폴더 (DATA_DIR 을 저장소 밖 — 쿠버네티스 PV 같은 곳 — 으로 지정했을 때) ──────────
-# DB·로그·설정 백업은 그곳에 바로 쓴다. .env·라이선스는 저장소에서 그대로 고쳐 쓰고, 스크립트를 돌릴 때마다
-# 유지 폴더에 사본을 남긴다 → 파드를 다시 만들어 저장소를 새로 받으면 bash set-data-dir.sh 가 사본에서 되살린다.
-persist_sync() {
-  [ "$DATA_DIR" = "$ROOT/data" ] && return 0
-  local lic="$ROOT/secrets/license.json" keep="$DATA_DIR/secrets/license.json"
-  { mkdir -p "$DATA_DIR/secrets" && chmod 700 "$DATA_DIR/secrets" \
-      && { cmp -s .env "$DATA_DIR/.env" || { cp .env "$DATA_DIR/.env" && chmod 600 "$DATA_DIR/.env"; }; } \
-      && if [ -f "$lic" ]; then cmp -s "$lic" "$keep" || cp "$lic" "$keep"
-         elif [ -f "$keep" ]; then mkdir -p "$ROOT/secrets" && cp "$keep" "$lic"; fi   # 새로 받은 저장소에 되살림
-  } 2>/dev/null || note "⚠ 유지 폴더($DATA_DIR)에 .env·라이선스 사본을 쓰지 못했습니다"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -125,6 +208,55 @@ pg_datadir() {  # 이미 초기화된 곳이 있으면 그곳, 아니면 DATA_DI
   # NFS 에 따라 소유자·권한을 바꿀 수 없으면 PostgreSQL 이 거부한다 → 로컬 디스크로 대체
   if [ "$(stat -c '%u %a' "$d" 2>/dev/null)" = "$(id -u) 700" ]; then echo "$d"
   else rmdir "$d" 2>/dev/null; echo "$l"; fi
+}
+
+# ── 같은 유지 폴더를 두 환경에서 동시에 쓰지 않게 ──────────────────────
+# 빌드한 새 환경과 개발 파드가 같은 유지 폴더를 붙이면, 두 PostgreSQL 이 같은 DB 파일을 쓰다가 DB 가 깨진다.
+# PostgreSQL 의 잠금(postmaster.pid)은 같은 기계 안에서만 통하므로, 실행 중인 환경의 이름을 run.lock 에 적고
+# 20초마다 갱신한다. 90초 넘게 갱신이 없으면 그 환경은 없어진 것으로 보고 이어받는다.
+HOST_ID=$(hostname 2>/dev/null || cat /proc/sys/kernel/hostname)
+LOCK_STALE=90
+lock_read() {  # → LOCK_HOST(실행 중인 환경 이름, 없으면 빈 값) · LOCK_AGE(마지막 갱신 뒤 지난 초)
+  local h="" t=0
+  if [ -f "$DATA_DIR/run.lock" ]; then { read -r h t < "$DATA_DIR/run.lock"; } 2>/dev/null || true; fi
+  [[ "$t" =~ ^[0-9]+$ ]] || t=0
+  LOCK_HOST=$h; LOCK_AGE=$(( $(date +%s) - t ))
+}
+lock_take() {  # lock_take <DB 폴더> — 다른 환경이 쓰는 중이면 멈추고, 아니면 이 환경 이름으로 잠그고 갱신 프로세스를 띄운다
+  local pgd=$1 prev old p
+  lock_read
+  if [ -z "$LOCK_HOST" ]; then prev=none
+  elif [ "$LOCK_HOST" = "$HOST_ID" ]; then prev=self
+  elif [ "$LOCK_AGE" -lt "$LOCK_STALE" ]; then
+    die "다른 환경($LOCK_HOST)이 이 유지 폴더로 실행 중입니다 (${LOCK_AGE}초 전 확인).
+  같은 DB 를 두 곳에서 띄우면 DB 가 깨집니다 — 그쪽에서 먼저 bash stop.sh 로 내리세요.
+  그 환경이 이미 없어졌다면 ${LOCK_STALE}초 뒤 다시 실행하면 이어받습니다."
+  else prev=stale; note "이전 환경($LOCK_HOST)이 ${LOCK_AGE}초 동안 실행 기록을 갱신하지 않아 멈춘 것으로 보고 이어받습니다"; fi
+  # 실행 기록 없이 DB 실행 표시만 남은 경우 — 예전 스크립트로 띄운 다른 환경이 아직 돌고 있을 수 있다
+  if [ "$prev" = none ] && [ "$pgd" = "$DATA_DIR/pgdata" ] && [ -f "$pgd/postmaster.pid" ] && [ "${FORCE_UNLOCK:-0}" != 1 ]; then
+    old=$(head -1 "$pgd/postmaster.pid" 2>/dev/null)
+    if [ "$(cat "/proc/$old/comm" 2>/dev/null)" != postgres ]; then
+      die "DB 가 다른 환경에서 아직 실행 중일 수 있습니다 — DB 폴더에 실행 표시(postmaster.pid)가 남아 있는데 실행 기록(run.lock)이 없습니다.
+  예전 스크립트로 띄운 개발 파드가 있으면 그 파드에서 먼저:  bash stop.sh
+  아무 데서도 돌고 있지 않은 게 확실하면:  FORCE_UNLOCK=1 bash start.sh"
+    fi
+  fi
+  printf '%s %s\n' "$HOST_ID" "$(date +%s)" > "$DATA_DIR/run.lock.$$" && mv -f "$DATA_DIR/run.lock.$$" "$DATA_DIR/run.lock"
+  p=$(cat "$RUN_DIR/lock.pid" 2>/dev/null) || true
+  if [ -z "$p" ] || ! kill -0 "$p" 2>/dev/null; then
+    LOCK_F="$DATA_DIR/run.lock" LOCK_H="$HOST_ID" setsid nohup bash -c \
+      'while sleep 20; do printf "%s %s\n" "$LOCK_H" "$(date +%s)" > "$LOCK_F.$$" && mv -f "$LOCK_F.$$" "$LOCK_F"; done' \
+      >/dev/null 2>&1 < /dev/null &
+    echo $! > "$RUN_DIR/lock.pid"
+  fi
+}
+lock_release() {  # stop.sh — 갱신 프로세스를 내리고, 이 환경의 기록이면 지운다
+  local p
+  p=$(cat "$RUN_DIR/lock.pid" 2>/dev/null) || true
+  if [ -n "$p" ]; then kill "$p" 2>/dev/null || true; fi
+  rm -f "$RUN_DIR/lock.pid"
+  lock_read
+  if [ "$LOCK_HOST" = "$HOST_ID" ]; then rm -f "$DATA_DIR/run.lock"; fi
 }
 
 # ── 한국어 PII 가드 ────────────────────────────────────────────

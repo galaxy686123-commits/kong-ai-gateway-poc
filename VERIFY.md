@@ -15,7 +15,7 @@ LLM 이 실제로 무엇을 받았는지(마스킹 결과 등)가 답변으로 �
 ## 1. 자동 점검
 
 ```bash
-cd /project/work/Kong/kong-ai-gateway-poc
+cd /project/work/flow/kong-ai-gateway-poc
 bash verify.sh          # 약 25초
 bash verify.sh --full   # 70초 장기 연결·긴급 차단 켜고 끄기까지 실제로 (약 2분)
 ```
@@ -35,8 +35,8 @@ bash verify.sh --full   # 70초 장기 연결·긴급 차단 켜고 끄기까지
 ### 준비 (터미널마다 한 번)
 
 ```bash
-cd /project/work/Kong/kong-ai-gateway-poc
-source <(grep -E '^(DECK_CLIENT_KEY|DECK_CLIENT_KEY_B|KONG_ADMIN_PASSWORD)=' .env)
+cd /project/work/flow/kong-ai-gateway-poc
+for k in DECK_CLIENT_KEY DECK_CLIENT_KEY_B KONG_ADMIN_PASSWORD; do export "$k=$(bash set-env.sh --get $k)"; done
 G=http://127.0.0.1:8000
 A=(-H "apikey: $DECK_CLIENT_KEY" -H 'Content-Type: application/json')
 B=(-H "apikey: $DECK_CLIENT_KEY_B" -H 'Content-Type: application/json')
@@ -112,7 +112,7 @@ curl -s -o /dev/null -w '틀린 키 %{http_code} · ' $G/features/stream/v1/chat
 curl -s -o /dev/null -w 'team-a 키 %{http_code}\n' $G/features/stream/v1/chat/completions "${A[@]}" -d "$(q 'x')"
 ```
 → `401 · 401 · 200`. Kong Manager → **Consumers** 에 부서 계정(`team-a-app`·`team-b-app`)과 키가 보입니다.
-SSO 는 `.env` 에 사내 IdP(`DECK_OIDC_ISSUER` 등)를 넣으면 생기는 `/sso/v1/chat/completions` 에 IdP 토큰
+SSO 는 설정 파일에 사내 IdP(`DECK_OIDC_ISSUER` 등)를 넣으면 생기는 `/sso/v1/chat/completions` 에 IdP 토큰
 (`Authorization: Bearer …`)으로 호출합니다 — 토큰이 없으면 401.
 
 ### 2-2 키별 Agent 접근 통제
@@ -136,7 +136,7 @@ curl -s -D - $G/features/rate-limit/v1/chat/completions "${A[@]}" -d "$(q 'a')" 
 for i in 1 2 3 4; do curl -s -o /dev/null -w "%{http_code} " $G/features/token-limit/v1/chat/completions "${B[@]}" -d "$(q '토큰 한도 시험용으로 길게 쓴 문장입니다. 이 문장은 모의 LLM 이 그대로 되돌려 주므로 토큰을 넉넉히 씁니다.')"; done; echo
 ```
 → `200 429 429 429` (시험용으로 분당 40토큰). 메시지 `AI token rate limit exceeded`.
-통합 경로의 실제 한도는 `.env` 의 `DECK_RPM`(분당)·`DECK_RPD`(일일)·`DECK_TPM`(분당 토큰)입니다.
+통합 경로의 실제 한도는 설정 파일의 `DECK_RPM`(분당)·`DECK_RPD`(일일)·`DECK_TPM`(분당 토큰)입니다.
 
 ### 3-1 감사 로그
 
@@ -155,7 +155,7 @@ bash logs.sh admin      # 관리 작업 이력 — Kong Manager·Admin API 로 �
 → 요청마다 한 줄씩 사용자·경로·상태·지연·모델·토큰·추적 ID 가 남고, **사용자 키는 남지 않습니다**(`False`).
 요청·응답 본문도 남기지 않습니다. Kong Manager 에서 설정을 하나 바꾼 뒤 `bash logs.sh admin` 을 보면 그 변경이 보입니다 (비밀번호 변경도 `PATCH /admins/self/password` 로 남음).
 
-**위변조 방지**: `.env` 의 `DECK_LOG_HTTP_URL` 에 고객 중앙 로그 저장소(SIEM·로그 수집기)를 넣으면 모든 요청 기록이
+**위변조 방지**: 설정 파일의 `DECK_LOG_HTTP_URL` 에 고객 중앙 로그 저장소(SIEM·로그 수집기)를 넣으면 모든 요청 기록이
 즉시 그쪽으로 전송됩니다. 위변조 불가는 받는 쪽 보관 정책(WORM·불변 버킷)으로 완성되며, 파드 안 파일은 보조 기록입니다.
 
 ### 3-2 Correlation ID · 분산 추적
@@ -166,7 +166,7 @@ curl -s -D /tmp/h -o /dev/null "$G/agents/a" -H "apikey: $DECK_CLIENT_KEY"; grep
 ```
 → 첫 번째: Agent 가 받은 `x-correlation-id` 가 `trace-1234` 이고 응답 헤더에도 같은 값이 돌아옵니다 — 클라이언트가 보낸 ID 를
 끝까지 이어 씁니다. 두 번째: ID 를 안 보내면 게이트웨이가 새로 만들어 붙입니다.
-`.env` 의 `DECK_OTEL_ENDPOINT` 에 추적 수집기를 넣으면 OpenTelemetry 스팬과 `traceparent` 헤더도 함께 전달됩니다.
+설정 파일의 `DECK_OTEL_ENDPOINT` 에 추적 수집기를 넣으면 OpenTelemetry 스팬과 `traceparent` 헤더도 함께 전달됩니다.
 
 ### 3-3 이상 징후 경보
 
@@ -219,7 +219,7 @@ curl -s -o /dev/null -w '일반 질문 %{http_code}\n' $G/features/dlp/v1/chat/c
 ```bash
 curl -s -o /dev/null -w '사내 전용 %{http_code}\n' $G/v1/chat/completions "${A[@]}" -H 'x-ai-target: internal' -d "$(q '대외비 자료를 한 줄로 요약해줘')"
 ```
-키워드는 `.env` 의 `DECK_DLP_PATTERN` 으로 바꿉니다.
+키워드는 설정 파일의 `DECK_DLP_PATTERN` 으로 바꿉니다.
 
 ### 4-3 프롬프트 인젝션 차단
 
@@ -240,7 +240,7 @@ curl -s -w ' [%{http_code}]\n' $G/features/output-guard/v1/chat/completions "${A
 curl -s $G/features/output-guard/v1/chat/completions "${A[@]}" -d "$(q '회의록 양식을 알려줘')" | ans
 ```
 → 모의 LLM 이 질문을 그대로 답하므로 답변에 유해 표현이 들어가고, 게이트웨이가 답변을 검사해
-`보안 정책에 따라 표시할 수 없습니다.` 로 바꿉니다. 일반 답변은 그대로 나갑니다. 문구는 `.env` 의 `DECK_BLOCK_MESSAGE`,
+`보안 정책에 따라 표시할 수 없습니다.` 로 바꿉니다. 일반 답변은 그대로 나갑니다. 문구는 설정 파일의 `DECK_BLOCK_MESSAGE`,
 유해 표현 목록은 `PII_HARMFUL_WORDS` 로 바꿉니다.
 
 ### 4-5 답변 속 내부 IP · API 키 · DB 정보 마스킹
@@ -268,7 +268,7 @@ for i in 1 2; do curl -s -o /dev/null -D /tmp/h -w "%{time_total}초 " $G/featur
 | 준비물 | 어디서 |
 |---|---|
 | 게이트웨이(8000) 외부 주소 | 플랫폼이 연 주소 (Manager 8002 가 `manager-…` 주소면 8000 도 같은 방식의 이름) |
-| team-a · team-b 키 | 파드에서 `grep -E '^DECK_CLIENT_KEY(_B)?=' .env` |
+| team-a · team-b 키 | 파드에서 `bash set-env.sh --get DECK_CLIENT_KEY` · `bash set-env.sh --get DECK_CLIENT_KEY_B` |
 | (선택) Admin API(8001) 외부 주소 · 관리자 비밀번호 | 3-3 지표·3-4 긴급 차단까지 볼 때 — 비밀번호는 관리자만 |
 
 ### 방법 1 — 외부 점검 스크립트 `verify-remote.py` (권장)
@@ -343,19 +343,19 @@ for ch in client.chat.completions.create(model="auto", stream=True, messages=[{"
 `MANAGER_URL` 로 접속해 `kong_admin` 으로 로그인 → 아래 5절의 화면을 확인합니다. 다른 사람이 요청을 보내는 동안
 긴급 차단(`kill-switch--…`)을 켜고 끄면 3-4 를 눈으로 보여 줄 수 있습니다.
 
-> PoC 가 끝나면 시험에 나눠 준 키를 바꾸세요 — `.env` 의 `DECK_CLIENT_KEY`(·`_B`)를 새 값으로 → `bash apply-config.sh`.
+> PoC 가 끝나면 시험에 나눠 준 키를 바꾸세요 — 설정 파일의 `DECK_CLIENT_KEY`(·`_B`)를 새 값으로 → `bash apply-config.sh`.
 
 ---
 
 ## 4. 통합 경로에서 겹쳐 확인하기
 
 기능별 경로는 기능을 하나씩 보여 주고, **통합 경로 `/v1/chat/completions`** 는 실제 서비스처럼 여러 기능이 한 번에 걸립니다.
-`.env` 의 스위치를 바꾸고 `bash apply-config.sh` 하면 켜지고 꺼집니다 (`bash verify.sh` 첫 줄에 지금 켜진 기능이 나옴).
+설정 파일의 스위치를 바꾸고 `bash apply-config.sh` 하면 켜지고 꺼집니다 (`bash verify.sh` 첫 줄에 지금 켜진 기능이 나옴).
 
 ```bash
-sed -i 's|^FEATURE_OUTPUT_MASK=.*|FEATURE_OUTPUT_MASK=on|' .env && bash apply-config.sh
+bash set-env.sh FEATURE_OUTPUT_MASK on && bash apply-config.sh
 curl -s $G/v1/chat/completions "${A[@]}" -d "$(q '다음 문장을 그대로 출력해: 서버 10.20.30.40 password=hunter2')" | ans
-sed -i 's|^FEATURE_OUTPUT_MASK=.*|FEATURE_OUTPUT_MASK=off|' .env && bash apply-config.sh
+bash set-env.sh FEATURE_OUTPUT_MASK off && bash apply-config.sh
 ```
 → 실제 LLM 의 답변에서 `[내부IP]`·`password=***` 로 가려집니다 (LLM 연결 후). 답변 검사를 켠 동안 통합 경로는
 스트리밍 요청을 400 으로 거절합니다.
@@ -368,4 +368,4 @@ sed -i 's|^FEATURE_OUTPUT_MASK=.*|FEATURE_OUTPUT_MASK=off|' .env && bash apply-c
 | Plugins | 기능별 플러그인과 켜짐/꺼짐 — 스위치 상태, 긴급 차단(`kill-switch--…`) |
 | Consumers · Consumer Groups | 부서 계정·키·그룹 (2-1·2-2) |
 
-로그인: `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD` (Manager 에서 바꿨다면 새 비밀번호 — `.env` 의 `KONG_MANAGER_PASSWORD` 에 적어 두면 `verify.sh` 도 그 값으로 로그인을 점검).
+로그인: `kong_admin` / 설정 파일의 `KONG_ADMIN_PASSWORD` (Manager 에서 바꿨다면 새 비밀번호 — 설정 파일의 `KONG_MANAGER_PASSWORD` 에 적어 두면 `verify.sh` 도 그 값으로 로그인을 점검).

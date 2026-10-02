@@ -2,6 +2,15 @@
 # status.sh — 프로세스·라우트 상태 (직접 설치 방식). 자세한 점검은 verify.sh
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
+say "위치"
+note "설정 파일  $ENV_FILE"
+license_state; note "라이선스   $LICENSE_FILE — $LIC_MSG"
+note "유지 폴더  $DATA_DIR"
+lock_read
+if [ -z "$LOCK_HOST" ]; then note "실행 환경  없음 (실행 기록 없음)"
+elif [ "$LOCK_HOST" = "$HOST_ID" ]; then note "실행 환경  이 환경 ($HOST_ID)"
+elif [ "$LOCK_AGE" -lt "$LOCK_STALE" ]; then note "실행 환경  다른 환경 $LOCK_HOST (${LOCK_AGE}초 전 확인) — 그쪽 일은 bash remote.sh 로 맡긴다"
+else note "실행 환경  없음 (마지막 기록 $LOCK_HOST, ${LOCK_AGE}초 전 — 멈춤)"; fi
 say "프로세스"
 if pg_ready; then note "PostgreSQL   실행 중 (127.0.0.1:$PG_PORT, $(pg_datadir))"; else note "PostgreSQL   멈춤"; fi
 if pii_running; then note "PII 가드     실행 중 (127.0.0.1:$PII_PORT)"; else note "PII 가드     멈춤"; fi

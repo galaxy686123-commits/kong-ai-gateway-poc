@@ -10,4 +10,5 @@ if mock_running; then kill "$(mock_pid)" && note "모의 서버 정지"; fi
 rm -f "$RUN_DIR/mock.pid"
 PGD=$(pg_datadir)
 if pg_ready; then "$PG_BIN/pg_ctl" -D "$PGD" -m fast -w stop >/dev/null && note "PostgreSQL 정지"; fi
+lock_release     # 실행 기록을 지운다 — 이제 다른 환경(빌드한 새 환경 등)이 이 유지 폴더로 뜰 수 있다
 note "데이터는 그대로: $DATA_DIR"

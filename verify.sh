@@ -33,9 +33,14 @@ fi
 echo "Kong AI Gateway PoC 전체 점검 (직접 설치) — $(date '+%F %T')"
 
 sec "1. 환경"
-if [ ! -f .env ]; then bad ".env 가 없습니다 — cp .env.example .env 후 값을 채우세요"; exit 1; fi
-if msg=$( (load_env) 2>&1 ); then load_env; native_env; ok ".env 필수값 채워짐"
+if msg=$( (load_env) 2>&1 ); then load_env; native_env; ok "설정 파일 필수값 채워짐 ($ENV_FILE)"
 else bad "${msg##*✘ }"; exit 1; fi
+# 빌드한 새 환경이 이 유지 폴더로 돌고 있으면, 여기(개발 파드)에는 Kong 이 없는 게 정상이다
+lock_read
+if [ -n "$LOCK_HOST" ] && [ "$LOCK_HOST" != "$HOST_ID" ] && [ "$LOCK_AGE" -lt "$LOCK_STALE" ]; then
+  warn "이 유지 폴더는 다른 환경($LOCK_HOST)이 쓰는 중 — 그쪽 점검은 bash remote.sh verify"
+  printf '  OK %d · 주의 %d · 불가 %d\n' "$PASS" "$WARN" "$FAIL"; exit 0
+fi
 sudo -n true 2>/dev/null && ok "sudo (비밀번호 없이)" || bad "sudo 불가 — 설치·재설치에 필요"
 repo=$(grep -hsE '^[[:space:]]*deb[[:space:]]' /etc/apt/sources.list | awk '{for(k=2;k<=NF;k++) if($k ~ /^https?:/){print $k; exit}}')
 c1=$(code "${repo:-http://archive.ubuntu.com/ubuntu/}"); c2=$(code https://github.com)
@@ -53,12 +58,24 @@ case "$LIC_STATE" in
 esac
 PGD=$(pg_datadir)
 where=$(df -PT "$PGD" 2>/dev/null | awk 'NR==2{print $7" ("$2")"}')
-if [ "$DATA_DIR" != "$ROOT/data" ]; then   # 유지 폴더(bash set-data-dir.sh)를 쓰는 중 — .env·라이선스 사본도 있는지
-  kept=""; [ -f "$DATA_DIR/.env" ] && kept=" · .env 사본"; [ -f "$DATA_DIR/secrets/license.json" ] && kept="$kept · 라이선스 사본"
-else kept=""; fi
+kept=""
+if [ "$DATA_DIR" != "$ROOT/data" ]; then   # 유지 폴더(bash set-data-dir.sh)를 쓰는 중 — 설정·라이선스의 원본도 그곳에 있는지
+  [ "$ENV_FILE" = "$DATA_DIR/settings.env" ] && kept=" · 설정 파일"
+  [ "$LICENSE_FILE" = "$DATA_DIR/secrets/license.json" ] && [ -f "$LICENSE_FILE" ] && kept="$kept · 라이선스"
+fi
 if [ "$PGD" != "$DATA_DIR/pgdata" ]; then warn "DB 위치 $PGD — 데이터 폴더($DATA_DIR)에 DB 를 만들 수 없어 로컬 디스크를 씀 : 파드를 다시 만들면 사라짐"
 else case "$where" in *overlay*|"") warn "데이터 위치 $PGD — $where : 파드를 다시 만들면 사라질 수 있음";;
                       *)          ok "데이터 위치 $DATA_DIR — $where (DB·로그·백업·점검 기록$kept)";; esac
+fi
+# 빌드하면 저장소 폴더는 스냅샷(읽기 전용)이 된다 — 비밀값이 저장소에 남아 있지 않고, 바뀌는 것은 모두 유지 폴더에 쓰는지
+if [ "$DATA_DIR" != "$ROOT/data" ]; then
+  left=$(repo_leftovers)
+  if [ ! -w "$ROOT" ]; then
+    ok "저장소 폴더 읽기 전용 (빌드 스냅샷) — 설정·라이선스·DB·로그는 유지 폴더에 씀"
+    if [ -n "$left" ]; then warn "스냅샷에 DB 사본·비밀값이 들어 있음: $left — 다음 빌드 전에 개발 파드의 저장소 폴더에서 지우세요"; fi
+  elif [ -n "$left" ]; then
+    warn "빌드 전에 저장소 폴더에서 치울 것: $left — 빌드하면 스냅샷에 그대로 들어감 (DB 사본·설정 백업·비밀값. .env 는 bash status.sh 한 번이면 옮겨짐)"
+  else ok "빌드 준비 — 저장소 폴더에 DB 사본·비밀값 없음 (.env 에는 유지 폴더 위치만)"; fi
 fi
 
 sec "2. 설치"
@@ -100,14 +117,14 @@ if kong_up; then
   c_gui=$(code "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/")
   if [ "$c_login" = 200 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ]; then ok "Kong Manager 화면 200 · 로그인 kong_admin 성공 · 틀린 비밀번호 401"
   elif [ "$c_login" = 401 ] && [ "$c_bad" = 401 ] && [ "$c_gui" = 200 ] && [ "$c_tok" = 200 ]; then
-    # 로그인 자체는 동작한다(틀린 비밀번호를 401 로 거절) — .env 에 적힌 비밀번호가 실제와 다른 경우
-    fix="bash verify.sh 맨 아래 안내대로 KONG_MANAGER_PASSWORD 를 다시 넣으세요"
+    # 로그인 자체는 동작한다(틀린 비밀번호를 401 로 거절) — 설정 파일에 적힌 비밀번호가 실제와 다른 경우
+    fix="bash set-env.sh KONG_MANAGER_PASSWORD 로 다시 넣으세요"
     if [ -z "${KONG_MANAGER_PASSWORD:-}" ]; then
-      warn "Kong Manager 화면 200 · 로그인 비밀번호가 .env 와 다름 (Manager 에서 바꿨다면 정상) — 새 비밀번호를 .env 의 KONG_MANAGER_PASSWORD 에 넣으면 로그인까지 점검"
+      warn "Kong Manager 화면 200 · 로그인 비밀번호가 설정 파일과 다름 (Manager 에서 바꿨다면 정상) — bash set-env.sh KONG_MANAGER_PASSWORD 로 새 비밀번호를 넣으면 로그인까지 점검"
     elif [[ "$KONG_MANAGER_PASSWORD" == \<* ]]; then
-      warn "Kong Manager 화면 200 · .env 의 KONG_MANAGER_PASSWORD 에 예시 문구(<…>)가 그대로 있음 — $fix"
+      warn "Kong Manager 화면 200 · 설정 파일의 KONG_MANAGER_PASSWORD 에 예시 문구(<…>)가 그대로 있음 — $fix"
     else
-      warn "Kong Manager 화면 200 · .env 의 KONG_MANAGER_PASSWORD 로 로그인 401 — Manager 에서 쓰는 비밀번호와 다름 (오타·띄어쓰기·# 확인) — $fix"
+      warn "Kong Manager 화면 200 · 설정 파일의 KONG_MANAGER_PASSWORD 로 로그인 401 — Manager 에서 쓰는 비밀번호와 다름 (오타·띄어쓰기·# 확인) — $fix"
     fi
     MGR_PW_HINT=1
   else bad "Kong Manager — 화면 $c_gui · 로그인 $c_login · 틀린 비밀번호 $c_bad (200 · 200 · 401 이어야 함)"; fi
@@ -136,7 +153,7 @@ elif [ "$BIND" = 0.0.0.0 ]; then
   if [ "$e_gui" = 200 ] && [ "$e_api" = 200 ]; then ok "외부 주소 — Manager 200 ($MANAGER_URL) · Admin API 200 ($ADMIN_API_URL)"
   else warn "외부 주소 — Manager $e_gui · Admin API $e_api (파드 안에서 외부 주소가 안 보일 수 있음 — 브라우저로 $MANAGER_URL/ 확인)"; fi
   ok "Admin API·Manager 가 파드 바깥 연결도 받음 (0.0.0.0:$ADMIN_PORT · 0.0.0.0:$MANAGER_PORT)"
-else warn "브라우저에서 Kong Manager 를 열 주소가 없음 — .env 에 JUPYTER_URL, 또는 MANAGER_URL·ADMIN_API_URL"; fi
+else warn "브라우저에서 Kong Manager 를 열 주소가 없음 — 설정 파일에 JUPYTER_URL, 또는 MANAGER_URL·ADMIN_API_URL"; fi
 
 sec "4. 요구사항별 점검"
 deck_env
@@ -171,7 +188,7 @@ names = {"acl": "접근통제", "rate-limiting": "호출한도", "ai-rate-limiti
          "ai-custom-guardrail": "유해답변", "post-function": "답변마스킹", "ai-semantic-prompt-guard": "의미가드", "ai-semantic-cache": "시맨틱캐시"}
 d = json.load(sys.stdin)["data"]
 print(" · ".join(names[p["name"]] for p in d if p["enabled"] and p["name"] in names) or "없음")' 2>/dev/null)
-  ok "통합 경로 /v1/chat/completions — 켜진 기능: $([ "$DECK_ON_MASKING" = true ] && echo '마스킹 · ')${on:-없음}  (.env 의 FEATURE_… 로 바꿈)"
+  ok "통합 경로 /v1/chat/completions — 켜진 기능: $([ "$DECK_ON_MASKING" = true ] && echo '마스킹 · ')${on:-없음}  (설정 파일의 FEATURE_… — bash set-env.sh)"
   LLM=1; [[ "$DECK_CHAT_URL" = *example* ]] && LLM=0
 
   # ── 1. 서비스 등록·연동 ─────────────────────────────────
@@ -275,7 +292,7 @@ print("사용자=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consumer") or {}
       if [[ "$DECK_LOG_HTTP_URL" = "$DECK_MOCK_URL"* ]]; then
         got=$(curl -s "$DECK_MOCK_URL/logs?n=50" | grep -c "$vid"); [ "$got" -gt 0 ] && ok "3-1 중앙 로그 — 같은 기록이 중앙 저장소(모의)에 도착" || bad "3-1 중앙 로그 — 중앙 저장소에서 기록을 찾지 못함"
       else ok "3-1 중앙 로그 — $DECK_LOG_HTTP_URL 로 전송 중 (도착 확인은 저장소에서)"; fi
-    else warn "3-1 중앙 로그 — 전송 대상 미지정 (.env 의 DECK_LOG_HTTP_URL) · 지금은 파드 파일에만 기록"; fi
+    else warn "3-1 중앙 로그 — 전송 대상 미지정 (설정 파일의 DECK_LOG_HTTP_URL) · 지금은 파드 파일에만 기록"; fi
   fi
   if has agent-a; then
     r=$(curl -s -m 30 -D "$RUN_DIR/r.hdr" "${KA[@]}" -H "X-Correlation-ID: $vid-a" "$P/agents/a")
@@ -286,7 +303,7 @@ print("사용자=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consumer") or {}
         sleep 2; tr=$(curl -s "$DECK_MOCK_URL/stats" | python3 -c 'import json,sys; print(json.load(sys.stdin)["traces"])' 2>/dev/null)
         [ "${tr:-0}" -gt 0 ] && ok "3-2 분산 추적 — 스팬 ${tr}묶음이 추적 수집기(모의)에 도착" || bad "3-2 분산 추적 — 수집기에 도착한 스팬 없음"
       else ok "3-2 분산 추적 — $DECK_OTEL_ENDPOINT 로 전송 중 (시각화는 추적 백엔드에서)"; fi
-    else warn "3-2 분산 추적 — 추적 백엔드 미지정 (.env 의 DECK_OTEL_ENDPOINT) · 추적 ID 전달만 동작"; fi
+    else warn "3-2 분산 추적 — 추적 백엔드 미지정 (설정 파일의 DECK_OTEL_ENDPOINT) · 추적 ID 전달만 동작"; fi
   fi
   mt=$(curl -s -m 10 "http://127.0.0.1:$STATUS_PORT/metrics")
   if grep -q 'consumer="team-a-app"' <<<"$mt" && grep -q '^kong_ai_llm' <<<"$mt"; then
@@ -352,9 +369,9 @@ sec "요약"
 printf '  OK %d · 주의 %d · 불가 %d\n' "$PASS" "$WARN" "$FAIL"
 if [ "${MGR_PW_HINT:-0}" = 1 ]; then
   cat <<'HINT'
-  ※ Manager 비밀번호를 .env 에 넣는 법 — 아래 한 줄만 붙여 넣고(다른 줄과 같이 붙여 넣지 말 것), 묻는 곳에
-    Manager 비밀번호를 입력하고 Enter (화면에 안 보임). 그다음 bash verify.sh
-    read -rsp 'Manager 비밀번호: ' P; echo; sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
+  ※ Manager 비밀번호를 설정 파일에 넣는 법 — 아래 명령을 실행하고, 묻는 곳에 Manager 비밀번호를 입력한 뒤 Enter
+    (화면에 안 보임). 그다음 bash verify.sh
+    bash set-env.sh KONG_MANAGER_PASSWORD
 HINT
 fi
 [ "$FAIL" = 0 ] && echo "  → 이상 없음." || echo "  → [불가] 항목을 먼저 해결하세요. 이 화면을 담당자에게 보내 주세요."

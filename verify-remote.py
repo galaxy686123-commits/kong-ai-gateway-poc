@@ -24,10 +24,10 @@ import urllib.request
 
 p = argparse.ArgumentParser(description="Kong AI Gateway PoC 외부 점검")
 p.add_argument("--url", required=True, help="게이트웨이(8000) 외부 주소, 예: https://gw-xxxx.example.com")
-p.add_argument("--key", required=True, help="team-a 사용자 키 (.env 의 DECK_CLIENT_KEY)")
-p.add_argument("--key-b", help="team-b 사용자 키 (.env 의 DECK_CLIENT_KEY_B) — 2-2 를 양쪽에서 확인")
+p.add_argument("--key", required=True, help="team-a 사용자 키 (파드에서 bash set-env.sh --get DECK_CLIENT_KEY)")
+p.add_argument("--key-b", help="team-b 사용자 키 (bash set-env.sh --get DECK_CLIENT_KEY_B) — 2-2 를 양쪽에서 확인")
 p.add_argument("--admin-url", help="Admin API(8001) 외부 주소 — 3-3 지표·3-4 긴급 차단 확인")
-p.add_argument("--admin-token", help="Admin API 토큰 (.env 의 KONG_ADMIN_PASSWORD)")
+p.add_argument("--admin-token", help="Admin API 토큰 (bash set-env.sh --get KONG_ADMIN_PASSWORD)")
 p.add_argument("--full", action="store_true", help="70초 장기 연결·상한 초과·긴급 차단까지")
 p.add_argument("--insecure", action="store_true", help="TLS 인증서 검증 안 함")
 a = p.parse_args()

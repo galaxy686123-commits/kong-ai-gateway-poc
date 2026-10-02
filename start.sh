@@ -19,6 +19,12 @@ else note "빠진 프로그램이 있어 설치합니다"; "$ROOT/install.sh"; f
 
 say "2/5 PostgreSQL"
 PGD=$(pg_datadir)
+# DB 폴더는 그 주인만 쓸 수 있다 — 빌드한 새 환경이 다른 사용자로 돌면 DB 가 뜨지 않는다
+if [ -f "$PGD/PG_VERSION" ] && [ "$(stat -c %u "$PGD")" != "$(id -u)" ]; then
+  die "DB 폴더($PGD)의 주인은 uid $(stat -c %u "$PGD") 인데 이 환경은 uid $(id -u) ($(id -un)) 입니다.
+  DB 를 만든 사용자와 같은 사용자로 실행해야 합니다."
+fi
+lock_take "$PGD"     # 다른 환경이 이 유지 폴더를 쓰는 중이면 여기서 멈춘다 (lib.sh)
 if pg_ready; then note "이미 실행 중 ($PGD)"
 else
   if [ ! -f "$PGD/PG_VERSION" ]; then
@@ -47,6 +53,7 @@ CONF
     note "초기화 완료 ($PGD)"
   fi
   # 파드를 다시 만들면 예전 pid 가 남아 있을 수 있다 — 그 번호를 다른 프로세스가 쓰고 있으면 기동이 막힌다
+  # (다른 환경이 쓰는 중이 아니라는 건 바로 위 lock_take 가 확인했다)
   if [ -f "$PGD/postmaster.pid" ]; then
     old=$(head -1 "$PGD/postmaster.pid")
     [ "$(cat "/proc/$old/comm" 2>/dev/null)" = postgres ] || rm -f "$PGD/postmaster.pid"
@@ -122,7 +129,8 @@ cat <<MSG
 ──────────────────────────────────────────────
  프록시        http://127.0.0.1:$PROXY_PORT   (파드 안) · http://<파드 IP>:$PROXY_PORT
  Kong Manager  $MANAGER_URL/
-               kong_admin / .env 의 KONG_ADMIN_PASSWORD
+               kong_admin / 설정 파일의 KONG_ADMIN_PASSWORD
+ 설정 파일     $ENV_FILE
  데이터·로그   $DATA_DIR
  다음          bash apply-config.sh   요구사항별 설정 적용 (라이선스 필요)
                bash verify.sh         요구사항별 점검

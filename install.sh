@@ -55,7 +55,11 @@ else
     run "${mk[@]}" install DESTDIR="$DIST"
     note "빌드 완료 → $DIST"
   fi
-  run sudo cp -R "$DIST/." /
+  # 유지 폴더(NFS)는 root 로 못 읽을 수 있다(root_squash) — 이 사용자로 로컬 디스크에 먼저 옮긴 뒤 설치한다
+  tmpd=$(mktemp -d "$RUN_DIR/pgvector.XXXXXX")
+  run cp -R "$DIST/." "$tmpd/"
+  run sudo cp -R "$tmpd/." /
+  rm -rf "$tmpd"
   note "설치 완료"
 fi
 

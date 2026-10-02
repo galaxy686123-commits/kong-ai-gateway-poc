@@ -4,8 +4,8 @@
 #   bash apply-config.sh --dry-run       무엇이 바뀌는지만 본다 (적용하지 않음)
 #   bash apply-config.sh --no-features   기능별 시험 경로(/features/…)를 빼고 적용 (이미 있으면 지운다)
 #
-# 통합 경로 /v1/chat/completions 의 기능은 .env 의 FEATURE_…=on/off 로 켜고 끈다.
-# .env 에 값이 있는 항목만 들어간다 (외부 LLM·Azure·GCP·AWS·SSO·추적·중앙 로그·임베딩).
+# 통합 경로 /v1/chat/completions 의 기능은 설정 파일의 FEATURE_…=on/off 로 켜고 끈다 (bash set-env.sh FEATURE_… on).
+# 설정 파일에 값이 있는 항목만 들어간다 (외부 LLM·Azure·GCP·AWS·SSO·추적·중앙 로그·임베딩).
 # kong-poc 태그가 붙은 것만 관리하므로 Kong Manager 에서 직접 만든 설정은 건드리지 않는다.
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
@@ -26,14 +26,13 @@ case "$LIC_STATE" in
   valid|grace) note "라이선스 $LIC_MSG" ;;
   *) die "$LIC_MSG.
   라이선스가 없거나 유예 기간도 끝나면 Kong 이 읽기 전용이라 설정을 적용할 수 없습니다.
-  secrets/license.json 을 넣고 bash stop.sh && bash start.sh 후 다시 실행하세요." ;;
+  bash set-license.sh <라이선스 파일> 로 넣고 bash stop.sh && bash start.sh 후 다시 실행하세요." ;;
 esac
-# 2-2 접근 통제를 보려면 부서 키가 둘 필요하다 — 두 번째 키가 없으면 만들어 .env 에 적는다
+# 2-2 접근 통제를 보려면 부서 키가 둘 필요하다 — 두 번째 키가 없으면 만들어 설정 파일에 적는다
 if [ -z "${DECK_CLIENT_KEY_B:-}" ]; then
   DECK_CLIENT_KEY_B=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(24)))')
-  if grep -q '^DECK_CLIENT_KEY_B=' .env; then sed -i "s|^DECK_CLIENT_KEY_B=.*|DECK_CLIENT_KEY_B=$DECK_CLIENT_KEY_B|" .env   # 빈 줄을 그 자리에서 채운다
-  else printf '\n# apply-config.sh 가 만든 team-b 사용자 키\nDECK_CLIENT_KEY_B=%s\n' "$DECK_CLIENT_KEY_B" >> .env; fi
-  note "team-b 사용자 키를 만들어 .env 에 적었습니다 (DECK_CLIENT_KEY_B)"
+  env_set DECK_CLIENT_KEY_B "$DECK_CLIENT_KEY_B" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
+  note "team-b 사용자 키를 만들어 설정 파일에 적었습니다 (DECK_CLIENT_KEY_B · $ENV_FILE)"
 fi
 deck_env
 
@@ -70,7 +69,7 @@ opt 61-http-log "${DECK_LOG_HTTP_URL:-}"  "중앙 로그 → ${DECK_LOG_HTTP_URL
 EMB=""; [ -n "${DECK_EMBED_URL:-}" ] && [ -n "${DECK_EMBED_MODEL:-}" ] && EMB=1
 opt 70-semantic "$EMB" "의미 기반 가드·시맨틱 캐시" "임베딩 모델 없음 (DECK_EMBED_URL·DECK_EMBED_MODEL)"
 
-say "통합 경로 기능 스위치 (.env 의 FEATURE_…)"
+say "통합 경로 기능 스위치 (설정 파일의 FEATURE_…)"
 sw() { local v="DECK_ON_$1"; printf '  %-4s %-16s %s\n' "$([ "${!v}" = true ] && echo 켬 || echo 끔)" "$1" "$2"; }
 sw MASKING      "4-1 개인정보 마스킹 (모든 채팅 경로)"
 sw ACL          "2-2 허용 그룹만"

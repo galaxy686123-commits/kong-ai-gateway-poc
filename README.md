@@ -27,12 +27,16 @@ Kubernetes 권한이나 컨테이너 없이 **sudo · apt(Ubuntu 22.04) · GitHu
 
 Kong 패키지 저장소·GitHub Release 가 막힌 파드를 위해 설치 파일을 저장소에 넣었습니다. `git clone` 하나로 받습니다.
 
+> **설정 파일** — 처음 설치할 때는 저장소의 `.env` 입니다. 유지 폴더를 정하면(`bash set-data-dir.sh`, 아래 「유지 폴더」)
+> 설정 전체가 `<유지 폴더>/kong-poc/settings.env` 로 옮겨지고 저장소 `.env` 에는 그 위치 한 줄만 남습니다.
+> 그 뒤로는 어디 있든 `bash set-env.sh <키> <값>` 으로 고칩니다. 이 문서의 「`.env` 의 …」는 그 설정 파일을 말합니다.
+
 ---
 
 ## 처음 설치
 
 ```bash
-cd /project/work/Kong                     # 파드를 다시 만들어도 남는 경로
+cd /project/work/flow                     # 파드를 다시 만들어도 남는 경로 (빌드하면 이 아래가 스냅샷이 됨)
 git clone --depth 1 https://github.com/galaxy686123-commits/kong-ai-gateway-poc.git
 cd kong-ai-gateway-poc
 bash kong-check.sh                        # (선택) 설치 전 환경 점검
@@ -50,8 +54,9 @@ sed -i 's|^MANAGER_URL=.*|MANAGER_URL=<8002 포트의 외부 주소>|; s|^ADMIN_
 grep -E '^(KONG_ADMIN_PASSWORD|DECK_CLIENT_KEY|MANAGER_URL|ADMIN_API_URL)=' .env    # 로그인 비밀번호·사용자 키 확인
 ```
 
-- `.env` 는 숨김 파일이라 주피터 탐색기에서 바로 안 열립니다. `sed` 로 고치거나 `cp .env env.txt` → 편집 → `mv env.txt .env`.
-- **라이선스**: 주피터 탐색기로 `secrets/` 에 올리고 이름을 `license.json` 으로 바꿉니다.
+- `.env` 는 숨김 파일이라 주피터 탐색기에서 바로 안 열립니다. 값 하나는 `bash set-env.sh <키> <값>` 으로 바꿉니다
+  (비밀번호처럼 화면에 남기기 싫은 값은 `bash set-env.sh <키>` — 입력을 묻고 화면에 안 보임).
+- **라이선스**: 주피터 탐색기로 아무 폴더에나 올린 뒤 `bash set-license.sh <올린 파일>` — 제자리에 넣어 줍니다.
 
 ```bash
 bash start.sh          # 설치 → DB → 마이그레이션 → PII 가드·모의 서버 → Kong (처음 약 2분)
@@ -74,13 +79,14 @@ Kong Manager 는 **브라우저가 Admin API(8001)를 직접 부르므로** 8002
 | **플랫폼이 8000·8001·8002 를 밖으로 연 경우** | `MANAGER_URL=<8002 주소>` · `ADMIN_API_URL=<8001 주소>` · `JUPYTER_URL=` (비움) | `MANAGER_URL` |
 | 주피터를 거쳐 여는 경우 (`jupyter-server-proxy`) | `JUPYTER_URL=<주피터 주소>` | `<JUPYTER_URL>/proxy/absolute/8002/` |
 
-계정은 `kong_admin` / `.env` 의 `KONG_ADMIN_PASSWORD`. 접속 방식을 바꾼 뒤에는 `bash stop.sh && bash start.sh`.
+계정은 `kong_admin` / 설정 파일의 `KONG_ADMIN_PASSWORD`. 접속 방식을 바꾼 뒤에는 `bash stop.sh && bash start.sh`.
 
 Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바뀌고, 스크립트가 쓰는 Admin API 토큰은 처음 값(`KONG_ADMIN_PASSWORD`)
-그대로입니다. `.env` 의 `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 적으세요(`verify.sh` 의 로그인 점검용). 넣는 법 — 아래 **한 줄만** 붙여 넣고(다른 줄과 같이 붙여 넣으면 그 줄이 비밀번호로 들어감) 묻는 곳에 새 비밀번호를 입력합니다 (화면에 안 보임).
+그대로입니다. `KONG_ADMIN_PASSWORD` 는 고치지 말고, 새 비밀번호는 `KONG_MANAGER_PASSWORD` 에 넣으세요(`verify.sh` 의 로그인 점검용).
+아래 명령을 실행하고 묻는 곳에 새 비밀번호를 입력합니다 (화면에 안 보임).
 
 ```bash
-read -rsp 'Manager 비밀번호: ' P; echo; sed -i '/^KONG_MANAGER_PASSWORD=/d' .env; printf 'KONG_MANAGER_PASSWORD=%s\n' "$P" >> .env; unset P
+bash set-env.sh KONG_MANAGER_PASSWORD
 ```
 
 ---
@@ -165,7 +171,7 @@ LLM 이 실제로 무엇을 받았는지(마스킹 결과 등) 답변으로 바�
 ## 시험해 보기
 
 ```bash
-KEY=$(grep '^DECK_CLIENT_KEY=' .env | cut -d= -f2)
+KEY=$(bash set-env.sh --get DECK_CLIENT_KEY)
 H=(-H "apikey: $KEY" -H 'Content-Type: application/json')
 
 # 1-1 통합 경로 · 모델 선택
@@ -242,12 +248,16 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | 스크립트 | 하는 일 |
 |---|---|
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
+| `run.sh` | **빌드한 새 환경의 시작 명령** — 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
+| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` (같은 유지 폴더를 붙인 개발 파드에서) |
+| `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
+| `set-license.sh` | 받은 라이선스 파일을 제자리에 넣기 — `bash set-license.sh <파일>` |
 | `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기 · `--no-features` 기능별 경로 빼기. `kong-poc` 태그가 붙은 것만 관리 |
 | `verify.sh` | 환경·설치·접속·요구사항별 점검. `--full` 은 장기 연결·긴급 차단까지 실제로 |
 | `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 요구사항 점검 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |
 | `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
-| `set-data-dir.sh` | **유지 폴더(PV) 지정** — DB·로그·백업·점검 기록을 그 폴더로 옮기고 `.env`·라이선스 사본을 둔다. 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
+| `set-data-dir.sh` | **유지 폴더(PV) 지정** — 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
 | `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
 | `stop.sh` | 정지 (데이터는 남김) |
 | `install.sh` | 프로그램만 설치 (`start.sh` 가 필요할 때 부름) |
@@ -270,7 +280,8 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
 | `pgdata/` | DB — Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
 | `logs/` | Kong 로그 전부 (아래 「로그」 표) · PostgreSQL · PII 가드 로그 |
 | `backup/` · `reports/` | 설정 백업(`dump-config.sh`) · 점검 기록(`verify.sh` 를 돌릴 때마다 저장) |
-| `.env` · `secrets/license.json` | 설정·라이선스 **사본** — 저장소의 것을 그대로 고쳐 쓰고, 스크립트를 돌릴 때마다 사본이 갱신됨 |
+| `settings.env` · `secrets/license.json` | 설정·라이선스 **원본** — `bash set-env.sh` · `bash set-license.sh` 로 고침. 저장소 `.env` 에는 이 폴더 위치 한 줄만 |
+| `run.lock` · `requests/` | 지금 이 폴더로 돌고 있는 환경의 기록(20초마다 갱신) · `remote.sh` 가 맡긴 일과 결과 |
 | `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
 
 - **주피터 탐색기에 보이는 경로를 그대로 줘도 됩니다.** 탐색기의 `/datasets/…` 는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와
@@ -278,10 +289,61 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
 - 옮기기 전에 그 폴더가 DB 를 둘 수 있는지 확인하고(권한 700 · 파드와 함께 사라지는 overlay 나 오브젝트 스토리지(FUSE)·네트워크 공유가
   아닌지), 안 되면 아무것도 옮기지 않습니다. 실행 중이면 잠시 내렸다가 옮긴 뒤 다시 띄우고 설정까지 다시 적용합니다.
 - 원래 자리는 지우지 않고 `data.moved-<시각>` 으로 남겨 둡니다 — 확인 후 지워도 됩니다.
-- **파드를 다시 만들었으면**: 저장소를 받고(`git clone`) → `bash set-data-dir.sh <같은 유지 폴더>` 하나로 `.env`·라이선스를
-  되살리고 프로그램을 다시 설치해 기존 DB·설정으로 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 —
-  했더라도 유지 폴더의 설정으로 되살리고 새로 만든 것은 `.env.before-<시각>` 으로 보관합니다).
+- **파드를 다시 만들었으면**: 저장소를 받고(`git clone`) → `bash set-data-dir.sh <같은 유지 폴더>` 하나로 유지 폴더의 설정·DB 를 쓰도록
+  위치를 적고 프로그램을 다시 설치해 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 —
+  했더라도 유지 폴더의 설정을 쓰고 새로 만든 것은 `settings.env.from-repo-<시각>` 으로 보관합니다).
+- 예전 방식(저장소 `.env` 가 원본, 유지 폴더엔 사본)으로 쓰던 저장소는 새 버전을 받은 뒤 아무 스크립트나 한 번(`bash status.sh`) 실행하면
+  설정·라이선스가 유지 폴더로 옮겨집니다.
 - 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090`.
+
+### 빌드해서 새 환경으로 돌리기
+
+플랫폼이 저장소 폴더를 **스냅샷(읽기 전용)으로 굳혀 새 환경을 띄우는** 경우입니다. 스냅샷에는 저장소 폴더만 들어가고,
+apt 로 설치한 Kong·PostgreSQL 은 들어가지 않습니다 → 새 환경이 뜰 때 `run.sh` 가 다시 설치합니다(처음 약 2분).
+바뀌는 것(설정·라이선스·DB·로그)은 전부 유지 폴더에 있으므로 새 환경도 **같은 유지 폴더를 같은 경로로** 붙여야 합니다.
+
+**빌드 전 (개발 파드에서)**
+
+```bash
+cd /project/work/flow/kong-ai-gateway-poc
+bash status.sh        # 「설정 파일」·「라이선스」가 유지 폴더 경로인지 확인 (예전 방식이면 이때 옮겨짐)
+bash verify.sh        # 「빌드 준비 — 저장소 폴더에 DB 사본·비밀값 없음」이 OK 인지
+bash stop.sh          # 반드시 내린다 — 같은 DB 를 두 곳에서 띄우면 DB 가 깨진다
+```
+
+- `verify.sh` 가 「빌드 전에 저장소 폴더에서 치울 것」을 알려 주면 지우고 빌드합니다. 유지 폴더로 옮기기 전 자리(`data.moved-<시각>`)는
+  **옛 DB 사본 전체**라 스냅샷에 들어가면 안 됩니다 (지금 DB 는 유지 폴더에 있으니 지워도 됨).
+- 저장소를 다른 위치로 옮겨 쓰기 시작했으면 **옛 위치의 저장소는 지우세요.** 예전 스크립트는 실행 기록을 몰라서, 그곳에서
+  `start.sh` 를 실행하면 새 환경이 쓰는 DB 를 함께 띄워 DB 가 깨질 수 있습니다.
+
+**빌드 설정**
+
+| 항목 | 값 |
+|---|---|
+| 시작 명령 | `bash /project/work/flow/kong-ai-gateway-poc/run.sh` — 끝나지 않고 계속 떠 있음 |
+| 실행 사용자 | 개발 파드와 같은 사용자(uid) — DB 폴더의 주인이 같아야 DB 가 뜸 |
+| 유지 폴더 | 개발 파드와 같은 경로로, 쓰기 가능하게 |
+| 필요 권한 | sudo(비밀번호 없이) · Ubuntu 저장소(apt) 접속 — 프로그램 재설치에 필요 |
+| 포트 | 8000(프록시) · 8001(Admin API) · 8002(Manager) · 8100(지표) |
+| 복제본 | 1개 — 같은 DB 를 둘 이상이 쓸 수 없음 |
+
+새 환경의 외부 주소가 개발 파드와 다르면 빌드 전에 바꿔 둡니다:
+`bash set-env.sh MANAGER_URL <8002 외부 주소>` · `bash set-env.sh ADMIN_API_URL <8001 외부 주소>`.
+
+**새 환경이 뜬 뒤 (개발 파드에서)** — 새 환경에 터미널이 없어도 유지 폴더를 거쳐 일을 맡길 수 있습니다.
+
+```bash
+bash remote.sh status     # 새 환경의 프로세스·라우트
+bash remote.sh verify     # 새 환경 안에서 전체 점검 (결과가 이 화면에 나옴)
+bash set-env.sh FEATURE_SEMANTIC_CACHE on && bash remote.sh apply      # 설정을 바꾸고 적용
+bash set-license.sh <새 라이선스 파일> && bash remote.sh restart         # 라이선스 교체
+```
+
+- 개발 파드에서 `start.sh` 를 실행하면 「다른 환경이 이 유지 폴더로 실행 중」이라며 멈춥니다(실행 기록 `run.lock`). 개발 파드에서
+  다시 띄우려면 새 환경을 먼저 내리세요. 새 환경이 없어졌는데 기록만 남았으면 90초 뒤 이어받습니다.
+- `conf/*.yaml`·스크립트를 고치면 다시 빌드해야 새 환경에 들어갑니다. 설정 값(`settings.env`)만 바꾸는 건 빌드 없이 `remote.sh` 로 됩니다.
+- 처음 만든 DB(빈 유지 폴더)로 뜨면 `run.sh` 가 요구사항 설정까지 한 번 적용합니다. 이미 설정이 있으면 건드리지 않습니다
+  (Manager 에서 바꾼 값을 지키려고).
 
 ---
 
@@ -338,11 +400,13 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
 
 | 증상 | 원인 · 조치 |
 |---|---|
-| 외부 Manager 주소가 `upstream connect error … Connection refused` | Kong 이 8001·8002 를 파드 안에서만 받는 중 — `.env` 에 `MANAGER_URL`·`ADMIN_API_URL` 외부 주소, `JUPYTER_URL` 비움 → `bash stop.sh && bash start.sh` |
+| 외부 Manager 주소가 `upstream connect error … Connection refused` | Kong 이 8001·8002 를 파드 안에서만 받는 중 — `bash set-env.sh MANAGER_URL <외부 주소>` · `ADMIN_API_URL` 도 같은 방법, `bash set-env.sh JUPYTER_URL ''` → `bash stop.sh && bash start.sh` |
 | Manager 로그인 후 목록이 비거나 401 | `MANAGER_URL`·`ADMIN_API_URL` 이 브라우저 접속 주소와 다름 |
-| 비밀번호가 맞는데 로그인이 안 됨 | `.env` 값 뒤에 설명(`# …`)이 붙어 비밀번호의 일부로 읽힘 — 값 뒤 주석 제거 |
-| `verify.sh` 가 Kong Manager 로그인 401 | Manager 에서 비밀번호를 바꿈 — `.env` 의 `KONG_MANAGER_PASSWORD` 에 새 비밀번호 (`KONG_ADMIN_PASSWORD` 는 그대로) |
-| `apply-config.sh` 가 라이선스 때문에 멈춤 / 설정 변경 403 | 라이선스가 없거나 유예 기간도 끝남 — `secrets/license.json` 확인 후 `bash stop.sh && bash start.sh` |
+| 비밀번호가 맞는데 로그인이 안 됨 | 설정 파일의 값 뒤에 설명(`# …`)이 붙어 비밀번호의 일부로 읽힘 — 값 뒤 주석 제거 (`bash set-env.sh <키>` 로 다시 넣기) |
+| `verify.sh` 가 Kong Manager 로그인 401 | Manager 에서 비밀번호를 바꿈 — `bash set-env.sh KONG_MANAGER_PASSWORD` 로 새 비밀번호 (`KONG_ADMIN_PASSWORD` 는 그대로) |
+| `apply-config.sh` 가 라이선스 때문에 멈춤 / 설정 변경 403 | 라이선스가 없거나 유예 기간도 끝남 — `bash set-license.sh <파일>` 후 `bash stop.sh && bash start.sh` (`bash status.sh` 에 라이선스 위치·만료일) |
+| `start.sh` 가 「다른 환경이 이 유지 폴더로 실행 중」 | 빌드한 새 환경 등이 같은 DB 를 쓰는 중 — 그쪽을 먼저 내리거나 `bash remote.sh …` 로 그쪽에 맡김. 그 환경이 없어졌으면 90초 뒤 이어받음 |
+| `start.sh` 가 「실행 표시(postmaster.pid)가 남아 있는데 실행 기록이 없습니다」 | 예전 스크립트로 띄운 개발 파드가 아직 돌 수 있음 — 그 파드에서 `bash stop.sh`. 아무 데서도 안 도는 게 확실하면 `FORCE_UNLOCK=1 bash start.sh` |
 | 통합 경로에 `"stream": true` 요청이 400 `response streaming is not enabled` | 답변 검사(`FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK`)가 켜져 있음 — 정상 동작 |
 | LLM 호출이 503 `name resolution failed` | LLM 주소의 호스트 이름을 파드에서 찾을 수 없음 — 주소 확인. IP 를 바꿨다면 `bash apply-config.sh` 가 Kong 에 새 이름을 반영 |
 | `start.sh` 가 설치 중 멈춤 | `data/logs/install.log` 끝부분 확인 (apt 저장소 접속·디스크) |

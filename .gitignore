@@ -1,6 +1,7 @@
 # 시크릿 — 절대 커밋 금지
 .env
-.env.before-*
+.env.*
+!.env.example
 secrets/*
 !secrets/.gitkeep
 
