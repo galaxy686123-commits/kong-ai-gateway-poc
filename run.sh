@@ -40,7 +40,8 @@ say "환경 확인 — $HOST_ID · $(id -un) (uid $(id -u))"
 note "저장소    $ROOT $([ -w "$ROOT" ] && echo '(쓰기 가능)' || echo '(읽기 전용 — 빌드 스냅샷)')"
 note "유지 폴더 $DATA_DIR $(df -PTh "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print "(" $2 " · " $5 " 남음)"}')"
 note "설정 파일 $ENV_FILE"
-note "외부 주소 Manager $MANAGER_URL · Admin API $ADMIN_API_URL${ENV_ID:+  (환경 ID $ENV_ID — 파드 이름에서)}"
+if [ -n "$MANAGER_URL_T" ]; then note "외부 주소 $MANAGER_URL_T · $ADMIN_API_URL_T — 브라우저가 연 주소의 ID 에 맞춰 요청마다 정함"
+else note "외부 주소 Manager $MANAGER_URL · Admin API $ADMIN_API_URL"; fi
 if sudo -n true 2>/dev/null; then note "sudo      됨"; else note "sudo      안 됨 — 빠진 프로그램을 설치할 수 없습니다"; fi
 # 외부 주소 속 ID 가 파드 이름과 다른 플랫폼이 있다 — ID 처럼 생긴 환경변수를 남겨 두면 어디서 읽을지 정할 수 있다
 ids=$(env | grep -E '^[A-Za-z_0-9]+=[A-Za-z]{2,5}[0-9]{8,12}$' | sort | tr '\n' ' ')

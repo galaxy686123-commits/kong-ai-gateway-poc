@@ -146,6 +146,17 @@ elif [ -n "${JUPYTER_URL:-}" ]; then
     if [ "$p_gui" = 200 ] && [ "$p_api" = 200 ]; then ok "주피터 프록시 경유 — Manager 화면 200 · Admin API 200 → 브라우저: $MANAGER_URL/"
     else bad "주피터 프록시 경유 — Manager 화면 $p_gui · Admin API $p_api (둘 다 200 이어야 함)"; fi
   fi
+elif [ -n "$MANAGER_URL_T" ]; then
+  # 주소에 {ENV_ID} — Manager 를 연 주소(manager-<ID>)에서 Admin API 주소·허용 출처를 요청마다 정한다 (lib.sh gui_by_host)
+  ms=${MANAGER_URL_T%%://*}; ma=${MANAGER_URL_T#*://}; ma=${ma%%/*}; as=${ADMIN_API_URL_T%%://*}; aa=${ADMIN_API_URL_T#*://}; aa=${aa%%/*}
+  th=${ma//\{ENV_ID\}/selftest0000000001}; ta=${aa//\{ENV_ID\}/selftest0000000001}
+  k_api=$(curl -s -m 8 -H "Host: ${th%%:*}" "http://127.0.0.1:$MANAGER_PORT$GUI_PATH/kconfig.js" | grep -o "$as://$ta" | head -1)
+  k_cors=$(curl -s -m 8 -o /dev/null -D - -X OPTIONS -H "Origin: $ms://$th" -H "Access-Control-Request-Method: GET" "http://127.0.0.1:$ADMIN_PORT/auth" | tr -d '\r' | grep -i '^access-control-allow-origin:' | cut -d' ' -f2)
+  k_evil=$(curl -s -m 8 -o /dev/null -D - -X OPTIONS -H "Origin: https://not-allowed.example.com" -H "Access-Control-Request-Method: GET" "http://127.0.0.1:$ADMIN_PORT/auth" | tr -d '\r' | grep -ci '^access-control-allow-origin:')
+  if [ -n "$k_api" ] && [ "$k_cors" = "$ms://$th" ] && [ "$k_evil" = 0 ]; then
+    ok "외부 주소 자동 — Manager 를 연 주소의 ID 로 Admin API 주소·허용 출처를 정함 (시험: ${th%%:*} → $k_api · 다른 출처는 막음)"
+  else bad "외부 주소 자동 — Manager 설정 [$k_api] · 허용 출처 [$k_cors] · 다른 출처 허용 수 [$k_evil] (각각 $as://$ta · $ms://$th · 0 이어야 함)"; fi
+  ok "Admin API·Manager 가 파드 바깥 연결도 받음 (0.0.0.0:$ADMIN_PORT · 0.0.0.0:$MANAGER_PORT)"
 elif [ "$BIND" = 0.0.0.0 ]; then
   # 플랫폼이 연 주소 — 파드 안에서 그 주소가 안 보이는 플랫폼도 있어 실패해도 [주의]
   e_gui=$(code "$MANAGER_URL/")

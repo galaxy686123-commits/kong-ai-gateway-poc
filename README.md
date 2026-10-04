@@ -329,15 +329,18 @@ bash stop.sh          # 반드시 내린다 — 같은 DB 를 두 곳에서 띄�
 
 새 환경의 외부 주소가 개발 파드와 다르면 빌드 전에 바꿔 둡니다:
 `bash set-env.sh MANAGER_URL <8002 외부 주소>` · `bash set-env.sh ADMIN_API_URL <8001 외부 주소>`.
-**환경마다(빌드할 때마다) 주소 속 환경 ID 가 바뀌면** 그 자리를 `{ENV_ID}` 로 적어 둡니다 — 뜰 때마다 파드 이름에서
-`영문 3자 + 숫자 10자리` 조각을 읽어 채우므로 개발 파드와 새 환경이 같은 설정 파일을 써도 각자 자기 주소가 됩니다.
+**환경마다(빌드할 때마다) 주소 속 ID 가 바뀌면** 그 자리를 `{ENV_ID}` 로 적어 둡니다. 그러면 Kong 이 **요청마다**
+브라우저가 연 Manager 주소(`manager-<ID>.도메인`)에서 Admin API 주소(`adminapi-<ID>.도메인`)를 만들어 Manager 에 알려 주고,
+Admin API 는 `manager-<아무 ID>.도메인` 에서 온 요청만 허용합니다 — ID 를 몰라도 되므로 다시 빌드해도 설정을 고칠 필요가 없고,
+개발 파드와 새 환경이 같은 설정 파일을 그대로 씁니다. (nginx `map`·`sub_filter`·`more_set_headers`, `lib.sh` 의 `gui_by_host`)
 
 ```bash
 bash set-env.sh MANAGER_URL 'https://manager-{ENV_ID}.<플랫폼 도메인>'
 bash set-env.sh ADMIN_API_URL 'https://adminapi-{ENV_ID}.<플랫폼 도메인>'
 ```
 
-파드 이름에 ID 가 없는 플랫폼이면 시작 명령 앞에 `KONG_POC_ENV_ID=<ID>` 를 줍니다. 채워진 주소는 `run.sh` 기록의 「외부 주소」 줄에 나옵니다.
+`verify.sh` 는 이 동작을 직접 시험합니다(「외부 주소 자동」). 화면·기록에 보여 주는 주소는 파드 이름의 `영문 3자 + 숫자 10자리`
+조각(없으면 `unknown`)으로 채운 것이라 실제 주소와 다를 수 있지만, Manager 동작에는 쓰이지 않습니다.
 
 **새 환경이 뜬 뒤 (개발 파드에서)** — 새 환경에 터미널이 없어도 유지 폴더를 거쳐 일을 맡길 수 있습니다.
 

@@ -161,15 +161,16 @@ load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너
   export ENV_FILE
   : "${PROXY_PORT:=8000}" "${ADMIN_PORT:=8001}" "${MANAGER_PORT:=8002}"
   : "${MANAGER_URL:=http://localhost:${MANAGER_PORT}}" "${ADMIN_API_URL:=http://localhost:${ADMIN_PORT}}"
-  # 외부 주소의 {ENV_ID} 는 이 환경의 ID 로 채운다 — 빌드할 때마다 환경 ID(=주소)가 바뀌는 플랫폼용 (env_id)
+  # 외부 주소에 {ENV_ID} 가 있으면(빌드할 때마다 주소 속 ID 가 바뀌는 플랫폼) Manager 는 요청마다 주소를 맞춘다 (gui_by_host).
+  # 여기서는 화면·점검에 보여 줄 주소만 이 환경의 ID(env_id — 파드 이름)로 채운다. 원래 틀은 *_URL_T 에 둔다.
+  MANAGER_URL_T=""; ADMIN_API_URL_T=""; ENV_ID=""
   case "$MANAGER_URL $ADMIN_API_URL" in
     *"{ENV_ID}"*)
+      MANAGER_URL_T=$MANAGER_URL; ADMIN_API_URL_T=$ADMIN_API_URL
       ENV_ID=$(env_id)
-      if [ -n "$ENV_ID" ]; then
-        MANAGER_URL=${MANAGER_URL//\{ENV_ID\}/$ENV_ID}; ADMIN_API_URL=${ADMIN_API_URL//\{ENV_ID\}/$ENV_ID}
-      else note "⚠ 외부 주소의 {ENV_ID} 를 채울 환경 ID 를 찾지 못했습니다 (호스트 이름 $HOST_ID) — 명령 앞에 KONG_POC_ENV_ID=<ID>"; fi ;;
+      MANAGER_URL=${MANAGER_URL//\{ENV_ID\}/${ENV_ID:-unknown}}; ADMIN_API_URL=${ADMIN_API_URL//\{ENV_ID\}/${ENV_ID:-unknown}} ;;
   esac
-  export MANAGER_URL ADMIN_API_URL
+  export MANAGER_URL ADMIN_API_URL MANAGER_URL_T ADMIN_API_URL_T
   # 라이선스 — 따로 정하지 않았으면, 유지 폴더를 쓸 때는 그곳의 secrets/license.json
   case "${LICENSE_FILE:-}" in
     ""|./secrets/license.json|secrets/license.json|"$ROOT/secrets/license.json")
@@ -404,6 +405,8 @@ kong_env() {
   export KONG_ADMIN_LISTEN="$BIND:$ADMIN_PORT"
   export KONG_ADMIN_GUI_LISTEN="$BIND:$MANAGER_PORT"
   export KONG_ADMIN_GUI_URL="$MANAGER_URL" KONG_ADMIN_GUI_API_URL="$ADMIN_API_URL"
+  unset KONG_NGINX_HTTP_INCLUDE KONG_NGINX_ADMIN_INCLUDE
+  if [ -n "$MANAGER_URL_T" ]; then gui_by_host; fi
   if [ -n "$GUI_PATH" ]; then export KONG_ADMIN_GUI_PATH="$GUI_PATH"; else unset KONG_ADMIN_GUI_PATH; fi
   export KONG_NGINX_WORKER_PROCESSES="$KONG_WORKERS"
   ulimit -n "$(ulimit -Hn)" 2>/dev/null || true                   # 열 수 있는 파일 수를 허용된 최대로 (기본 1024 — 동시 연결 수 상한)
@@ -424,6 +427,41 @@ kong_env() {
   export EXT_AUTH_HEADER="${EXT_AUTH_HEADER:-Bearer none}"
   KONG_LICENSE_DATA="$(license_data)"
   if [ -n "$KONG_LICENSE_DATA" ]; then export KONG_LICENSE_DATA; else unset KONG_LICENSE_DATA; fi
+}
+# ── 주소가 빌드마다 바뀌는 플랫폼 — Manager 가 요청 주소에서 Admin API 주소를 만든다 ─────────────
+# MANAGER_URL=https://manager-{ENV_ID}.도메인 · ADMIN_API_URL=https://adminapi-{ENV_ID}.도메인 처럼 적으면:
+#  ① Manager 설정(kconfig.js)의 Admin API 주소를 요청한 호스트(manager-<ID>)에서 만들어 끼운다 (nginx map + sub_filter)
+#  ② Admin API 는 manager-<아무 ID>.도메인 에서 온 브라우저 요청만 허용하고 그 출처를 그대로 돌려준다 (CORS — headers-more)
+#  주소 속 ID 를 몰라도 되므로 개발 파드·빌드한 새 환경 어디서든 같은 설정으로 Manager 가 동작한다.
+gui_by_host() {
+  local ms ma mh as aa re_host re_origin admin_val dflt f1="$RUN_DIR/nginx-http-gui.conf" f2="$RUN_DIR/nginx-admin-cors.conf"
+  ms=${MANAGER_URL_T%%://*}; ma=${MANAGER_URL_T#*://}; ma=${ma%%/*}; mh=${ma%%:*}   # 방식 · 호스트[:포트] · 호스트
+  as=${ADMIN_API_URL_T%%://*}; aa=${ADMIN_API_URL_T#*://}; aa=${aa%%/*}
+  re_host=$(printf '%s' "$mh" | sed -e 's/\./\\./g' -e 's/{ENV_ID}/(?<kp_id>[A-Za-z0-9-]+)/')      # 호스트 이름엔 점만 이스케이프하면 된다
+  re_origin=$(printf '%s://%s' "$ms" "$ma" | sed -e 's/\./\\./g' -e 's/{ENV_ID}/[A-Za-z0-9-]+/')
+  admin_val=${aa//\{ENV_ID\}/\$kp_id}
+  dflt=${ADMIN_API_URL#*://}; dflt=${dflt%%/*}       # 틀에 안 맞는 호스트로 열면 — 이 환경의 ID 로 채운 주소
+  cat > "$f1" <<CONF
+# kong-poc (lib.sh gui_by_host) — 요청한 Manager 주소에서 Admin API 주소를 만든다
+map \$host \$kong_poc_admin_api_host {
+    "~^${re_host}\$" "${admin_val}";
+    default "${dflt}";
+}
+map \$http_origin \$kong_poc_cors_origin {
+    "~^${re_origin}\$" \$http_origin;
+    default "";
+}
+sub_filter '__KONG_POC_ADMIN_API_HOST__' '\$kong_poc_admin_api_host';
+sub_filter_once off;
+sub_filter_types application/javascript;
+CONF
+  cat > "$f2" <<'CONF'
+# kong-poc (lib.sh gui_by_host) — Manager 주소 틀에 맞는 출처만 허용하고 그대로 돌려준다
+more_set_headers -s '200 201 204 400 401 403 404 405 409 500' 'Access-Control-Allow-Origin: $kong_poc_cors_origin';
+more_set_headers -s '200 201 204 400 401 403 404 405 409 500' 'Vary: Origin';
+CONF
+  export KONG_NGINX_HTTP_INCLUDE="$f1" KONG_NGINX_ADMIN_INCLUDE="$f2"
+  export KONG_ADMIN_GUI_API_URL="$as://__KONG_POC_ADMIN_API_HOST__"
 }
 kong_up() { kong health -p "$KONG_PREFIX" >/dev/null 2>&1; }
 fix_log_path() {  # Kong 설정 속 요청 로그 위치가 이 환경에 없으면(유지 폴더가 다른 경로로 붙음) 설정을 다시 적용해 맞춘다
