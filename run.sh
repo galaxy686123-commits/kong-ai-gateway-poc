@@ -24,6 +24,7 @@ env_report() {  # 기동하지 못했을 때 — 이 환경이 어떻게 생겼�
   for p in /datasets /data /mnt /infer-data /infer-env /infer-model /workspace /project; do
     if [ -d "$p" ]; then note "── $p: $(ls -1 "$p" 2>/dev/null | head -12 | tr '\n' ' ')"; fi
   done
+  note "── ID 로 보이는 환경변수: $(env | grep -E '^[A-Za-z_0-9]+=[A-Za-z]{2,5}[0-9]{8,12}$' | sort | tr '\n' ' ')"
   note "── 경로가 든 환경변수"
   env | grep -E '^[A-Za-z_0-9]+=/' | grep -vE '^(PATH|LD_LIBRARY_PATH|PYTHONPATH|MANPATH|INFOPATH|PWD|OLDPWD|SHELL|HOME)=' | sed 's/^/    /' | head -25
 }
@@ -41,6 +42,9 @@ note "유지 폴더 $DATA_DIR $(df -PTh "$DATA_DIR" 2>/dev/null | awk 'NR==2 {pr
 note "설정 파일 $ENV_FILE"
 note "외부 주소 Manager $MANAGER_URL · Admin API $ADMIN_API_URL${ENV_ID:+  (환경 ID $ENV_ID — 파드 이름에서)}"
 if sudo -n true 2>/dev/null; then note "sudo      됨"; else note "sudo      안 됨 — 빠진 프로그램을 설치할 수 없습니다"; fi
+# 외부 주소 속 ID 가 파드 이름과 다른 플랫폼이 있다 — ID 처럼 생긴 환경변수를 남겨 두면 어디서 읽을지 정할 수 있다
+ids=$(env | grep -E '^[A-Za-z_0-9]+=[A-Za-z]{2,5}[0-9]{8,12}$' | sort | tr '\n' ' ')
+if [ -n "$ids" ]; then note "ID 환경변수 $ids"; fi
 
 stop_all() { say "종료 신호 — 차례로 내립니다"; bash "$ROOT/stop.sh"; exit 0; }
 trap stop_all TERM INT
