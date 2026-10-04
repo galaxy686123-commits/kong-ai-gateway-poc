@@ -161,6 +161,15 @@ load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너
   export ENV_FILE
   : "${PROXY_PORT:=8000}" "${ADMIN_PORT:=8001}" "${MANAGER_PORT:=8002}"
   : "${MANAGER_URL:=http://localhost:${MANAGER_PORT}}" "${ADMIN_API_URL:=http://localhost:${ADMIN_PORT}}"
+  # 외부 주소의 {ENV_ID} 는 이 환경의 ID 로 채운다 — 빌드할 때마다 환경 ID(=주소)가 바뀌는 플랫폼용 (env_id)
+  case "$MANAGER_URL $ADMIN_API_URL" in
+    *"{ENV_ID}"*)
+      ENV_ID=$(env_id)
+      if [ -n "$ENV_ID" ]; then
+        MANAGER_URL=${MANAGER_URL//\{ENV_ID\}/$ENV_ID}; ADMIN_API_URL=${ADMIN_API_URL//\{ENV_ID\}/$ENV_ID}
+      else note "⚠ 외부 주소의 {ENV_ID} 를 채울 환경 ID 를 찾지 못했습니다 (호스트 이름 $HOST_ID) — 명령 앞에 KONG_POC_ENV_ID=<ID>"; fi ;;
+  esac
+  export MANAGER_URL ADMIN_API_URL
   # 라이선스 — 따로 정하지 않았으면, 유지 폴더를 쓸 때는 그곳의 secrets/license.json
   case "${LICENSE_FILE:-}" in
     ""|./secrets/license.json|secrets/license.json|"$ROOT/secrets/license.json")
@@ -263,6 +272,15 @@ pg_datadir() {  # 이미 초기화된 곳이 있으면 그곳, 아니면 DATA_DI
 # PostgreSQL 의 잠금(postmaster.pid)은 같은 기계 안에서만 통하므로, 실행 중인 환경의 이름을 run.lock 에 적고
 # 20초마다 갱신한다. 90초 넘게 갱신이 없으면 그 환경은 없어진 것으로 보고 이어받는다.
 HOST_ID=$(hostname 2>/dev/null || cat /proc/sys/kernel/hostname)
+env_id() {  # 이 환경의 ID — KONG_POC_ENV_ID, 없으면 호스트 이름(파드 이름)에서 '영문 3자 + 숫자 10자리' 조각
+  # 예) pjt20260130-aer2026100001-dp-85ffccd86b-vmxkj → aer2026100001  (pjt20260130 은 숫자 8자리라 프로젝트 ID 로 보고 건너뜀)
+  local t
+  if [ -n "${KONG_POC_ENV_ID:-}" ]; then printf '%s' "$KONG_POC_ENV_ID"; return 0; fi
+  for t in ${HOST_ID//-/ }; do
+    if [[ "$t" =~ ^[a-z]{3}[0-9]{10}$ ]]; then printf '%s' "$t"; return 0; fi
+  done
+  return 0
+}
 LOCK_STALE=90
 lock_read() {  # → LOCK_HOST(실행 중인 환경 이름, 없으면 빈 값) · LOCK_AGE(마지막 갱신 뒤 지난 초)
   local h="" t=0

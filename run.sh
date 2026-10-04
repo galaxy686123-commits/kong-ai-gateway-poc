@@ -39,6 +39,7 @@ say "환경 확인 — $HOST_ID · $(id -un) (uid $(id -u))"
 note "저장소    $ROOT $([ -w "$ROOT" ] && echo '(쓰기 가능)' || echo '(읽기 전용 — 빌드 스냅샷)')"
 note "유지 폴더 $DATA_DIR $(df -PTh "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print "(" $2 " · " $5 " 남음)"}')"
 note "설정 파일 $ENV_FILE"
+note "외부 주소 Manager $MANAGER_URL · Admin API $ADMIN_API_URL${ENV_ID:+  (환경 ID $ENV_ID — 파드 이름에서)}"
 if sudo -n true 2>/dev/null; then note "sudo      됨"; else note "sudo      안 됨 — 빠진 프로그램을 설치할 수 없습니다"; fi
 
 stop_all() { say "종료 신호 — 차례로 내립니다"; bash "$ROOT/stop.sh"; exit 0; }
