@@ -56,6 +56,24 @@ write_pointer() {  # write_pointer <유지 폴더> — 저장소 .env 를 위치
        fi; } > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$ROOT/.env"; then return 0; fi
   rm -f "$tmp"; return 1
 }
+find_mounted_data() {  # find_mounted_data <원래 경로> — 이 환경에 붙은 저장소(마운트) 아래에서 같은 유지 폴더를 찾는다
+  # 예) 원래 /project/work/datasets/DTS…/data/kong-poc → 이 환경에선 /datasets/DTS…/data/kong-poc
+  #     원래 경로의 끝 2~4단(data/kong-poc · DTS…/data/kong-poc …)을 마운트 지점마다 붙여 보고 settings.env 가 있는 곳만
+  local want=${1%/} m t s k n c found="" comps=()
+  IFS=/ read -ra comps <<< "${want#/}"
+  n=${#comps[@]}
+  while read -r _ m t _; do
+    case "$t" in proc|sysfs|devpts|cgroup|cgroup2|mqueue|devtmpfs|securityfs|debugfs|tracefs|pstore|bpf|autofs|fusectl|configfs|binfmt_misc|hugetlbfs|rpc_pipefs|nsfs) continue ;; esac
+    [ "$m" != / ] || continue
+    for k in 2 3 4; do
+      [ "$n" -ge "$k" ] || continue
+      s=$(IFS=/; printf '%s' "${comps[*]:$((n - k))}")
+      c="$m/$s"
+      if [ -f "$c/settings.env" ] && [[ " $found " != *" $c "* ]]; then found="$found $c"; fi
+    done
+  done < /proc/self/mounts
+  printf '%s' "${found# }"
+}
 remember_real() {  # remember_real <유지 폴더> — 바로가기를 거치는 경로면 실제 위치를 저장소 .env 에 함께 적어 둔다
   local real
   real=$(cd "$1" 2>/dev/null && pwd -P) || return 0
@@ -110,7 +128,7 @@ repo_leftovers() {  # 저장소 폴더에 남은 DB 사본·설정 백업·비�
 
 load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너뛴다 (set-env.sh 로 빈 값을 채울 때)
   # 유지 폴더 위치 — 저장소 .env 의 DATA_DIR. 저장소에 .env 없이 빌드했다면 환경변수 KONG_POC_DATA_DIR 로 줄 수 있다
-  local d=${KONG_POC_DATA_DIR:-} r v val check=1
+  local d=${KONG_POC_DATA_DIR:-} r f v val check=1
   if [ "${1:-}" = --no-check ]; then check=0; fi
   [ -n "$d" ] || d=$(env_get DATA_DIR "$ROOT/.env")
   d=${d%/}
@@ -121,9 +139,17 @@ load_env() {  # load_env [--no-check] — --no-check: 필수값 검사를 건너
       if [ -n "$r" ] && [ -d "$r" ]; then
         note "유지 폴더 $d 가 이 환경에는 없어 실제 위치 $r 를 씁니다"; d=$r
         export KONG_POC_DATA_DIR=$d          # 이 스크립트가 부르는 다른 스크립트도 같은 위치를 쓴다 (안내는 한 번만)
-      else die "유지 폴더가 없습니다: $d${r:+ (실제 위치 $r 도 없음)}
-  이 환경에 유지 폴더(PV)가 붙어 있는지, 경로가 같은지 확인하세요.
-  다른 경로로 붙었다면 명령 앞에 위치를 주세요:  KONG_POC_DATA_DIR=<그 경로>/kong-poc bash run.sh"; fi
+      else
+        # 빌드한 새 환경은 유지 폴더를 다른 경로로 붙일 수 있다 — 이 환경에 붙은 저장소에서 같은 폴더를 찾는다
+        f=$(find_mounted_data "$d")
+        if [ -n "$f" ] && [ "${f// /}" = "$f" ]; then
+          note "유지 폴더 $d 가 이 환경에는 없어, 이 환경에 붙은 저장소에서 찾은 $f 를 씁니다"; d=$f
+          export KONG_POC_DATA_DIR=$d
+        else die "유지 폴더가 없습니다: $d${r:+ (실제 위치 $r 도 없음)}${f:+
+  같은 폴더로 보이는 곳이 여러 개입니다: $f}
+  이 환경에 유지 폴더(PV · 데이터셋)가 붙어 있는지 확인하세요. 붙은 곳이 다르면 명령 앞에 위치를 주세요:
+    KONG_POC_DATA_DIR=<그 경로>/kong-poc bash run.sh"; fi
+      fi
     fi
     remember_real "$d"
     settings_to_data "$d"
@@ -382,6 +408,16 @@ kong_env() {
   if [ -n "$KONG_LICENSE_DATA" ]; then export KONG_LICENSE_DATA; else unset KONG_LICENSE_DATA; fi
 }
 kong_up() { kong health -p "$KONG_PREFIX" >/dev/null 2>&1; }
+fix_log_path() {  # Kong 설정 속 요청 로그 위치가 이 환경에 없으면(유지 폴더가 다른 경로로 붙음) 설정을 다시 적용해 맞춘다
+  local lp
+  lp=$(admin '/plugins?name=file-log' | python3 -c 'import json, sys; d = json.load(sys.stdin).get("data") or []; print(d[0]["config"]["path"] if d else "")' 2>/dev/null) || lp=""
+  if [ -z "$lp" ] || [ -d "$(dirname "$lp")" ]; then return 0; fi
+  license_state
+  case "$LIC_STATE" in
+    valid|grace) say "요청 로그 위치($lp)가 이 환경에 없어 설정을 다시 적용합니다 → $LOGS/audit.log"; bash "$ROOT/apply-config.sh" ;;
+    *) note "⚠ 요청 로그 위치($lp)가 이 환경에 없는데 라이선스가 없어 설정을 다시 적용하지 못했습니다" ;;
+  esac
+}
 admin() {  # admin <경로> [curl 옵션...] — RBAC 토큰으로 Admin API 호출
   local p=$1; shift
   curl -s -m 10 -H "Kong-Admin-Token: $KONG_ADMIN_PASSWORD" "$@" "http://127.0.0.1:$ADMIN_PORT$p"

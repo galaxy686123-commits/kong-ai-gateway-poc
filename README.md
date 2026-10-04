@@ -320,9 +320,9 @@ bash stop.sh          # 반드시 내린다 — 같은 DB 를 두 곳에서 띄�
 
 | 항목 | 값 |
 |---|---|
-| 시작 명령 | `bash /project/work/flow/kong-ai-gateway-poc/run.sh` — 끝나지 않고 계속 떠 있음 |
+| 시작 명령 | `run.sh` — 끝나지 않고 계속 떠 있음. 플랫폼이 시작 스크립트(예: flow 폴더의 `run-application.sh`)를 부르면 그 안에 `exec bash "$(dirname "$0")/kong-ai-gateway-poc/run.sh"` (`exec` 라야 종료 신호가 run.sh 에 닿아 DB 까지 정상 종료) |
 | 실행 사용자 | 개발 파드와 같은 사용자(uid) — DB 폴더의 주인이 같아야 DB 가 뜸 |
-| 유지 폴더 | 개발 파드와 같은 경로로, 쓰기 가능하게 |
+| 유지 폴더 | 쓰기 가능하게 붙어 있어야 함 — 경로는 달라도 됨 (아래) |
 | 필요 권한 | sudo(비밀번호 없이) · Ubuntu 저장소(apt) 접속 — 프로그램 재설치에 필요 |
 | 포트 | 8000(프록시) · 8001(Admin API) · 8002(Manager) · 8100(지표) |
 | 복제본 | 1개 — 같은 DB 를 둘 이상이 쓸 수 없음 |
@@ -339,6 +339,11 @@ bash set-env.sh FEATURE_SEMANTIC_CACHE on && bash remote.sh apply      # 설정�
 bash set-license.sh <새 라이선스 파일> && bash remote.sh restart         # 라이선스 교체
 ```
 
+- 새 환경에서는 저장소가 다른 곳(예: `/infer-model/<모델>/source/flow/kong-ai-gateway-poc`)에 놓여도 됩니다 — 스크립트가 자기 위치를 찾습니다.
+- 유지 폴더도 다른 경로로 붙어도 됩니다. ① 저장소 `.env` 의 `DATA_DIR` → ② 바로가기를 푼 실제 위치(`DATA_DIR_REAL`) → ③ 이 환경에 붙은 저장소(마운트)
+  아래에서 같은 폴더(`…/data/kong-poc/settings.env`) 순서로 찾고, 경로가 바뀌었으면 Kong 설정 속 요청 로그 위치도 맞춥니다.
+  끝내 못 찾으면 `run.sh` 가 **환경 정보**(호스트 이름·사용자·sudo·외부 접속·붙은 저장소·폴더 목록)를 남기고 멈춥니다 — 그 기록으로 다음 조치를 정합니다.
+  위치를 직접 줄 때는 `KONG_POC_DATA_DIR=<붙은 경로>/kong-poc bash run.sh`.
 - 개발 파드에서 `start.sh` 를 실행하면 「다른 환경이 이 유지 폴더로 실행 중」이라며 멈춥니다(실행 기록 `run.lock`). 개발 파드에서
   다시 띄우려면 새 환경을 먼저 내리세요. 새 환경이 없어졌는데 기록만 남았으면 90초 뒤 이어받습니다.
 - `conf/*.yaml`·스크립트를 고치면 다시 빌드해야 새 환경에 들어갑니다. 설정 값(`settings.env`)만 바꾸는 건 빌드 없이 `remote.sh` 로 됩니다.

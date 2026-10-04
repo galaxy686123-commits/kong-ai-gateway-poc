@@ -4,6 +4,34 @@
 #   이 명령은 끝나지 않는다 (명령이 끝나면 환경이 끝난 것으로 보는 플랫폼이 많다). 개발 파드에서는 start.sh·stop.sh 를 쓴다.
 #   떠 있는 동안 같은 유지 폴더를 붙인 개발 파드에서  bash remote.sh status|apply|restart|verify  로 일을 맡길 수 있다.
 source "$(dirname "$0")/lib.sh"
+
+env_report() {  # 기동하지 못했을 때 — 이 환경이 어떻게 생겼는지 기록에 남긴다 (다음 조치를 정하려고)
+  local u c p
+  say "환경 정보 — 이 기록을 담당자에게 보내 주세요"
+  note "호스트 이름   $HOST_ID"
+  note "사용자        $(id 2>/dev/null) · 홈 $HOME"
+  note "작업 폴더     $PWD"
+  note "저장소        $ROOT $([ -w "$ROOT" ] && echo '(쓰기 가능)' || echo '(읽기 전용)')"
+  note "저장소 .env   DATA_DIR=$(env_get DATA_DIR "$ROOT/.env")  DATA_DIR_REAL=$(env_get DATA_DIR_REAL "$ROOT/.env")"
+  if sudo -n true 2>/dev/null; then note "sudo          됨 (비밀번호 없이)"; else note "sudo          안 됨"; fi
+  for u in http://archive.ubuntu.com/ubuntu/ https://github.com; do
+    c=$(curl -s -o /dev/null -m 6 -w '%{http_code}' "$u" 2>/dev/null); c=${c: -3}
+    note "외부 접속     $u → ${c:-000}"
+  done
+  note "── 붙어 있는 저장소"
+  df -hT 2>/dev/null | awk 'NR == 1 || ($2 !~ /^(tmpfs|devtmpfs|overlay|shm|squashfs)$/ && $7 !~ /^\/(proc|sys|dev)(\/|$)/)' | sed 's/^/    /' | head -30
+  note "── 최상위 폴더: $(ls -1 / 2>/dev/null | tr '\n' ' ')"
+  for p in /datasets /data /mnt /infer-data /infer-env /infer-model /workspace /project; do
+    if [ -d "$p" ]; then note "── $p: $(ls -1 "$p" 2>/dev/null | head -12 | tr '\n' ' ')"; fi
+  done
+  note "── 경로가 든 환경변수"
+  env | grep -E '^[A-Za-z_0-9]+=/' | grep -vE '^(PATH|LD_LIBRARY_PATH|PYTHONPATH|MANPATH|INFOPATH|PWD|OLDPWD|SHELL|HOME)=' | sed 's/^/    /' | head -25
+}
+
+# 유지 폴더(설정·DB)를 찾지 못하면 이 환경의 정보를 남기고 멈춘다
+if ! msg=$( (load_env) 2>&1 ); then
+  printf '%s\n' "$msg"; env_report; exit 1
+fi
 load_env; native_env
 set +e
 
@@ -16,7 +44,7 @@ if sudo -n true 2>/dev/null; then note "sudo      됨"; else note "sudo      안
 stop_all() { say "종료 신호 — 차례로 내립니다"; bash "$ROOT/stop.sh"; exit 0; }
 trap stop_all TERM INT
 
-bash "$ROOT/start.sh" || { note "기동 실패 — 위 메시지를 확인하세요 (로그 $LOGS)"; exit 1; }
+bash "$ROOT/start.sh" || { note "기동 실패 — 위 메시지를 확인하세요 (로그 $LOGS)"; env_report; exit 1; }
 
 # 처음 만든 DB 라 설정이 비어 있으면 요구사항 설정을 한 번 넣는다 (이미 있으면 그대로 — Manager 에서 바꾼 값을 지키려고)
 n=$(admin /routes | python3 -c 'import json, sys; print(len(json.load(sys.stdin).get("data") or []))' 2>/dev/null)
@@ -25,15 +53,6 @@ if [ "$n" = 0 ]; then
   case "$LIC_STATE" in
     valid|grace) say "처음 만든 DB — 요구사항 설정을 적용합니다"; bash "$ROOT/apply-config.sh" ;;
     *) note "라이선스가 없어 설정 적용은 건너뜀 — bash set-license.sh 로 넣은 뒤 bash remote.sh restart · bash remote.sh apply" ;;
-  esac
-fi
-# 유지 폴더가 개발 파드와 다른 경로로 붙었으면(바로가기 없음) Kong 설정 속 요청 로그 위치를 이 환경의 경로로 맞춘다
-lp=$(admin '/plugins?name=file-log' | python3 -c 'import json, sys; d = json.load(sys.stdin).get("data") or []; print(d[0]["config"]["path"] if d else "")' 2>/dev/null)
-if [ "$n" != 0 ] && [ -n "$lp" ] && [ ! -d "$(dirname "$lp")" ]; then
-  license_state
-  case "$LIC_STATE" in
-    valid|grace) say "요청 로그 위치($lp)가 이 환경에 없어 설정을 다시 적용합니다 → $LOGS/audit.log"; bash "$ROOT/apply-config.sh" ;;
-    *) note "⚠ 요청 로그 위치($lp)가 이 환경에 없는데 라이선스가 없어 설정을 다시 적용하지 못했습니다" ;;
   esac
 fi
 

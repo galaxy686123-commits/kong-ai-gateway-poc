@@ -121,6 +121,7 @@ else
   kong_up || die "Kong 이 준비되지 않습니다 ($LOGS/kong-error.log)"
   note "시작됨"
 fi
+fix_log_path      # 유지 폴더가 다른 경로로 붙은 환경이면 요청 로그 위치를 맞춘다 (lib.sh)
 
 cat <<MSG
 
