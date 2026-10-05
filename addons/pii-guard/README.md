@@ -5,7 +5,7 @@ Kong 의 `ai-custom-guardrail` 플러그인이 호출하는 판정 서비스입�
 | 검사 | 쓰는 곳 |
 |---|---|
 | **질문** — 주민등록번호(체크섬)·외국인등록번호·여권·운전면허·계좌·카드·사업자등록번호 등 한국 고유 식별자 | (선택) 질문 차단용 |
-| **답변** (`source: OUTPUT`) — 유해 표현 목록(`.env` 의 `PII_HARMFUL_WORDS`, 쉼표 구분)에 걸리면 차단 | 4-4 유해 답변 → 표준 문구 (통합 경로의 `FEATURE_OUTPUT_GUARD` · `/features/output-guard`) |
+| **답변** (`source: OUTPUT`) — 유해 표현 목록(`.env` 의 `PII_HARMFUL_WORDS`, 쉼표 구분)에 걸리면 차단 | 4-4 유해 답변 → 표준 문구 (통합 경로의 `FEATURE_OUTPUT_GUARD` · 영역 ④ 경로 `/poc/4`) |
 
 - 파이썬 표준 라이브러리만 사용 — 패키지 설치 없이 파드의 `python3` 로 실행
 - `.env` 의 `PII_LLM_ENABLED=true` 와 `PII_LLM_URL`·`PII_LLM_MODEL` 을 넣으면 정규식 외에 채팅 모델로 문맥 판정(이름+계약 정보 결합 등)을 더합니다

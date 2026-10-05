@@ -77,7 +77,7 @@ sw() { local v="DECK_ON_$1"; printf '  %-4s %-16s %s\n' "$([ "${!v}" = true ] &&
 sw MASKING      "4-1 개인정보 마스킹 (모든 채팅 경로)"
 sw ACL          "2-2 허용 그룹만"
 sw RATE_LIMIT   "2-3 호출 수 (분당 $DECK_RPM · 일 $DECK_RPD)"
-sw TOKEN_LIMIT  "2-3 토큰 (분당 $DECK_TPM)"
+sw TOKEN_LIMIT  "2-4 토큰 (분당 $DECK_TPM)"
 sw PROMPT_GUARD "4-2·4-3 기밀 키워드·인젝션"
 sw OUTPUT_GUARD "4-4 유해 답변 → 표준 문구 (켜면 스트리밍 꺼짐)"
 sw OUTPUT_MASK  "4-5 답변 속 시스템 정보 마스킹 (켜면 스트리밍 꺼짐)"

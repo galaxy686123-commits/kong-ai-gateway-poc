@@ -40,7 +40,7 @@ services:
           limit_by: consumer
           policy: local
       - name: ai-rate-limiting-advanced
-        enabled: ${{ env "DECK_ON_TOKEN_LIMIT" }}   # FEATURE_TOKEN_LIMIT — 2-3 사용자별 분당 토큰 (DECK_TPM)
+        enabled: ${{ env "DECK_ON_TOKEN_LIMIT" }}   # FEATURE_TOKEN_LIMIT — 2-4 사용자별 분당 토큰 (DECK_TPM)
         config:
           strategy: local
           policies:
