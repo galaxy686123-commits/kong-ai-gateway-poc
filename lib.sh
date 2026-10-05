@@ -356,7 +356,7 @@ deck_env() {
   # 답변을 다 받아 검사·수정하는 기능을 켜면 통합 경로는 스트리밍 요청을 받지 않는다 (조각으로 나뉜 답은 검사할 수 없다)
   DECK_LLM_STREAMING=allow
   if [ "$DECK_ON_OUTPUT_GUARD" = true ] || [ "$DECK_ON_OUTPUT_MASK" = true ]; then DECK_LLM_STREAMING=deny; fi
-  # 기능별 경로가 부를 LLM — 기본은 모의 LLM(결과가 늘 같음), FEATURE_UPSTREAM=llm 이면 사내 LLM
+  # 영역별 시험 경로(/poc/1~4)가 부를 LLM — 기본은 모의 LLM(결과가 늘 같음), FEATURE_UPSTREAM=llm 이면 사내 LLM
   if [ "${FEATURE_UPSTREAM:-mock}" = llm ]; then
     DECK_FEATURE_URL="$DECK_CHAT_URL"; DECK_FEATURE_MODEL="$DECK_CHAT_MODEL"; DECK_FEATURE_AUTH="{vault://env/llm-auth-header}"
   else

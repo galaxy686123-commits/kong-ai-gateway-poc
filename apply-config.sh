@@ -2,7 +2,7 @@
 # apply-config.sh — 요구사항별 Kong 설정(conf/*.yaml)을 적용한다 (decK).
 #   bash apply-config.sh                 적용 — 여러 번 실행해도 안전 (바뀐 것만 반영)
 #   bash apply-config.sh --dry-run       무엇이 바뀌는지만 본다 (적용하지 않음)
-#   bash apply-config.sh --no-features   기능별 시험 경로(/features/…)를 빼고 적용 (이미 있으면 지운다)
+#   bash apply-config.sh --no-areas      영역별 시험 경로(/poc/1~4)를 빼고 적용 (이미 있으면 지운다)
 #
 # 통합 경로 /v1/chat/completions 의 기능은 설정 파일의 FEATURE_…=on/off 로 켜고 끈다 (bash set-env.sh FEATURE_… on).
 # 설정 파일에 값이 있는 항목만 들어간다 (외부 LLM·Azure·GCP·AWS·SSO·추적·중앙 로그·임베딩).
@@ -14,8 +14,8 @@ DRY=0; FEAT=1
 for a in "$@"; do
   case "$a" in
     --dry-run)     DRY=1 ;;
-    --no-features) FEAT=0 ;;
-    *) die "알 수 없는 옵션: $a  (--dry-run · --no-features)" ;;
+    --no-areas|--no-features) FEAT=0 ;;   # --no-features 는 예전 이름
+    *) die "알 수 없는 옵션: $a  (--dry-run · --no-areas)" ;;
   esac
 done
 
@@ -60,14 +60,17 @@ opt 13-llm-azure       "${DECK_AZURE_INSTANCE:-}" "x-ai-target: azure"    "DECK_
 opt 14-llm-gcp         "${DECK_GCP_PROJECT:-}"    "x-ai-target: gcp"      "DECK_GCP_PROJECT 없음"
 opt 15-llm-aws         "${DECK_AWS_REGION:-}"     "x-ai-target: aws"      "DECK_AWS_REGION 없음"
 F=""; [ "$FEAT" = 1 ] && mock_running && pii_running && F=1
-opt 20-features "$F" "기능별 경로 /features/… (LLM: ${FEATURE_UPSTREAM:-mock})" \
-    "$([ "$FEAT" = 0 ] && echo '--no-features' || echo '모의 서버·PII 가드가 떠 있지 않음 (bash start.sh)')"
+opt 20-areas "$F" "영역별 시험 경로 /poc/1~4 — ①연동 ②접근·사용량 ③이력·감사 ④가드레일 (LLM: ${FEATURE_UPSTREAM:-mock})" \
+    "$([ "$FEAT" = 0 ] && echo '--no-areas' || echo '모의 서버·PII 가드가 떠 있지 않음 (bash start.sh)')"
 row O 40-ocr-agents "OCR·Agent (주소: ${DECK_OCR_URL%/ocr}…)"
 opt 50-sso      "${DECK_OIDC_ISSUER:-}"   "/sso — 사내 SSO(OIDC) 토큰으로 호출" "DECK_OIDC_ISSUER 없음"
 opt 60-otel     "${DECK_OTEL_ENDPOINT:-}" "분산 추적 → ${DECK_OTEL_ENDPOINT:-}"   "DECK_OTEL_ENDPOINT 없음"
 opt 61-http-log "${DECK_LOG_HTTP_URL:-}"  "중앙 로그 → ${DECK_LOG_HTTP_URL:-}"     "DECK_LOG_HTTP_URL 없음"
 EMB=""; [ -n "${DECK_EMBED_URL:-}" ] && [ -n "${DECK_EMBED_MODEL:-}" ] && EMB=1
 opt 70-semantic "$EMB" "의미 기반 가드·시맨틱 캐시" "임베딩 모델 없음 (DECK_EMBED_URL·DECK_EMBED_MODEL)"
+FS=""; [ -n "$EMB" ] && [ -n "$F" ] && FS=1
+opt 21-areas-semantic "$FS" "영역 ④ 의미 기반 가드 — 질문(4-3)·답변(4-4)" \
+    "$([ -z "$EMB" ] && echo '임베딩 모델 없음' || echo '영역별 시험 경로 없음')"
 
 say "통합 경로 기능 스위치 (설정 파일의 FEATURE_…)"
 sw() { local v="DECK_ON_$1"; printf '  %-4s %-16s %s\n' "$([ "${!v}" = true ] && echo 켬 || echo 끔)" "$1" "$2"; }

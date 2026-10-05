@@ -96,31 +96,36 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | ID | 요구사항 | Kong 구현 | 설정 파일 | 점검 경로 (`verify.sh`) |
 |---|---|---|---|---|
 | 1-1 | 멀티 모델 단일 엔드포인트 | 같은 주소 `/v1/chat/completions` + 헤더 `x-ai-target` 로 대상 선택 (`ai-proxy-advanced`·`ai-proxy`) | 10 · 11 · 12 · 13 · 14 · 15 | 통합 경로·대상별 실제 호출 |
-| 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 모든 채팅 경로 | `/features/stream` — LLM 직접 호출과 5회 비교 |
+| 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 모든 채팅 경로 | ① `/poc/1` — LLM 직접 호출과 10회 비교 |
 | 1-3 | OCR 10MB+ · Agent 장기 연결 | 업로드 상한 50MB(`request-size-limiting`) · 응답 대기 600초 | 40 | `/ocr` 12MB · `/agents/a` 70초 |
-| 1-4 | 장애 시 대체 모델 (SD-04-17) | 우선순위 분산 + 실패 시 다음 모델 (`ai-proxy-advanced` priority·failover) | 11 · 20 | `/features/failover` |
-| 2-1 | SSO · 부서별 API 키 (SD-01-3) | 부서별 사용자·키(`key-auth`) · 사내 IdP 토큰(`openid-connect`) | 00 · 50 | 키 없음 401 · 부서 키 200 |
+| 1-4 | 장애 시 대체 모델 (SD-04-17) | 우선순위 분산 + 실패 시 다음 모델 (`ai-proxy-advanced` priority·failover) | 11 · 20 | ① `/poc/1` + 헤더 `X-Mock-Down` 으로 주 모델 장애 |
+| 2-1 | SSO · 부서별 API 키 (SD-01-3) | 부서별 사용자·키(`key-auth`) · 사내 IdP 토큰(`openid-connect`) | 00 · 20 · 50 | ② `/poc/2` 키 없음·틀린 키 401 · 부서 키 200 |
 | 2-2 | 키별 Agent 접근 통제 403 (PD-05-31) | 부서 그룹별 허용(`acl`) | 00 · 40 | team-a 키로 agent-b → 403 |
-| 2-3 | 호출 수·토큰 한도 429 (RL-08-81) | 분당·일일 호출 수(`rate-limiting`) · 분당 토큰(`ai-rate-limiting-advanced`) | 10 · 20 | `/features/rate-limit` · `/features/token-limit` |
-| 3-1 | 감사 로그 (MN-02-76) | 요청마다 한 줄(`file-log`) + 중앙 저장소 전송(`http-log`) · 관리 작업 이력(DB) | 00 · 61 | 추적 ID 로 기록 찾기 |
+| 2-3 | 호출 수 한도 429 (RL-08-81) | 사용자별 분당·일일 호출 수(`rate-limiting`) | 10 · 20 | ② `/poc/2` 분당 3회 |
+| 2-4 | 토큰·비용 한도 429 | 사용자별 분당 토큰·예상 비용(`ai-rate-limiting-advanced` — `total_tokens`·`cost`) | 10 · 20 | ② `/poc/2` 분당 40토큰 · 예상 비용 0.1 |
+| 3-1 | 감사 로그 (MN-02-76) | 요청마다 한 줄(`file-log`) + 중앙 저장소 전송(`http-log`) · 관리 작업 이력(DB) | 00 · 61 | ③ `/poc/3` 추적 ID 로 기록 찾기 |
 | 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID |
 | 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 | 00 · `alerts/` | `:8100/metrics` |
-| 3-4 | Kill-Switch (MN-01-73) | 계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단 | 00 · 10 · 40 | `--full` 에서 켰다 끔 |
-| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (`pre-function`) | 00 | 모의 LLM 이 받은 질문 확인 |
-| 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 외부로 갈 수 있는 경로에서 400 (`ai-prompt-guard`) | 10 · 12 | `/features/dlp` |
-| 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 70 | `/features/injection` · `/features/semantic-guard` |
-| 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 답변을 PII 가드로 검사, 유해하면 표준 문구 (`ai-custom-guardrail`) | 10 | `/features/output-guard` |
-| 4-5 | 답변 속 내부 IP·키·DB 정보 마스킹 (PO-06-67) | 답변의 사설 IP·API 키·DB 접속 정보 → `[내부IP]`·`***` (`post-function`) | 10 | `/features/output-mask` |
+| 3-4 | Kill-Switch (MN-01-73) | 계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단 | 00 · 10 · 20 · 40 | ③ `/poc/3` 스위치를 `--full` 에서 켰다 끔 |
+| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (`pre-function`) | 00 | ④ `/poc/4` 모의 LLM 이 받은 질문 확인 |
+| 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 외부로 갈 수 있는 경로에서 400 (`ai-prompt-guard`) | 10 · 12 · 20 | ④ `/poc/4` |
+| 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 20 · 21 · 70 | ④ `/poc/4` — 의미 기반은 임베딩이 있을 때 |
+| 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 키워드(PII 가드 `ai-custom-guardrail`) + 의미 기반(`ai-semantic-response-guard`) | 10 · 20 · 21 | ④ `/poc/4` — 의미 기반은 임베딩이 있을 때 |
+| 4-5 | 답변 속 내부 IP·키·DB 정보 마스킹 (PO-06-67) | 답변의 사설 IP·API 키·DB 접속 정보 → `[내부IP]`·`***` (`post-function`) | 10 · 20 | ④ `/poc/4` — 모의 LLM 이 「점검 결과」 질문에 내부 정보를 섞어 답함 |
+
+킥오프 자료 기준 네 영역 17개입니다 — ① 서비스 등록·연동(1-1~1-4) · ② 접근·사용량 제어(2-1~2-4) · ③ 이력·감사(3-1~3-4) ·
+④ 가드레일(4-1~4-5). 예전 2-3 의 토큰 한도는 2-4(토큰·비용)로 나눴습니다.
 
 설정 파일 번호: `00-base` 공통 · `10-llm` 통합 경로 · `11-target-*` 통합 경로의 LLM(장애 대체) · `12`~`15` 모델 선택 ·
-`20-features` 기능별 경로 · `40-ocr-agents` · `50-sso` · `60-otel` · `61-http-log` · `70-semantic` 임베딩 기능.
+`20-areas` 영역별 시험 경로 · `21-areas-semantic` 영역 ④ 의미 기반 가드 · `40-ocr-agents` · `50-sso` · `60-otel` ·
+`61-http-log` · `70-semantic` 임베딩 기능.
 
 > **3-1 위변조 방지**: 게이트웨이는 모든 요청을 즉시 중앙 저장소로 보냅니다(`DECK_LOG_HTTP_URL`). 위변조 불가는 받는 쪽
 > 보관 정책(WORM 버킷·SIEM)으로 완성합니다. 파드 안 파일(`data/logs/audit.log`)은 보조 기록입니다.
 
 ---
 
-## 통합 경로와 기능별 경로
+## 통합 경로와 영역별 시험 경로
 
 ### 통합 경로 `/v1/chat/completions`
 
@@ -131,7 +136,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | `FEATURE_MASKING` | on | 4-1 개인정보 마스킹 (모든 채팅 경로) |
 | `FEATURE_ACL` | on | 2-2 허용 그룹만 |
 | `FEATURE_RATE_LIMIT` | on | 2-3 호출 수 (`DECK_RPM`·`DECK_RPD`) |
-| `FEATURE_TOKEN_LIMIT` | on | 2-3 토큰 (`DECK_TPM`) |
+| `FEATURE_TOKEN_LIMIT` | on | 2-4 토큰 (`DECK_TPM`) |
 | `FEATURE_PROMPT_GUARD` | on | 4-2 기밀 키워드 · 4-3 인젝션 |
 | `FEATURE_OUTPUT_GUARD` | off | 4-4 유해 답변 → 표준 문구 |
 | `FEATURE_OUTPUT_MASK` | off | 4-5 답변 속 시스템 정보 마스킹 |
@@ -153,18 +158,26 @@ Kong Manager 에서 플러그인을 직접 켜고 꺼도 되지만, 다음 `appl
 같은 주소에 헤더만 붙여 대상을 고릅니다: `internal`(사내 LLM 만 · 기밀 키워드 허용) · `external` · `azure` · `gcp` · `aws`.
 `.env` 에 값이 있는 대상만 만들어집니다. 외부로 나가는 대상은 기밀 키워드를 차단합니다.
 
-### 기능별 경로 `/features/<기능>/v1/chat/completions`
+### 영역별 시험 경로 `/poc/<영역>/v1/chat/completions`
 
-기능 **하나만** 붙인 시험용 경로입니다. LLM 은 기본으로 **모의 LLM**(받은 질문을 그대로 답함)이라 결과가 늘 같고,
-LLM 이 실제로 무엇을 받았는지(마스킹 결과 등) 답변으로 바로 보입니다. `FEATURE_UPSTREAM=llm` 이면 사내 LLM 으로 보냅니다.
+검증 항목의 네 영역마다 경로 하나에 **그 영역의 플러그인만** 붙였습니다. Kong Manager 의 Routes 목록이 네 영역과 1:1 로 맞습니다.
+LLM 은 기본으로 **모의 LLM**(받은 질문을 그대로 답함)이라 결과가 늘 같고, LLM 이 실제로 무엇을 받았는지(마스킹 결과 등) 답변으로
+바로 보입니다. `FEATURE_UPSTREAM=llm` 이면 사내 LLM 으로 보냅니다.
 
-`stream` · `failover` · `rate-limit`(분당 3회) · `token-limit`(분당 40토큰) · `injection` · `dlp` · `output-guard` ·
-`output-mask` · (임베딩이 있으면) `semantic-guard` · `cache`
+| 경로 | 영역 | 붙은 것 | 확인하는 항목 |
+|---|---|---|---|
+| `/poc/1` | ① 서비스 등록·연동 | 키 · `ai-proxy-advanced`(주 모델 → 보조 모델) | 1-2 스트리밍 · 1-4 장애 대체(헤더 `X-Mock-Down: mock-llm`) |
+| `/poc/2` | ② 접근·사용량 제어 | 키 · 그룹 허용 · 호출 수(분당 3회·하루 1000회) · 토큰(분당 40)·예상 비용(분당 0.1) | 2-1 · 2-3 · 2-4 |
+| `/poc/3` | ③ 이력·감사 | 키 · 긴급 차단 스위치(`kill-switch--poc-3`) — 로그·추적·지표는 전역 | 3-1 · 3-2 · 3-4 |
+| `/poc/4` | ④ 가드레일 | 키 · 정규식 가드 · 키워드 답변 검사 · 답변 속 내부 정보 마스킹 (+ 임베딩이 있으면 의미 기반 질문·답변 가드) | 4-1 ~ 4-5 |
 
-시험이 끝나면 `bash apply-config.sh --no-features` 로 지웁니다.
+한도는 바로 확인되게 낮춘 시험값입니다(통합 경로의 한도는 `DECK_RPM`·`DECK_RPD`·`DECK_TPM`). 2-4 의 비용은 `/poc/2` 의
+시험용 예시 단가(100만 토큰당 입력 1000·출력 2000)로 계산하며, 응답 헤더 `X-AI-RateLimit-Remaining-minute-policy-2` 에
+남은 값이 보입니다(비용은 다음 요청부터 반영 — Kong 동작). 다른 경로를 쓰는 항목: 1-1 헤더 `x-ai-target` · 1-3 `/ocr`·`/agents` ·
+2-1 SSO `/sso` · 2-2 `/agents`. 시험이 끝나면 `bash apply-config.sh --no-areas` 로 지웁니다.
 
-**경로 수**: 기본 13개 (통합 1 · 사내 전용 1 · 기능별 8 · OCR 1 · Agent 2). `.env` 에 외부 LLM·클라우드·SSO·임베딩을
-넣으면 그만큼 늘어 최대 21개입니다. `bash status.sh` 로 목록을 봅니다.
+**경로 수**: 기본 9개 (통합 1 · 사내 전용 1 · 영역 4 · OCR 1 · Agent 2). `.env` 에 외부 LLM·클라우드·SSO·임베딩을
+넣으면 그만큼 늘어 최대 15개입니다. `bash status.sh` 로 목록을 봅니다.
 
 ---
 
@@ -182,7 +195,7 @@ curl -s localhost:8000/v1/chat/completions "${H[@]}" -H 'x-ai-target: internal' 
 curl -sN localhost:8000/v1/chat/completions "${H[@]}" -d '{"messages":[{"role":"user","content":"하나부터 다섯까지 세어줘"}],"stream":true}'
 
 # 4-1 마스킹 — 모의 LLM 이 받은 질문이 그대로 돌아온다
-curl -s localhost:8000/features/stream/v1/chat/completions "${H[@]}" \
+curl -s localhost:8000/poc/4/v1/chat/completions "${H[@]}" \
   -d '{"messages":[{"role":"user","content":"주민번호 900101-1234567 연락처 010-1234-5678"}]}'
 
 # 4-2 기밀 키워드 → 400
@@ -252,7 +265,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` (같은 유지 폴더를 붙인 개발 파드에서) |
 | `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
 | `set-license.sh` | 받은 라이선스 파일을 제자리에 넣기 — `bash set-license.sh <파일>` |
-| `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기 · `--no-features` 기능별 경로 빼기. `kong-poc` 태그가 붙은 것만 관리 |
+| `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기 · `--no-areas` 영역별 시험 경로 빼기. `kong-poc` 태그가 붙은 것만 관리 |
 | `verify.sh` | 환경·설치·접속·요구사항별 점검. `--full` 은 장기 연결·긴급 차단까지 실제로 |
 | `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 요구사항 점검 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |

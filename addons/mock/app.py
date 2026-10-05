@@ -4,7 +4,10 @@
   POST /v1/chat/completions        OpenAI 호환 가짜 LLM. 받은 마지막 사용자 메시지를 그대로 답한다
                                    ("stream": true 면 SSE 로 나눠 보냄). 게이트웨이가 LLM 에 실제로
                                    무엇을 보냈는지(마스킹 여부 등)를 답변으로 확인할 수 있다.
-                                   모델 이름에 down 이 들어 있으면 503 — 장애 대체(fallback) 시험용 주 모델
+                                   모델 이름에 down 이 들어 있거나, 요청 헤더 X-Mock-Down 에 그 모델 이름이
+                                   오면 503 — 장애 대체(fallback) 시험용 (영역 ① /poc/1 의 주 모델 장애 재현).
+                                   질문에 "점검 결과" 가 있으면 내부 IP·API 키·DB 접속 정보가 든 예시 답변
+                                   (4-5 답변 속 내부 정보 마스킹 시험 — 질문에 넣으면 4-3 가드가 먼저 막는다)
   POST /fail/v1/chat/completions   항상 503
   POST /ocr                        업로드 본문의 크기·SHA-256 을 돌려줌 (?delay=초 로 지연)
   ANY  /agents/<이름>[/...]         받은 추적 헤더(X-Correlation-ID·traceparent)와 지연을 돌려줌 (?delay=초)
@@ -34,6 +37,11 @@ LOGS = []
 def bump(key, n=1):
     with _lock:
         STATS[key] = STATS.get(key, 0) + n
+
+
+# 4-5 시험용 — LLM 이 답변에 내부 정보를 흘린 상황 (게이트웨이가 가려야 한다)
+SYSTEM_INFO_ANSWER = ("점검 결과: 서버 10.20.30.40 정상, API 키 sk-abcdefghij1234567890 만료 임박, "
+                      "DB postgres://admin:secret@db:5432/app 연결 정상, password=hunter2")
 
 
 def last_user_text(body):
@@ -91,8 +99,12 @@ class Handler(BaseHTTPRequestHandler):
         bump("chat")
         text = last_user_text(body)
         answer = text if text else "(빈 질문)"
+        if "점검 결과" in text:   # 4-5 시험 — 답변에 내부 정보가 섞여 나오는 상황
+            answer = SYSTEM_INFO_ANSWER
         model = body.get("model") or "mock-llm"
-        if "down" in model:   # 모델 이름에 down 이 들어 있으면 장애 — 장애 대체(1-4) 시험용 주 모델
+        down = self.headers.get("X-Mock-Down", "")
+        # 장애 대체(1-4) 시험 — 모델 이름에 down 이 있거나, 요청 헤더 X-Mock-Down 에 이 모델 이름이 오면 503
+        if "down" in model or (down and down == model):
             return self._json(503, {"error": {"message": "mock model %s is down" % model}})
         p_tok, c_tok = max(1, len(text) // 2), max(1, len(answer) // 2)
         # 요청 헤더로 지연을 바꿀 수 있다 (verify.sh 가 지연 측정 전 Kong 을 빨리 데울 때 0 으로)
