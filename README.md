@@ -163,7 +163,7 @@ Kong Manager 에서 플러그인을 직접 켜고 꺼도 되지만, 다음 `appl
 이름 있는 플러그인(긴급 차단 스위치 등)은 `apply-config.sh` 가 먼저 지우고 다시 만들므로 켜 둔 스위치는 꺼짐으로 돌아갑니다.)
 
 **요청 본문의 `model` 은 게이트웨이가 지우고 설정된 모델을 씁니다** — OpenAI SDK 처럼 `model` 을 항상 보내는 앱도
-그대로 붙습니다. 예외: 두 LLM(사내·외부)을 넣으면 통합 경로에서는 `model` 이 두 LLM 의 모델 이름 중 하나일 때 그 LLM 을 고릅니다
+그대로 붙습니다. 예외: LLM 을 둘 이상 넣으면 통합 경로에서는 `model` 이 등록된 LLM 의 모델 이름일 때 그 LLM 을 고릅니다
 (아래 「모델 선택」). 클라이언트가 보낸 이름은 요청 로그의 `client_model` 에 남습니다.
 
 통합 경로의 LLM: 사내 LLM(`DECK_CHAT_URL`) → 실패하면(503·429·5xx·연결 실패·시간 초과) 외부 LLM(`DECK_EXT_URL`, 또는
@@ -171,20 +171,31 @@ Kong Manager 에서 플러그인을 직접 켜고 꺼도 되지만, 다음 `appl
 
 ### 모델 선택 — 요청의 `model` · 헤더 `x-ai-target`
 
-**두 LLM(사내 `DECK_CHAT_*` · 외부 `DECK_EXT_*`)을 넣으면 통합 경로가 요청의 `model` 로 LLM 을 고릅니다** — 앱은 OpenAI 방식
-그대로 `model` 에 모델 이름만 바꿔 넣으면 됩니다. 통합 경로의 `ai-proxy-advanced` 에 대상이 넷 들어갑니다(Kong Manager 의
-Routes → `llm` → AI Proxy Advanced 에서 보임).
+**OpenAI 호환 LLM 을 둘 이상 넣으면 통합 경로가 요청의 `model` 로 LLM 을 고릅니다** — 앱은 OpenAI 방식 그대로 `model` 에
+모델 이름만 바꿔 넣으면 됩니다. LLM 자리: 1 사내 `DECK_CHAT_*` · 2 외부 `DECK_EXT_*` · **3번부터 `DECK_LLM<n>_*`** (번호를 늘려 계속).
+`apply-config.sh` 가 통합 경로의 대상 파일(`11-target-*.yaml`) 끝에 LLM 마다 대상(`model_alias` = 모델 이름)을 붙여 적용합니다
+(Kong Manager 의 Routes → `llm` → AI Proxy Advanced 에서 보임).
 
 | 요청의 `model` | 답하는 LLM |
 |---|---|
-| 없음 · 두 이름이 아닌 값 (예: SDK 기본값 `gpt-4o`) | 사내 LLM — 실패하면 외부 LLM 으로 장애 대체 (1-4) |
-| `DECK_CHAT_MODEL` 의 이름 | 사내 LLM 만 (`model_alias`) |
-| `DECK_EXT_MODEL` 의 이름 | 외부 LLM 만 (`model_alias`) |
+| 없음 · 등록되지 않은 이름 (예: SDK 기본값 `gpt-4o`) | 사내 LLM — 실패하면 외부 LLM 으로 장애 대체 (1-4) |
+| 등록된 LLM 의 모델 이름 (`DECK_CHAT_MODEL` · `DECK_EXT_MODEL` · `DECK_LLM<n>_MODEL`) | 그 LLM 만 (`model_alias`) |
 
 - 이름을 지정한 요청은 그 LLM 이 실패해도 다른 LLM 으로 넘어가지 않습니다(502). 장애 대체는 `model` 이 없거나 다른 이름일 때만입니다.
-- 두 이름이 아닌 값은 `chat-preprocess` 가 지웁니다 — 남겨 두면 400(`cannot use own model`)이 납니다.
+- 등록되지 않은 이름은 `chat-preprocess` 가 지웁니다 — 남겨 두면 400(`cannot use own model`)이 납니다.
 - Kong 3.16 실측: 별칭(`model_alias`)이 없는 대상끼리 기본 묶음이고 별칭마다 따로 묶입니다. 기본 묶음이 없으면 `model` 없는 요청이
-  500(`no targets configured for model alias: <default>`)이 되므로 기본 대상 둘 + 별칭 대상 둘로 둡니다(`conf/11-target-fallback.yaml`).
+  500(`no targets configured for model alias: <default>`)이 되므로 기본 대상(1·2순위)은 그대로 두고 별칭 대상을 덧붙입니다.
+
+**LLM 추가하기** — 빌드 없이 설정 값만 넣습니다 (3번부터 번호를 하나씩 늘림):
+
+```bash
+bash set-env.sh DECK_LLM3_URL 'https://llm3.example.internal/v1/chat/completions'
+bash set-env.sh DECK_LLM3_MODEL 'your-third-model'
+bash set-env.sh LLM3_AUTH_HEADER                 # 'Bearer 키' 입력 — 화면에 안 보임
+bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경이면 bash remote.sh restart · bash remote.sh apply
+```
+
+빼려면 그 LLM 의 `DECK_LLM<n>_URL` 을 비우고(`bash set-env.sh DECK_LLM3_URL ''`) 적용합니다. 모델 이름이 비어 있으면 적용이 멈추고 알려 줍니다.
 
 **헤더 `x-ai-target`** 으로도 고를 수 있습니다: `internal`(사내 LLM 만 · 기밀 키워드 허용) · `external` · `azure` · `gcp` · `aws`.
 `.env` 에 값이 있는 대상만 만들어집니다. 외부로 나가는 대상은 기밀 키워드를 차단합니다. 헤더로 고른 경로에서는 `model` 을 보지 않습니다.
@@ -255,6 +266,7 @@ r = client.chat.completions.create(model="auto", messages=[{"role": "user", "con
 |---|---|
 | 사내 LLM (OpenAI 호환) | `DECK_CHAT_URL` · `DECK_CHAT_MODEL` · `LLM_AUTH_HEADER` |
 | 두 번째 LLM (OpenAI 호환) — 장애 대체 대상 · 요청의 `model` 로 선택 · `x-ai-target: external` | `DECK_EXT_URL` · `DECK_EXT_MODEL` · `EXT_AUTH_HEADER` |
+| 세 번째부터 LLM (OpenAI 호환) — 요청의 `model` 로 선택 | `DECK_LLM<n>_URL` · `DECK_LLM<n>_MODEL` · `LLM<n>_AUTH_HEADER` (n = 3, 4, …) |
 | Azure OpenAI · GCP Vertex(Gemini) · AWS Bedrock | `DECK_AZURE_*`·`AZURE_API_KEY` · `DECK_GCP_*`·`GCP_SERVICE_ACCOUNT_JSON` · `DECK_AWS_*`·`AWS_*` |
 | OCR · Agent | `DECK_OCR_URL` · `DECK_AGENT_A_URL` · `DECK_AGENT_B_URL` (비우면 모의 서버) |
 | 사내 SSO (OIDC) | `DECK_OIDC_ISSUER` · `DECK_OIDC_CLIENT_ID` · `OIDC_CLIENT_SECRET` → `/sso/v1/chat/completions` |

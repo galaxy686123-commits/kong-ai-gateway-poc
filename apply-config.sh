@@ -50,9 +50,41 @@ FB="${FALLBACK:-auto}"
 if [ "$FB" = azure ] && [ -n "${DECK_AZURE_INSTANCE:-}" ]; then
   files+=(conf/11-target-fallback-azure.yaml); row O 11-target-fallback-azure "사내 LLM → Azure 장애 대체"
 elif [ "$FB" != none ] && [ -n "${DECK_EXT_URL:-}" ]; then
-  files+=(conf/11-target-fallback.yaml); row O 11-target-fallback "사내 LLM → 외부 LLM 장애 대체 · 요청의 model 로 선택 ($DECK_CHAT_MODEL · $DECK_EXT_MODEL)"
+  files+=(conf/11-target-fallback.yaml); row O 11-target-fallback "사내 LLM → 외부 LLM 장애 대체"
 else
   files+=(conf/11-target-single.yaml); row O 11-target-single "사내 LLM (장애 대체 없음)"
+fi
+# 요청의 model 로 LLM 고르기 — OpenAI 호환 LLM 이 둘 이상이면, 위 대상 파일 끝에 모델마다 대상(model_alias)을 붙인 사본을 쓴다.
+#  model 이 없거나 목록에 없는 이름이면 위 파일의 기본 대상(1순위 사내 → 장애 시 2순위)으로 간다 (chat-preprocess 가 다른 이름을 지움).
+#  Kong 3.16 실측: 별칭 없는 대상끼리 기본 묶음, 별칭마다 따로 묶임 — 이름을 지정한 요청은 그 LLM 이 실패해도 다른 LLM 으로 안 넘어간다.
+if [ "$DECK_MODEL_SELECT" = true ]; then
+  ti=$(( ${#files[@]} - 1 )); gen="$RUN_DIR/11-targets-select.yaml"; shown=""
+  { cat "${files[$ti]}"
+    while read -r n uv mv av; do
+      [ -n "$n" ] || continue
+      [ -n "${!mv:-}" ] || die "$mv 가 비어 있습니다 — LLM $n 의 모델 이름을 넣으세요 (bash set-env.sh $mv)"
+      shown="${shown:+$shown · }${!mv}"
+      cat <<EOF
+            - description: LLM $n — 요청의 model 이 이 이름일 때
+              weight: 100
+              route_type: llm/v1/chat
+              auth:
+                header_name: Authorization
+                header_value: "{vault://env/$(printf '%s' "$av" | tr 'A-Z_' 'a-z-')}"
+              logging:
+                log_statistics: true
+                log_payloads: false
+              model:
+                provider: openai
+                name: \${{ env "$mv" }}
+                model_alias: \${{ env "$mv" }}
+                options:
+                  upstream_url: \${{ env "$uv" }}
+EOF
+    done <<<"$(llm_list)"
+  } > "$gen"
+  files[$ti]=$gen
+  row O "모델 선택" "요청의 model 로 고름 — $shown"
 fi
 row O 12-select "x-ai-target: internal"
 opt 12-select-external "${DECK_EXT_URL:-}"       "x-ai-target: external" "DECK_EXT_URL 없음"
@@ -88,7 +120,7 @@ fi
 
 DECK=(--kong-addr "http://127.0.0.1:$ADMIN_PORT" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD")
 # LLM 주소가 IP 면 이름으로 바꿔 넘긴다 (lib.sh 의 ai_url — Kong 3.16 AI 플러그인은 IP 주소로는 장애 대체가 안 됨)
-AENV=(); for v in $AI_URL_VARS; do AENV+=("$v=$(ai_url "${!v:-}")"); done
+AENV=(); for v in $(ai_url_vars); do AENV+=("$v=$(ai_url "${!v:-}")"); done
 
 # 이름(instance_name)이 있는 플러그인의 붙는 곳(서비스·경로·계정)이 바뀌면 decK 는 새것을 먼저 만들다가
 # 이름 중복(409 UNIQUE)으로 멈춘다 — 그런 플러그인만 골라 「id 이름」 줄로 낸다 (예: 서비스 → 경로로 옮긴 2026-10 판)

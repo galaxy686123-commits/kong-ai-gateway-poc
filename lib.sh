@@ -350,11 +350,15 @@ deck_env() {
   : "${DECK_OCR_URL:=$DECK_MOCK_URL/ocr}" "${DECK_AGENT_A_URL:=$DECK_MOCK_URL/agents/a}" "${DECK_AGENT_B_URL:=$DECK_MOCK_URL/agents/b}"
   : "${DECK_AZURE_API_VERSION:=2024-06-01}" "${DECK_GCP_LOCATION:=asia-northeast3}" "${DECK_EMBED_DIMS:=1024}"
   : "${DECK_CHAT_MODEL:=}" "${DECK_EXT_MODEL:=}"
-  # 두 LLM 을 요청의 model 로 고르기 — 통합 경로가 11-target-fallback 을 쓸 때 (apply-config.sh 와 같은 조건)
-  DECK_MODEL_SELECT=false
-  if ! { [ "${FALLBACK:-auto}" = azure ] && [ -n "${DECK_AZURE_INSTANCE:-}" ]; } && [ "${FALLBACK:-auto}" != none ] && [ -n "${DECK_EXT_URL:-}" ]; then
-    DECK_MODEL_SELECT=true
-  fi
+  # 요청의 model 로 LLM 고르기 — OpenAI 호환 LLM(사내 · 외부 · 3번부터)이 둘 이상이면 켠다.
+  # DECK_SELECT_MODELS = 고를 수 있는 모델 이름(쉼표로) — chat-preprocess 가 이 이름만 남기고, apply-config 가 대상을 만든다
+  local n uv mv av names="" cnt=0
+  while read -r n uv mv av; do
+    [ -n "$n" ] || continue
+    cnt=$((cnt + 1)); names="${names:+$names,}${!mv:-}"
+  done <<<"$(llm_list)"
+  DECK_SELECT_MODELS=$names; DECK_MODEL_SELECT=false
+  if [ "$cnt" -ge 2 ]; then DECK_MODEL_SELECT=true; fi
   # 통합 경로 기능 스위치 — .env 의 FEATURE_xxx=on/off → DECK_ON_xxx=true/false
   local f d v
   for f in MASKING:on ACL:on RATE_LIMIT:on TOKEN_LIMIT:on PROMPT_GUARD:on OUTPUT_GUARD:off OUTPUT_MASK:off \
@@ -382,6 +386,16 @@ deck_env() {
 # → IP 에는 이름(ip-10-1-2-3.kong-poc)을 붙여 Kong 에 넘기고, 그 이름은 Kong 만 읽는 hosts 파일에 적는다.
 #   시스템 /etc/hosts 는 건드리지 않는다. LLM 서버가 받는 Host 헤더도 이 이름이 된다.
 AI_URL_VARS="DECK_CHAT_URL DECK_EXT_URL DECK_EMBED_URL DECK_FEATURE_URL DECK_MOCK_URL"
+# ── LLM 목록 — 1 사내(DECK_CHAT_*) · 2 외부(DECK_EXT_*) · 3번부터 DECK_LLM<n>_URL · DECK_LLM<n>_MODEL · LLM<n>_AUTH_HEADER ──
+# 세 번째부터는 설정 파일에 번호만 늘려 넣으면 된다 (빌드 불필요 — 키를 넣었으면 Kong 을 다시 띄운 뒤 적용).
+llm_extra_nums() { compgen -v | sed -nE 's/^DECK_LLM([0-9]+)_URL$/\1/p' | sort -n | while read -r n; do v="DECK_LLM${n}_URL"; [ "$n" -ge 3 ] && [ -n "${!v}" ] && echo "$n"; done; }
+llm_list() {  # 줄마다 "번호 주소변수 모델변수 키변수" — 주소가 있는 것만, 번호 순
+  local n
+  if [ -n "${DECK_CHAT_URL:-}" ]; then echo "1 DECK_CHAT_URL DECK_CHAT_MODEL LLM_AUTH_HEADER"; fi
+  if [ -n "${DECK_EXT_URL:-}" ]; then echo "2 DECK_EXT_URL DECK_EXT_MODEL EXT_AUTH_HEADER"; fi
+  for n in $(llm_extra_nums); do echo "$n DECK_LLM${n}_URL DECK_LLM${n}_MODEL LLM${n}_AUTH_HEADER"; done
+}
+ai_url_vars() { echo "$AI_URL_VARS $(for n in $(llm_extra_nums); do printf 'DECK_LLM%s_URL ' "$n"; done)"; }
 ip_name() { printf 'ip-%s.kong-poc' "${1//./-}"; }
 url_ip()  { [[ "$1" =~ ^[a-z]+://([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)([:/]|$) ]] && printf '%s' "${BASH_REMATCH[1]}"; }
 ai_url() {  # URL 의 호스트가 IP 면 이름으로 바꾼 URL
@@ -392,7 +406,8 @@ kong_hosts() {  # Kong 용 hosts 파일을 새로 쓴다 — 내용이 바뀌었
   local f="$RUN_DIR/hosts" new ip v
   new=$(cat /etc/hosts 2>/dev/null
         echo "# kong-poc — LLM 주소의 IP 에 붙인 이름 (lib.sh 의 kong_hosts 가 만든다)"
-        { for v in DECK_CHAT_URL DECK_EXT_URL DECK_EMBED_URL; do ip=$(url_ip "${!v:-}") && echo "$ip $(ip_name "$ip")"; done
+        { for v in DECK_CHAT_URL DECK_EXT_URL DECK_EMBED_URL $(for n in $(llm_extra_nums); do echo "DECK_LLM${n}_URL"; done); do
+            ip=$(url_ip "${!v:-}") && echo "$ip $(ip_name "$ip")"; done
           echo "127.0.0.1 $(ip_name 127.0.0.1)"; } | sort -u)
   if [ -f "$f" ] && [ "$(cat "$f")" = "$new" ]; then return 1; fi
   printf '%s\n' "$new" > "$f"
@@ -434,6 +449,7 @@ kong_env() {
   export LLM_AUTH_HEADER="${LLM_AUTH_HEADER:-Bearer none}"
   export EMBED_AUTH_HEADER="${EMBED_AUTH_HEADER:-Bearer none}"
   export EXT_AUTH_HEADER="${EXT_AUTH_HEADER:-Bearer none}"
+  local n k; for n in $(llm_extra_nums); do k="LLM${n}_AUTH_HEADER"; export "$k=${!k:-Bearer none}"; done   # 3번부터의 LLM 키
   KONG_LICENSE_DATA="$(license_data)"
   if [ -n "$KONG_LICENSE_DATA" ]; then export KONG_LICENSE_DATA; else unset KONG_LICENSE_DATA; fi
 }

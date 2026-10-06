@@ -59,14 +59,14 @@ curl -s -D - -o /dev/null $G/v1/chat/completions "${A[@]}" -H 'x-ai-target: exte
 ```
 → 같은 주소인데 헤더에 따라 `X-Kong-LLM-Model` 이 사내 모델·외부 모델로 바뀝니다. 대상: `internal`·`external`·`azure`·`gcp`·`aws`.
 
-두 LLM 을 넣었으면 헤더 대신 **요청의 `model`** 로도 고릅니다 (`<외부 모델 이름>` 자리에 `DECK_EXT_MODEL` 값):
+LLM 을 둘 이상 넣었으면 헤더 대신 **요청의 `model`** 로도 고릅니다 (`<외부 모델 이름>` 자리에 `DECK_EXT_MODEL` 값 — 3번부터의 LLM 도 같은 방법):
 
 ```bash
 curl -s -D - -o /dev/null $G/v1/chat/completions "${A[@]}" \
   -d '{"model":"<외부 모델 이름>","messages":[{"role":"user","content":"안녕"}]}' | grep -iE '^HTTP|x-kong-llm-model'
 ```
 → `X-Kong-LLM-Model` 이 그 모델로 나옵니다. `model` 이 없거나 다른 이름이면 사내 모델(실패 시 외부 모델)입니다.
-`verify.sh` 의 「1-1 모델 선택」 줄이 두 이름을 모두 확인합니다.
+`verify.sh` 의 「1-1 모델 선택」 줄이 등록된 이름을 모두 불러 확인합니다.
 
 ### 1-2 스트리밍 · 첫 토큰 지연
 
@@ -362,7 +362,7 @@ for ch in client.chat.completions.create(model="auto", stream=True, messages=[{"
     if ch.choices and ch.choices[0].delta.content:
         print(ch.choices[0].delta.content, end="", flush=True)
 
-# 대상 고르기 (1-1): 두 LLM 이면 model="<외부 모델 이름>" · 또는 extra_headers={"x-ai-target": "external"}
+# 대상 고르기 (1-1): LLM 이 둘 이상이면 model="<모델 이름>" · 또는 extra_headers={"x-ai-target": "external"}
 ```
 
 - 정책에 막히면 SDK 예외로 나옵니다: 401 `AuthenticationError`(키) · 403 `PermissionDeniedError`(접근 통제·긴급 차단) ·

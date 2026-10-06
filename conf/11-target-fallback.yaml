@@ -2,10 +2,7 @@
 #  통합 경로(llm)가 부를 LLM — 사내 LLM → 외부 LLM(OpenAI 호환) 장애 대체
 #  apply-config.sh 가 11-target-*.yaml 중 하나만 고른다. 외부 LLM 주소(DECK_EXT_URL)가 있을 때 (FALLBACK=auto).
 #  사내 LLM 이 503·429·5xx·연결 실패·시간 초과면 같은 요청을 외부 LLM 으로 다시 보낸다 (클라이언트는 모른다).
-#  요청의 model 로도 고른다 (1-1) — model 이 사내·외부 LLM 의 모델 이름이면 그 LLM 만 부른다(model_alias).
-#    model 이 없거나 다른 이름이면 기본 대상(1순위 사내 → 장애 시 외부)으로 간다 (00-base 의 chat-preprocess 가 다른 이름을 지움).
-#    Kong 3.16 실측: 별칭이 없는 대상끼리 기본 묶음, 별칭마다 따로 묶인다 — 이름을 지정한 요청은 그 LLM 이 실패해도
-#    다른 LLM 으로 넘어가지 않는다(502). 기본 묶음이 없으면 model 없는 요청이 500(no targets … <default>).
+#  요청의 model 로 고르는 대상(model_alias)은 apply-config.sh 가 이 파일 끝에 붙인 사본을 만든다 (LLM 이 둘 이상일 때).
 # ─────────────────────────────────────────────────────────────
 _format_version: "3.0"
 _info:
@@ -53,36 +50,5 @@ plugins:
               model:
                 provider: openai
                 name: ${{ env "DECK_EXT_MODEL" }}
-                options:
-                  upstream_url: ${{ env "DECK_EXT_URL" }}
-            # ── 요청의 model 로 고를 때 (1-1) ─────────────────────────
-            - description: 사내 LLM — 요청의 model 이 이 이름일 때
-              weight: 100
-              route_type: llm/v1/chat
-              auth:
-                header_name: Authorization
-                header_value: "{vault://env/llm-auth-header}"
-              logging:
-                log_statistics: true
-                log_payloads: false
-              model:
-                provider: openai
-                name: ${{ env "DECK_CHAT_MODEL" }}
-                model_alias: ${{ env "DECK_CHAT_MODEL" }}
-                options:
-                  upstream_url: ${{ env "DECK_CHAT_URL" }}
-            - description: 외부 LLM — 요청의 model 이 이 이름일 때
-              weight: 100
-              route_type: llm/v1/chat
-              auth:
-                header_name: Authorization
-                header_value: "{vault://env/ext-auth-header}"
-              logging:
-                log_statistics: true
-                log_payloads: false
-              model:
-                provider: openai
-                name: ${{ env "DECK_EXT_MODEL" }}
-                model_alias: ${{ env "DECK_EXT_MODEL" }}
                 options:
                   upstream_url: ${{ env "DECK_EXT_URL" }}

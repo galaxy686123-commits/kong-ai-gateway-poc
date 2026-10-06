@@ -217,10 +217,11 @@ print(" · ".join(names[p["name"]] for p in d if p["enabled"] and p["name"] in n
       if [ "$c" = 200 ]; then res="$res ${t:-기본}→$(hdr X-Kong-LLM-Model)"; else fail="$fail ${t:-기본}($c)"; fi
     done
     [ -z "$fail" ] && ok "1-1 단일 주소 /v1/chat/completions —$res" || bad "1-1 단일 주소 — 실패:$fail"
-    # 두 LLM 이 있으면 요청의 model 로 고른다 (11-target-fallback 의 model_alias)
+    # LLM 이 둘 이상이면 요청의 model 로 고른다 (apply-config.sh 가 만든 model_alias 대상)
     if [ "${DECK_MODEL_SELECT:-false}" = true ]; then
       res=""; fail=""
-      for m in "$DECK_CHAT_MODEL" "$DECK_EXT_MODEL"; do
+      IFS=, read -ra MS <<<"$DECK_SELECT_MODELS"
+      for m in "${MS[@]}"; do
         read -r c _ <<<"$(req_model /v1/chat/completions "$m" "한 단어로만 답하세요. 대한민국의 수도는?" "${KA[@]}")"
         h=$(hdr X-Kong-LLM-Model)
         if [ "$c" = 200 ] && [ "${h#*/}" = "$m" ]; then res="$res model=$m→$h"; else fail="$fail model=$m→$c ${h:-?}"; fi
