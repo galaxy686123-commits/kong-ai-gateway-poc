@@ -387,6 +387,7 @@ bash set-env.sh FEATURE_OUTPUT_MASK off && bash apply-config.sh
 | 메뉴 | 보이는 것 |
 |---|---|
 | Gateway Services · Routes | 통합 경로·모델 선택·영역별 시험 경로(`poc-1-integration` ~ `poc-4-guardrail`)·OCR·Agent |
+| Routes → 경로 → Plugins | 그 경로에 걸리는 기능 플러그인 — 기능 플러그인은 모두 경로에 붙어 있음 (전역·계정 차단 제외) |
 | Plugins | 영역별 플러그인과 켜짐/꺼짐 — 스위치 상태, 긴급 차단(`kill-switch--…`) |
 | Consumers · Consumer Groups | 부서 계정·키·그룹 (2-1·2-2) |
 

@@ -19,64 +19,64 @@ services:
           x-ai-target: [external]
         protocols: [http, https]
         response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
-    plugins:
-      - name: key-auth
-        config:
-          key_names: [apikey]
-          hide_credentials: true
-      - name: acl
-        config:
-          allow: [team-a, team-b]
-          hide_groups_header: true
-      - name: rate-limiting
-        config:
-          minute: ${{ env "DECK_RPM" }}
-          day: ${{ env "DECK_RPD" }}
-          limit_by: consumer
-          policy: local
-      - name: ai-rate-limiting-advanced
-        config:
-          strategy: local
-          policies:
-            - match:
-                - type: consumer
-                  partition_by: true
-              limits:
-                - limit: ${{ env "DECK_TPM" }}
-                  window_size: 60
-                  tokens_count_strategy: total_tokens
-      - name: ai-prompt-guard
-        config:
-          match_all_roles: false
-          deny_patterns:
-            - '(?i)(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instruction|prompt|rule)'
-            - '(?i)(?:이전|앞의|위의)\s*(?:지시|명령|규칙|지침).{0,10}(?:무시|잊어|따르지)'
-            - '(?i)(?:시스템\s*프롬프트|system\s+prompt).{0,20}(?:알려|보여|출력|공개|reveal|show|print)'
-            - '(?i)(?:jailbreak|탈옥|DAN\s+mode|developer\s+mode)'
-            - '(?i)<\s*script|javascript:|\bon(?:error|load)\s*='
-            - 'sk-[A-Za-z0-9_\-]{20,}'
-            - '${{ env "DECK_DLP_PATTERN" }}'
-      - name: request-termination
-        instance_name: kill-switch--llm-external
-        enabled: false
-        config:
-          status_code: 503
-          message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
-      - name: ai-proxy
-        config:
-          route_type: llm/v1/chat
-          response_streaming: allow
-          max_request_body_size: 8388608
-          model_name_header: true
-          auth:
-            header_name: Authorization
-            header_value: "{vault://env/ext-auth-header}"
-          logging:
-            log_statistics: true
-            log_payloads: false
-          model:
-            provider: openai
-            name: ${{ env "DECK_EXT_MODEL" }}
-            options:
-              upstream_url: ${{ env "DECK_EXT_URL" }}
+        plugins:
+          - name: key-auth
+            config:
+              key_names: [apikey]
+              hide_credentials: true
+          - name: acl
+            config:
+              allow: [team-a, team-b]
+              hide_groups_header: true
+          - name: rate-limiting
+            config:
+              minute: ${{ env "DECK_RPM" }}
+              day: ${{ env "DECK_RPD" }}
+              limit_by: consumer
+              policy: local
+          - name: ai-rate-limiting-advanced
+            config:
+              strategy: local
+              policies:
+                - match:
+                    - type: consumer
+                      partition_by: true
+                  limits:
+                    - limit: ${{ env "DECK_TPM" }}
+                      window_size: 60
+                      tokens_count_strategy: total_tokens
+          - name: ai-prompt-guard
+            config:
+              match_all_roles: false
+              deny_patterns:
+                - '(?i)(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instruction|prompt|rule)'
+                - '(?i)(?:이전|앞의|위의)\s*(?:지시|명령|규칙|지침).{0,10}(?:무시|잊어|따르지)'
+                - '(?i)(?:시스템\s*프롬프트|system\s+prompt).{0,20}(?:알려|보여|출력|공개|reveal|show|print)'
+                - '(?i)(?:jailbreak|탈옥|DAN\s+mode|developer\s+mode)'
+                - '(?i)<\s*script|javascript:|\bon(?:error|load)\s*='
+                - 'sk-[A-Za-z0-9_\-]{20,}'
+                - '${{ env "DECK_DLP_PATTERN" }}'
+          - name: request-termination
+            instance_name: kill-switch--llm-external
+            enabled: false
+            config:
+              status_code: 503
+              message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              response_streaming: allow
+              max_request_body_size: 8388608
+              model_name_header: true
+              auth:
+                header_name: Authorization
+                header_value: "{vault://env/ext-auth-header}"
+              logging:
+                log_statistics: true
+                log_payloads: false
+              model:
+                provider: openai
+                name: ${{ env "DECK_EXT_MODEL" }}
+                options:
+                  upstream_url: ${{ env "DECK_EXT_URL" }}
 

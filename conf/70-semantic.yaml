@@ -22,44 +22,44 @@ services:
       - name: ai-embed
         paths: [/ai/embed]
         protocols: [http, https]
-    plugins:
-      - name: ip-restriction            # 게이트웨이 자신만 쓰는 내부 경로 — 밖에서 부르면 403
-        config:
-          allow: [127.0.0.1]
-      - name: pre-function
-        instance_name: strip-dimensions
-        config:
-          access:
-            - |
-              local cjson = require "cjson.safe"
-              local body = kong.request.get_raw_body()
-              if body then
-                local t = cjson.decode(body)
-                if t and t.dimensions ~= nil then
-                  t.dimensions = nil
-                  kong.service.request.set_raw_body(cjson.encode(t))
-                end
-              end
-      - name: ai-proxy
-        config:
-          route_type: llm/v1/embeddings
-          genai_category: text/embeddings
-          auth:
-            header_name: Authorization
-            header_value: "{vault://env/embed-auth-header}"
-          logging:
-            log_statistics: true
-            log_payloads: false
-          model:
-            provider: openai
-            name: ${{ env "DECK_EMBED_MODEL" }}
-            options:
-              upstream_url: ${{ env "DECK_EMBED_URL" }}
+        plugins:
+          - name: ip-restriction            # 게이트웨이 자신만 쓰는 내부 경로 — 밖에서 부르면 403
+            config:
+              allow: [127.0.0.1]
+          - name: pre-function
+            instance_name: strip-dimensions
+            config:
+              access:
+                - |
+                  local cjson = require "cjson.safe"
+                  local body = kong.request.get_raw_body()
+                  if body then
+                    local t = cjson.decode(body)
+                    if t and t.dimensions ~= nil then
+                      t.dimensions = nil
+                      kong.service.request.set_raw_body(cjson.encode(t))
+                    end
+                  end
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/embeddings
+              genai_category: text/embeddings
+              auth:
+                header_name: Authorization
+                header_value: "{vault://env/embed-auth-header}"
+              logging:
+                log_statistics: true
+                log_payloads: false
+              model:
+                provider: openai
+                name: ${{ env "DECK_EMBED_MODEL" }}
+                options:
+                  upstream_url: ${{ env "DECK_EMBED_URL" }}
 
 plugins:
   # 통합 경로에 붙는 의미 기반 가드·캐시 (스위치)
   - name: ai-semantic-prompt-guard
-    service: llm
+    route: llm
     enabled: ${{ env "DECK_ON_SEMANTIC_GUARD" }}   # FEATURE_SEMANTIC_GUARD
     config:
       embeddings:
@@ -90,7 +90,7 @@ plugins:
           user: kong
 
   - name: ai-semantic-cache
-    service: llm
+    route: llm
     enabled: ${{ env "DECK_ON_SEMANTIC_CACHE" }}   # FEATURE_SEMANTIC_CACHE
     config:
       cache_ttl: 3600

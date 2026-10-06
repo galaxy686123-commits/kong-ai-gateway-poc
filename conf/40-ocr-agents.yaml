@@ -4,7 +4,7 @@
 #  1-3 대용량·장기 연결: OCR 은 큰 이미지(기본 50 MB까지)를 받고, OCR·Agent 모두 응답을 10분까지 기다린다.
 #  2-2 키별 Agent 접근 통제: agent-a 는 team-a, agent-b 는 team-b 키만 호출할 수 있다 (다르면 403).
 #  3-2 추적: 00-base.yaml 의 X-Correlation-ID 가 Agent 로 그대로 넘어간다 (Agent 가 다음 호출에 이어 붙이면 연쇄 추적).
-#  3-4 긴급 차단: 서비스마다 꺼 둔 request-termination 이 있다.
+#  3-4 긴급 차단: 서비스마다(그 경로에) 꺼 둔 request-termination 이 있다.
 #  주소는 .env 의 DECK_OCR_URL · DECK_AGENT_A_URL · DECK_AGENT_B_URL (비워 두면 시험용 모의 서버)
 # ─────────────────────────────────────────────────────────────
 _format_version: "3.0"
@@ -22,27 +22,27 @@ services:
       - name: ocr
         paths: [/ocr]
         protocols: [http, https]
-    plugins:
-      - &key-auth
-        name: key-auth
-        config:
-          key_names: [apikey]
-          hide_credentials: true
-      - name: acl
-        config:
-          allow: [team-a, team-b]
-          hide_groups_header: true
-      - name: request-size-limiting     # 1-3 업로드 상한 (이보다 크면 413)
-        config:
-          allowed_payload_size: ${{ env "DECK_OCR_MAX_MB" }}
-          size_unit: megabytes
-          require_content_length: false
-      - name: request-termination
-        instance_name: kill-switch--ocr
-        enabled: false
-        config:
-          status_code: 503
-          message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
+        plugins:
+          - &key-auth
+            name: key-auth
+            config:
+              key_names: [apikey]
+              hide_credentials: true
+          - name: acl
+            config:
+              allow: [team-a, team-b]
+              hide_groups_header: true
+          - name: request-size-limiting     # 1-3 업로드 상한 (이보다 크면 413)
+            config:
+              allowed_payload_size: ${{ env "DECK_OCR_MAX_MB" }}
+              size_unit: megabytes
+              require_content_length: false
+          - name: request-termination
+            instance_name: kill-switch--ocr
+            enabled: false
+            config:
+              status_code: 503
+              message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
 
   - name: agent-a
     url: ${{ env "DECK_AGENT_A_URL" }}
@@ -54,18 +54,18 @@ services:
         paths: [/agents/a]
         protocols: [http, https]
         response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
-    plugins:
-      - *key-auth
-      - name: acl
-        config:
-          allow: [team-a]               # 2-2 team-a 키만
-          hide_groups_header: true
-      - name: request-termination
-        instance_name: kill-switch--agent-a
-        enabled: false
-        config:
-          status_code: 503
-          message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
+        plugins:
+          - *key-auth
+          - name: acl
+            config:
+              allow: [team-a]               # 2-2 team-a 키만
+              hide_groups_header: true
+          - name: request-termination
+            instance_name: kill-switch--agent-a
+            enabled: false
+            config:
+              status_code: 503
+              message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
 
   - name: agent-b
     url: ${{ env "DECK_AGENT_B_URL" }}
@@ -77,15 +77,15 @@ services:
         paths: [/agents/b]
         protocols: [http, https]
         response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
-    plugins:
-      - *key-auth
-      - name: acl
-        config:
-          allow: [team-b]               # 2-2 team-b 키만
-          hide_groups_header: true
-      - name: request-termination
-        instance_name: kill-switch--agent-b
-        enabled: false
-        config:
-          status_code: 503
-          message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
+        plugins:
+          - *key-auth
+          - name: acl
+            config:
+              allow: [team-b]               # 2-2 team-b 키만
+              hide_groups_header: true
+          - name: request-termination
+            instance_name: kill-switch--agent-b
+            enabled: false
+            config:
+              status_code: 503
+              message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."

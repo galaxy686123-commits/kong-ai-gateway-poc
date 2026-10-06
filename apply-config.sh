@@ -89,8 +89,60 @@ fi
 DECK=(--kong-addr "http://127.0.0.1:$ADMIN_PORT" --headers "Kong-Admin-Token:$KONG_ADMIN_PASSWORD")
 # LLM 주소가 IP 면 이름으로 바꿔 넘긴다 (lib.sh 의 ai_url — Kong 3.16 AI 플러그인은 IP 주소로는 장애 대체가 안 됨)
 AENV=(); for v in $AI_URL_VARS; do AENV+=("$v=$(ai_url "${!v:-}")"); done
+
+# 이름(instance_name)이 있는 플러그인의 붙는 곳(서비스·경로·계정)이 바뀌면 decK 는 새것을 먼저 만들다가
+# 이름 중복(409 UNIQUE)으로 멈춘다 — 그런 플러그인만 골라 「id 이름」 줄로 낸다 (예: 서비스 → 경로로 옮긴 2026-10 판)
+moved_named() {
+  local t; t=$(mktemp -d)
+  env "${AENV[@]}" deck file render --populate-env-vars --format json "${files[@]}" > "$t/want.json" 2>/dev/null \
+    || { rm -rf "$t"; return 0; }
+  admin '/plugins?size=1000&tags=kong-poc' > "$t/plugins.json"
+  admin '/services?size=1000' > "$t/services.json"
+  admin '/routes?size=1000' > "$t/routes.json"
+  admin '/consumers?size=1000' > "$t/consumers.json"
+  python3 - "$t" <<'PY' 2>/dev/null || true
+import json, os, sys
+t = sys.argv[1]
+load = lambda n: json.load(open(os.path.join(t, n), encoding="utf-8"))
+want = load("want.json")
+names = {k: {x["id"]: x.get("name") or x.get("username") for x in load(k + ".json")["data"]} for k in ("services", "routes", "consumers")}
+def ref(x):
+    return (x.get("name") or x.get("username") or x.get("id")) if isinstance(x, dict) else x
+desired = {}
+def add(p, s=None, r=None, c=None):
+    if p.get("instance_name"):
+        desired[p["instance_name"]] = (ref(p.get("service")) or s, ref(p.get("route")) or r, ref(p.get("consumer")) or c)
+for p in want.get("plugins") or []:
+    add(p)
+for s in want.get("services") or []:
+    for p in s.get("plugins") or []:
+        add(p, s=s["name"])
+    for r in s.get("routes") or []:
+        for p in r.get("plugins") or []:
+            add(p, r=r["name"])
+for r in want.get("routes") or []:
+    for p in r.get("plugins") or []:
+        add(p, r=r["name"])
+for c in want.get("consumers") or []:
+    for p in c.get("plugins") or []:
+        add(p, c=c["username"])
+for p in load("plugins.json")["data"]:
+    n = p.get("instance_name")
+    if n in desired:
+        cur = tuple(names[k].get((p.get(f) or {}).get("id")) for k, f in (("services", "service"), ("routes", "route"), ("consumers", "consumer")))
+        if cur != desired[n]:
+            print(p["id"], n)
+PY
+  rm -rf "$t"
+}
+
 if [ "$DRY" = 1 ]; then
   say "바뀔 내용 (적용하지 않음)"
+  del=$(moved_named)
+  if [ -n "$del" ]; then
+    note "붙는 곳이 바뀐 이름 있는 플러그인 $(wc -l <<<"$del")개는 적용할 때 먼저 지우고 새로 만듭니다 (이름 중복 방지):"
+    note "  $(awk '{print $2}' <<<"$del" | tr '\n' ' ')"
+  fi
   env "${AENV[@]}" deck gateway diff "${DECK[@]}" "${files[@]}"
   exit 0
 fi
@@ -101,6 +153,11 @@ loaded=0; grep -qxF "dns_hostsfile = $RUN_DIR/hosts" "$KONG_PREFIX/.kong_env" 2>
 if kong_hosts || [ "$loaded" = 0 ]; then
   kong_env; kong reload -p "$KONG_PREFIX" >/dev/null 2>&1 || die "Kong reload 실패 ($LOGS/kong-error.log)"
   sleep 3; note "LLM 주소의 IP 에 붙인 이름을 Kong 에 반영 ($RUN_DIR/hosts)"
+fi
+del=$(moved_named)
+if [ -n "$del" ]; then   # 바로 아래 sync 가 같은 이름으로 새로 만든다 — 그 사이 몇 초만 빈다
+  while read -r id _; do admin "/plugins/$id" -X DELETE -o /dev/null; done <<<"$del"
+  note "붙는 곳이 바뀐 이름 있는 플러그인 $(wc -l <<<"$del")개를 먼저 지움 (이름 중복 방지): $(awk '{print $2}' <<<"$del" | tr '\n' ' ')"
 fi
 out=$(env "${AENV[@]}" deck gateway sync "${DECK[@]}" "${files[@]}" 2>&1) || { echo "$out" | tail -15; die "적용 실패"; }
 echo "$out" | grep -A3 '^Summary' | sed 's/^/  /'

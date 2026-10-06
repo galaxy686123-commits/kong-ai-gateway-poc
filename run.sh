@@ -50,6 +50,17 @@ if [ -n "$ids" ]; then note "ID 환경변수 $ids"; fi
 stop_all() { say "종료 신호 — 차례로 내립니다"; bash "$ROOT/stop.sh"; exit 0; }
 trap stop_all TERM INT
 
+# 다시 빌드하면 플랫폼이 새 환경을 띄울 때 이전 환경이 아직 내려가는 중일 수 있다 — 곧바로 실패하지 않고
+# 이전 환경이 실행 기록을 지우거나(정상 종료) 90초 넘게 갱신하지 않을(멈춤) 때까지 기다린다. 10분이 넘으면 start.sh 가 알리고 멈춘다.
+waited=0
+while :; do
+  lock_read
+  if [ -z "$LOCK_HOST" ] || [ "$LOCK_HOST" = "$HOST_ID" ] || [ "$LOCK_AGE" -ge "$LOCK_STALE" ] || [ "$waited" -ge 600 ]; then break; fi
+  if [ $((waited % 30)) = 0 ]; then note "이전 환경($LOCK_HOST)이 아직 이 유지 폴더를 쓰고 있습니다 (${LOCK_AGE}초 전 확인) — 내려가기를 기다립니다 (${waited}초째)"; fi
+  sleep 10 & wait $!
+  waited=$((waited + 10))
+done
+
 bash "$ROOT/start.sh" || { note "기동 실패 — 위 메시지를 확인하세요 (로그 $LOGS)"; env_report; exit 1; }
 
 # 처음 만든 DB 라 설정이 비어 있으면 요구사항 설정을 한 번 넣는다 (이미 있으면 그대로 — Manager 에서 바꾼 값을 지키려고)

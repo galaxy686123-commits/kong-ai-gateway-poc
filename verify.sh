@@ -194,7 +194,7 @@ else
   MOCK=1; [ "${FEATURE_UPSTREAM:-mock}" = llm ] && MOCK=0
   [ "$T" = 1 ] && [ "$MOCK" = 0 ] && warn "영역별 시험 경로가 사내 LLM 으로 설정됨(FEATURE_UPSTREAM=llm) — 아래 점검은 모의 LLM(받은 질문을 그대로 답함) 기준이라 일부가 [불가]로 보일 수 있음"
   # 통합 경로에 지금 켜져 있는 기능 (스위치 상태)
-  on=$(admin "/services/llm/plugins?size=100" | python3 -c 'import json,sys
+  on=$(admin "/routes/llm/plugins?size=100" | python3 -c 'import json,sys
 names = {"acl": "접근통제", "rate-limiting": "호출한도", "ai-rate-limiting-advanced": "토큰한도", "ai-prompt-guard": "인젝션·기밀가드",
          "ai-custom-guardrail": "유해답변", "post-function": "답변마스킹", "ai-semantic-prompt-guard": "의미가드", "ai-semantic-cache": "시맨틱캐시"}
 d = json.load(sys.stdin)["data"]
@@ -387,7 +387,7 @@ print(len(k), sum(1 for p in k if p["enabled"]))' 2>/dev/null)
   # 시맨틱 캐시 — 통합 경로에서 스위치(FEATURE_SEMANTIC_CACHE)를 켰을 때만 (사내 LLM 을 한 번 부른다)
   if [ "${DECK_ON_SEMANTIC_CACHE:-false}" = true ] && [ "$LLM" = 1 ]; then
     # 이전 점검이 저장한 답이 남아 있으면 첫 요청부터 Hit 이 된다 → 통합 경로 캐시를 비우고 시작
-    cid=$(admin /services/llm/plugins | python3 -c 'import json,sys; print([p["id"] for p in json.load(sys.stdin)["data"] if p["name"] == "ai-semantic-cache"][0])' 2>/dev/null)
+    cid=$(admin /routes/llm/plugins | python3 -c 'import json,sys; print([p["id"] for p in json.load(sys.stdin)["data"] if p["name"] == "ai-semantic-cache"][0])' 2>/dev/null)
     [ -n "$cid" ] && psql_su -d kong-pgvector -c "DELETE FROM semantic_cache_${cid//-/_}" >/dev/null 2>&1 || true
     q="시맨틱 캐시 점검: 부산에서 가장 높은 산은 어디인가요? 한 줄로."
     read -r c1 t1 <<<"$(req /v1/chat/completions "$q" "${KA[@]}")"; s1=$(hdr X-Cache-Status); sleep 2
