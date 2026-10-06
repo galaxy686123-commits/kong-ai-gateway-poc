@@ -175,7 +175,11 @@ KA=(-H "apikey: $DECK_CLIENT_KEY"); KB=(-H "apikey: ${DECK_CLIENT_KEY_B:-none}")
 # req <경로> <질문> [curl 인자...] → "상태 초" · 본문 r.out · 헤더 r.hdr
 req() {  # OpenAI SDK 처럼 model 을 넣어 보낸다 — 게이트웨이가 지우고 설정된 모델을 쓴다 (00-base.yaml)
   local path=$1 msg=$2; shift 2
-  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"model":"gpt-4o","messages":[{"role":"user","content":sys.argv[1]}],"max_tokens":40}))' "$msg")
+  req_model "$path" gpt-4o "$msg" "$@"
+}
+req_model() {  # req_model <경로> <model> <질문> [curl 옵션…] — 요청 본문의 model 을 정해 보낸다
+  local path=$1 model=$2 msg=$3; shift 3
+  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"model":sys.argv[2],"messages":[{"role":"user","content":sys.argv[1]}],"max_tokens":40}))' "$msg" "$model")
   curl -s -m 120 -o "$RUN_DIR/r.out" -D "$RUN_DIR/r.hdr" -w '%{http_code} %{time_total}' \
     -H 'Content-Type: application/json' "$@" -d "$body" "$P$path" 2>/dev/null | awk '{printf "%s %.2f", $1, $2}'
 }
@@ -213,6 +217,17 @@ print(" · ".join(names[p["name"]] for p in d if p["enabled"] and p["name"] in n
       if [ "$c" = 200 ]; then res="$res ${t:-기본}→$(hdr X-Kong-LLM-Model)"; else fail="$fail ${t:-기본}($c)"; fi
     done
     [ -z "$fail" ] && ok "1-1 단일 주소 /v1/chat/completions —$res" || bad "1-1 단일 주소 — 실패:$fail"
+    # 두 LLM 이 있으면 요청의 model 로 고른다 (11-target-fallback 의 model_alias)
+    if [ "${DECK_MODEL_SELECT:-false}" = true ]; then
+      res=""; fail=""
+      for m in "$DECK_CHAT_MODEL" "$DECK_EXT_MODEL"; do
+        read -r c _ <<<"$(req_model /v1/chat/completions "$m" "한 단어로만 답하세요. 대한민국의 수도는?" "${KA[@]}")"
+        h=$(hdr X-Kong-LLM-Model)
+        if [ "$c" = 200 ] && [ "${h#*/}" = "$m" ]; then res="$res model=$m→$h"; else fail="$fail model=$m→$c ${h:-?}"; fi
+      done
+      [ -z "$fail" ] && ok "1-1 모델 선택 — 요청의 model 로 LLM 을 고름:$res (다른 이름·없음은 기본 순서)" \
+        || bad "1-1 모델 선택 — 실패:$fail"
+    fi
   else
     warn "1-1 단일 주소 — LLM 미연결(DECK_CHAT_URL 이 예시 주소)이라 실제 모델 호출은 건너뜀"
   fi

@@ -349,6 +349,12 @@ deck_env() {
   : "${DECK_BLOCK_MESSAGE:=보안 정책에 따라 표시할 수 없습니다.}"
   : "${DECK_OCR_URL:=$DECK_MOCK_URL/ocr}" "${DECK_AGENT_A_URL:=$DECK_MOCK_URL/agents/a}" "${DECK_AGENT_B_URL:=$DECK_MOCK_URL/agents/b}"
   : "${DECK_AZURE_API_VERSION:=2024-06-01}" "${DECK_GCP_LOCATION:=asia-northeast3}" "${DECK_EMBED_DIMS:=1024}"
+  : "${DECK_CHAT_MODEL:=}" "${DECK_EXT_MODEL:=}"
+  # 두 LLM 을 요청의 model 로 고르기 — 통합 경로가 11-target-fallback 을 쓸 때 (apply-config.sh 와 같은 조건)
+  DECK_MODEL_SELECT=false
+  if ! { [ "${FALLBACK:-auto}" = azure ] && [ -n "${DECK_AZURE_INSTANCE:-}" ]; } && [ "${FALLBACK:-auto}" != none ] && [ -n "${DECK_EXT_URL:-}" ]; then
+    DECK_MODEL_SELECT=true
+  fi
   # 통합 경로 기능 스위치 — .env 의 FEATURE_xxx=on/off → DECK_ON_xxx=true/false
   local f d v
   for f in MASKING:on ACL:on RATE_LIMIT:on TOKEN_LIMIT:on PROMPT_GUARD:on OUTPUT_GUARD:off OUTPUT_MASK:off \

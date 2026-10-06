@@ -50,7 +50,7 @@ FB="${FALLBACK:-auto}"
 if [ "$FB" = azure ] && [ -n "${DECK_AZURE_INSTANCE:-}" ]; then
   files+=(conf/11-target-fallback-azure.yaml); row O 11-target-fallback-azure "사내 LLM → Azure 장애 대체"
 elif [ "$FB" != none ] && [ -n "${DECK_EXT_URL:-}" ]; then
-  files+=(conf/11-target-fallback.yaml); row O 11-target-fallback "사내 LLM → 외부 LLM 장애 대체"
+  files+=(conf/11-target-fallback.yaml); row O 11-target-fallback "사내 LLM → 외부 LLM 장애 대체 · 요청의 model 로 선택 ($DECK_CHAT_MODEL · $DECK_EXT_MODEL)"
 else
   files+=(conf/11-target-single.yaml); row O 11-target-single "사내 LLM (장애 대체 없음)"
 fi

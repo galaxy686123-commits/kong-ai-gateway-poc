@@ -78,7 +78,9 @@ plugins:
   # 채팅 요청 공통 전처리 (항상 켬 — 끄지 마세요)
   #  ① 1-1·1-4 모델은 게이트웨이가 정한다 — 클라이언트가 보낸 model 은 지운다.
   #     남겨 두면 설정과 다른 이름은 400("cannot use own model"), 같은 이름이어도 장애 대체가 일어나지 않는다
-  #     (Kong 3.16 실측). OpenAI SDK 등은 model 을 항상 보내므로 필요하다. 대상은 헤더 x-ai-target 으로 고른다.
+  #     (Kong 3.16 실측). OpenAI SDK 등은 model 을 항상 보내므로 필요하다.
+  #     예외 — 두 LLM(사내·외부)이 있으면 통합 경로(llm)에서는 model 이 두 LLM 이름 중 하나일 때 그대로 둔다.
+  #     ai-proxy-advanced 의 model_alias 가 그 LLM 을 고른다 (11-target-fallback.yaml). 헤더 x-ai-target 으로도 고를 수 있다.
   #     실제로 답한 모델은 응답 헤더 X-Kong-LLM-Model, 클라이언트가 보낸 이름은 요청 로그의 client_model.
   #  ② 4-1 개인정보 마스킹 (FEATURE_MASKING) — LLM 으로 보내기 전에 프롬프트 속 개인정보를 라벨로 바꾼다
   #     예) "주민번호 900101-1234567" → "주민번호 [주민등록번호]". 무엇을 가렸는지는 X-PII-Masked 헤더·요청 로그에.
@@ -88,17 +90,27 @@ plugins:
       access:
         - |
           local MASKING = ${{ env "DECK_ON_MASKING" }}   -- FEATURE_MASKING (4-1)
+          local SELECT = ${{ env "DECK_MODEL_SELECT" }}   -- 두 LLM 을 요청의 model 로 고름 (외부 LLM 이 있을 때)
           local path = kong.request.get_path()
           if not path:find("/chat/completions$") then return end
           local body = kong.request.get_body("application/json")
           if type(body) ~= "table" then return end
           local changed = false
 
-          -- ① 클라이언트가 보낸 모델 이름은 지운다
+          -- ① 클라이언트가 보낸 모델 이름은 지운다 — 통합 경로에서 두 LLM 중 하나의 이름이면 그대로 둔다(그 LLM 을 고름)
           if body.model ~= nil then
-            kong.log.set_serialize_value("client_model", tostring(body.model))
-            body.model = nil
-            changed = true
+            local m = tostring(body.model)
+            kong.log.set_serialize_value("client_model", m)
+            local keep = false
+            if SELECT and m ~= "" then
+              local r = kong.router.get_route()
+              keep = r ~= nil and r.name == "llm"
+                and (m == [[${{ env "DECK_CHAT_MODEL" }}]] or m == [[${{ env "DECK_EXT_MODEL" }}]])
+            end
+            if not keep then
+              body.model = nil
+              changed = true
+            end
           end
 
           -- ② 개인정보 마스킹
