@@ -89,6 +89,18 @@ Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바
 bash set-env.sh KONG_MANAGER_PASSWORD
 ```
 
+**관리자 추가** — Kong Manager 왼쪽 **Teams** → **Admins** → **+ Invite Admin** 에서 이메일·사용자 이름을 넣고 **Add/Edit Roles** 로
+워크스페이스(`default`)와 역할을 고른 뒤 **Invite Admin**. 메일 발송은 꺼져 있으므로(`smtp_mock`) 초대 목록(Invited)에서 그 관리자를 열고
+**Generate registration link** 로 만든 가입 링크(72시간 유효)를 본인에게 전합니다. 본인이 링크에서 비밀번호를 정하면 바로 로그인됩니다.
+
+| 역할 | 할 수 있는 것 |
+|---|---|
+| `super-admin` | 전부 — 관리자 초대·역할 관리 포함 |
+| `admin` | 관리자·역할 관리(RBAC)를 뺀 전부 — 경로·플러그인·사용자 편집 |
+| `read-only` | 보기만 |
+
+관리자는 DB 에 저장되므로 다시 빌드해도 남고, 번들 설정 적용(`apply-config.sh`)도 건드리지 않습니다.
+
 ---
 
 ## 요구사항 → 설정
@@ -356,8 +368,10 @@ bash set-env.sh MANAGER_URL 'https://manager-{ENV_ID}.<플랫폼 도메인>'
 bash set-env.sh ADMIN_API_URL 'https://adminapi-{ENV_ID}.<플랫폼 도메인>'
 ```
 
-`verify.sh` 는 이 동작을 직접 시험합니다(「외부 주소 자동」). 화면·기록에 보여 주는 주소는 파드 이름의 `영문 3자 + 숫자 10자리`
-조각(없으면 `unknown`)으로 채운 것이라 실제 주소와 다를 수 있지만, Manager 동작에는 쓰이지 않습니다.
+`verify.sh` 는 이 동작을 직접 시험합니다(「외부 주소 자동」). 화면·기록에 보여 주는 주소와 Kong 의 `admin_gui_url` 은
+`KONG_POC_ENV_ID` → 플랫폼의 `INFER_SERVICE_ID`(빌드한 새 환경의 서비스 ID, 소문자로) → 파드 이름의 `영문 3자 + 숫자 10자리` 조각
+(없으면 `unknown`) 순서로 채웁니다. Manager 화면 동작에는 쓰이지 않지만, **관리자 가입 링크·비밀번호 재설정 링크의 주소**가
+이 값으로 만들어집니다 — 링크의 주소가 브라우저의 Manager 주소와 다르면 앞부분(`https://manager-…`)만 바꿔 열면 됩니다.
 
 **새 환경이 뜬 뒤 (개발 파드에서)** — 새 환경에 터미널이 없어도 유지 폴더를 거쳐 일을 맡길 수 있습니다.
 

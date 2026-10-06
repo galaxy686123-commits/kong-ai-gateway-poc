@@ -273,10 +273,13 @@ pg_datadir() {  # 이미 초기화된 곳이 있으면 그곳, 아니면 DATA_DI
 # PostgreSQL 의 잠금(postmaster.pid)은 같은 기계 안에서만 통하므로, 실행 중인 환경의 이름을 run.lock 에 적고
 # 20초마다 갱신한다. 90초 넘게 갱신이 없으면 그 환경은 없어진 것으로 보고 이어받는다.
 HOST_ID=$(hostname 2>/dev/null || cat /proc/sys/kernel/hostname)
-env_id() {  # 이 환경의 ID — KONG_POC_ENV_ID, 없으면 호스트 이름(파드 이름)에서 '영문 3자 + 숫자 10자리' 조각
+env_id() {  # 이 환경의 ID — KONG_POC_ENV_ID → 플랫폼의 INFER_SERVICE_ID → 호스트 이름(파드 이름)의 '영문 3자 + 숫자 10자리' 조각
   # 예) pjt20260101-abc2026100001-dp-1a2b3c4d5e-xyz12 → abc2026100001  (pjt20260101 은 숫자 8자리라 프로젝트 ID 로 보고 건너뜀)
+  # 빌드한 새 환경은 외부 주소의 ID 가 파드 이름이 아니라 서비스 ID(INFER_SERVICE_ID, 대문자)다 — 소문자로 바꿔 쓴다.
+  # 이 값은 화면·기록의 주소와 Kong 의 admin_gui_url(관리자 가입 링크·비밀번호 재설정 링크의 주소)에 쓰인다.
   local t
   if [ -n "${KONG_POC_ENV_ID:-}" ]; then printf '%s' "$KONG_POC_ENV_ID"; return 0; fi
+  if [[ "${INFER_SERVICE_ID:-}" =~ ^[A-Za-z]{3}[0-9]{10}$ ]]; then printf '%s' "${INFER_SERVICE_ID,,}"; return 0; fi
   for t in ${HOST_ID//-/ }; do
     if [[ "$t" =~ ^[a-z]{3}[0-9]{10}$ ]]; then printf '%s' "$t"; return 0; fi
   done
