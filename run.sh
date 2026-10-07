@@ -2,7 +2,7 @@
 # run.sh — 빌드한 새 환경의 시작 명령. 빠진 프로그램 설치 → 기동 → 떠 있는 동안 지키고, 종료 신호를 받으면 차례로 내린다.
 #   플랫폼의 시작 명령에:  bash /project/work/flow/kong-ai-gateway-poc/run.sh
 #   이 명령은 끝나지 않는다 (명령이 끝나면 환경이 끝난 것으로 보는 플랫폼이 많다). 개발 파드에서는 start.sh·stop.sh 를 쓴다.
-#   떠 있는 동안 같은 유지 폴더를 붙인 개발 파드에서  bash remote.sh status|apply|restart|verify|switch|vectors  로 일을 맡길 수 있다.
+#   떠 있는 동안 같은 유지 폴더를 붙인 개발 파드에서  bash remote.sh status|apply|restart|verify|switch|vectors|guard-test|logs-admin  로 일을 맡길 수 있다.
 #   유지 폴더에 code/run.sh 가 있으면(bash remote.sh update 로 넣은 코드) 빌드 스냅샷 대신 그 코드로 돈다 — 빌드 없이 코드 갱신.
 source "$(dirname "$0")/lib.sh"
 
@@ -122,6 +122,8 @@ handle() {  # 개발 파드가 remote.sh 로 맡긴 일 — 정해진 것만 한
       switch|switch\ *) set -f; set -- $cmd; set +f; shift; bash "$ROOT/switch.sh" "$@" ;;   # 이름·상태는 switch.sh 가 확인
       vectors)     bash "$ROOT/vectors.sh" ;;
       vectors\ *)  bash "$ROOT/vectors.sh" --query "${cmd#vectors }" ;;
+      guard-test)  bash "$ROOT/guard-test.sh" ;;
+      logs-admin)  bash "$ROOT/logs.sh" admin ;;
       reload)      echo "코드를 다시 읽어 새로 띄웁니다 — 지금 $(code_where) → 유지 폴더 $(code_info "$CODE_DIR")"; RELOAD=1 ;;
       *)           echo "모르는 요청: $cmd"; false ;;
     esac

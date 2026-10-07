@@ -311,16 +311,17 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 |---|---|
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
 | `run.sh` | **빌드한 새 환경의 시작 명령** — 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
-| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
+| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` · `vectors` · `guard-test` · `logs-admin` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
 | `switch.sh` | `/poc` 플러그인·긴급 차단 바로 켜고 끄기 — `bash switch.sh <이름> on|off` (Kong Manager 스위치와 같음) · 이름 없이 = 지금 상태 |
 | `vectors.sh` | 벡터 DB(`kong-pgvector`)에 Kong 이 넣은 것 보기 — 시맨틱 캐시의 저장된 답 · 의미 기반 가드의 예문. `--query '문장'` 이면 가까운 것과 거리(막히는지·캐시가 맞는지) · 빌드한 새 환경이면 `bash remote.sh vectors` |
 | `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
 | `set-license.sh` | 받은 라이선스 파일을 제자리에 넣기 — `bash set-license.sh <파일>` |
 | `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기. `kong-poc` 태그가 붙은 것만 관리. Kong Manager 에서 켜고 끈 `/poc` 스위치는 설정 파일에 적고, 긴급 차단은 그대로 둠 (`manager-changes.py`) |
 | `verify.sh` | 환경·설치·접속·요구사항별 점검 — `/poc` 의 플러그인을 영역마다 잠깐 켜서 확인하고 처음 상태로. `--full` 은 70초 장기 연결까지 |
+| `guard-test.sh` | 가드레일(4-1~4-5)을 **문장 묶음**으로 시험 — 영역마다 잡은 비율 · 잘못 막은 비율과 놓친 문장 목록. 기본 묶음 `tests/guard-set.tsv`(125문장), 고객 문장은 유지 폴더의 `guard-set.tsv`(`--init` 으로 복사). 빌드한 새 환경이면 `bash remote.sh guard-test`. [VERIFY.md](VERIFY.md) 4-x |
 | `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 점검 — 앞단(인그레스) 경로와 지금 켜진 플러그인 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |
-| `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
+| `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력 — DB 가 빌드한 새 환경에 있으면 그쪽에 맡겨 보여 줌) |
 | `set-data-dir.sh` | **유지 폴더(PV) 지정** — 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
 | `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
 | `stop.sh` | 정지 (데이터는 남김) — Kong·PostgreSQL·PII 가드·모의 서버·Prometheus·Grafana |

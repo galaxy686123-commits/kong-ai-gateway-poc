@@ -191,7 +191,7 @@ print("시각", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(d["started_at"] /
 print("모델", (ai.get("meta") or {}).get("response_model"), "| 보낸 모델", d.get("client_model"), "| 토큰", (ai.get("usage") or {}).get("total_tokens"),
       "| 추적 ID", d["request"]["headers"].get("x-correlation-id"), "| 사용자 키 기록됨", "apikey" in d["request"]["headers"])'
 bash logs.sh            # 최근 요청 20건 요약
-bash logs.sh admin      # 관리 작업 이력 — Kong Manager·Admin API 로 설정을 바꾼 사람·시각·대상
+bash logs.sh admin      # 관리 작업 이력 — Kong Manager·Admin API 로 설정을 바꾼 사람·시각·대상 (새 환경이 돌면 그쪽 DB 에서)
 ```
 → 요청마다 한 줄씩 사용자·경로·상태·지연·모델·토큰·추적 ID 가 남고, **사용자 키는 남지 않습니다**(`False`).
 요청·응답 본문도 남기지 않습니다. Kong Manager 에서 설정을 하나 바꾼 뒤 `bash logs.sh admin` 을 보면 그 변경이 보입니다 (비밀번호 변경도 `PATCH /admins/self/password` 로 남음).
@@ -317,6 +317,23 @@ bash switch.sh pii-masking off; bash switch.sh response-masking off
 → 질문의 전화번호는 LLM 에 가기 전에 가려지고(`X-PII-Masked: mobile`), 답변의 내부 정보는 나오기 전에 가려집니다.
 답변 검사(`ai-custom-guardrail`·`response-masking`)를 설정 파일로 켜면 `/poc` 는 스트리밍 요청을 400 으로 거절합니다
 (조각난 답은 검사할 수 없음). 의미 기반 답변 가드는 거절 대신 스트리밍 요청에도 한 번에 답합니다.
+
+### 가드레일을 문장 묶음으로 (4-1 ~ 4-5)
+
+문장 한두 개가 아니라 묶음으로 **잡은 비율**(막거나 가림)과 **잘못 막은 비율**을 봅니다. 정상 업무 질문이 막히면 도입할 수 없기
+때문입니다. 기본 묶음은 `tests/guard-set.tsv` — 125문장(막거나 가릴 문장 70 · 그러면 안 되는 문장 55)이고, 지금 규칙이 놓치거나
+잘못 잡는 것으로 알려진 「경계」 사례가 섞여 있습니다(결과에서 따로 셈).
+
+```bash
+bash guard-test.sh --init     # 기본 묶음을 유지 폴더의 guard-set.tsv 로 복사 — 고객 업무 문장을 더한다 (한 번만, 있으면 그대로 둠)
+bash guard-test.sh            # 빌드한 새 환경이면 개발 파드에서 bash remote.sh guard-test
+```
+→ 영역마다 그 플러그인만 잠깐 켜고(약 1분 — `verify.sh` 와 같은 방식, 끝나거나 끊기면 처음 상태로) 문장을 모의 LLM 으로 보낸 뒤
+`잡은 비율 · 잘못 막은 비율 → 충족/미달`과 놓친 문장 · 잘못 막은 문장 목록을 보여 줍니다. 기준(90% · 5%)은 예시이고
+`--detect 90 --fp 5` 로 바꿉니다. 기록은 유지 폴더 `reports/guard-<시각>.txt`(요약) · `.tsv`(문장마다).
+모의 LLM 은 받은 질문을 그대로 답하므로 4-4 · 4-5 묶음의 문장은 곧 「LLM 의 답」입니다. 의미 기반 검사(4-3 · 4-4)는 임베딩 모델과
+기준 거리에 따라 결과가 크게 달라지므로, 고객 임베딩 모델을 연결한 뒤 이 묶음으로 기준 거리를 다시 맞춥니다
+(문장마다 거리는 `bash vectors.sh --query '문장'`). 묶음 형식은 파일 첫머리 설명 — 한 줄에 `영역 <TAB> 기대 <TAB> 문장 <TAB> 메모`.
 
 ### (참고) 시맨틱 캐시 — 임베딩 모델 연결 시
 

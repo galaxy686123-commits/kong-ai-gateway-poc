@@ -3,7 +3,8 @@
 #   logs.sh              최근 20건 요약
 #   logs.sh -f           실시간
 #   logs.sh export DIR   로그 파일을 DIR 로 복사 (보관·제출용)
-#   logs.sh admin        관리 작업 감사로그(설정 변경 이력, DB 저장)
+#   logs.sh admin        관리 작업 감사로그(설정 변경 이력, DB 저장) — DB 는 실행 중인 환경에만 있어, 빌드한 새 환경이 돌면
+#                        개발 파드에서는 그 환경에 맡겨 보여 준다 (bash remote.sh logs-admin 과 같음)
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
 LOG="$LOGS/audit.log"
@@ -13,6 +14,14 @@ case "${1:-}" in
           out="$dir/kong-audit-$(date +%Y%m%d-%H%M%S).log"
           cp "$LOG" "$out" && note "저장: $out ($(wc -l < "$out")건, $(du -h "$out" | cut -f1))" ;;
   admin)  # 설정을 바꾼 요청만 (조회 GET 제외). 30일 보관 후 자동 삭제.
+          if ! pg_ready; then
+            lock_read
+            if [ -n "$LOCK_HOST" ] && [ "$LOCK_HOST" != "$HOST_ID" ] && [ "$LOCK_AGE" -lt "$LOCK_STALE" ]; then
+              note "관리 작업 기록은 DB 에 있어 실행 중인 환경($LOCK_HOST)에 맡깁니다"
+              exec bash "$ROOT/remote.sh" logs-admin
+            fi
+            die "PostgreSQL 이 멈춰 있습니다 — bash start.sh"
+          fi
           PGOPTIONS="-c client_min_messages=warning" "$PG_BIN/psql" -h "$RUN_DIR" -p "$PG_PORT" -U postgres -d kong \
             -P footer=off -c \
             "select to_char((request_timestamp at time zone 'UTC') at time zone 'Asia/Seoul', 'MM-DD HH24:MI:SS') as \"시각(KST)\",

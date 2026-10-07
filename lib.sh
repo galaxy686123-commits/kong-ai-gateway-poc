@@ -396,6 +396,51 @@ for s in json.load(open(sys.argv[1])): print(s["id"], json.dumps(s["patch"], ens
   return 0
 }
 
+# ── /poc 플러그인을 잠깐 바꾸기 — verify.sh · guard-test.sh 가 쓴다 ─────────────
+#  처음 값은 verify_restore_file 에 적어 두어, 점검이 강제로 끊겨도 다음 점검·적용이 먼저 되돌린다 (verify_restore).
+poc_base() {  # 기본 상태 — 키 인증만 켜고 나머지 스위치(POC_SWITCHES)와 긴급 차단(kill-switch--poc)은 끔
+  local b="kill-switch--poc=false" f
+  for f in $POC_SWITCHES; do b="$b ${f##*:}=$([ "${f##*:}" = key-auth ] && echo true || echo false)"; done
+  echo "$b"
+}
+pset() {  # pset <이름=true|false|JSON 패치>… — 이름은 instance_name 또는 플러그인 이름. 실제로 바꾼 개수는 CHANGED
+  local out id patch c
+  CHANGED=0
+  out=$(admin "/routes/poc/plugins?size=100" | python3 -c '
+import json, os, sys
+plugins = json.load(sys.stdin)["data"]
+path, specs = sys.argv[1], sys.argv[2:]
+saved = json.load(open(path)) if os.path.exists(path) else []
+want = {}
+for spec in specs:                      # 같은 이름이 여러 번 오면 뒤의 것
+    name, _, val = spec.partition("=")
+    want[name] = {"enabled": val == "true"} if val in ("true", "false") else json.loads(val)
+def pick(patch, cur):                   # 패치가 건드리는 칸의 지금 값 = 되돌릴 값
+    return {k: pick(v, (cur or {}).get(k)) if isinstance(v, dict) else (cur or {}).get(k) for k, v in patch.items()}
+def keep_first(old, new):               # 같은 플러그인을 또 바꾸면, 처음 바꾸기 전 값을 남긴다
+    for k, v in new.items():
+        if k not in old: old[k] = v
+        elif isinstance(v, dict) and isinstance(old[k], dict): keep_first(old[k], v)
+for name, patch in want.items():
+    p = next((p for p in plugins if p.get("instance_name") == name), None) or next((p for p in plugins if p["name"] == name), None)
+    if p is None or pick(patch, p) == patch:
+        continue                        # 이 설치에 없거나(예: 임베딩 모델이 없어 의미 기반 가드가 없음) 이미 그 상태
+    s = next((s for s in saved if s["id"] == p["id"]), None)
+    if s is None: saved.append({"id": p["id"], "name": name, "patch": pick(patch, p)})
+    else: keep_first(s["patch"], pick(patch, p))
+    print(p["id"], json.dumps(patch, ensure_ascii=False))
+json.dump(saved, open(path, "w"), ensure_ascii=False)
+' "${RESTORE:-$(verify_restore_file)}" "$@" 2>/dev/null)
+  while read -r id patch; do
+    [ -n "$id" ] || continue
+    c=$(admin "/plugins/$id" -X PATCH -H 'Content-Type: application/json' -d "$patch" -o /dev/null -w '%{http_code}')
+    [ "$c" = 200 ] && CHANGED=$((CHANGED+1))
+  done <<<"$out"
+}
+# phase [이름=값…] — 기본 상태(BASE, 없으면 poc_base)에서 주어진 것만 바꾸고, Kong 이 반영할 때까지(최대 5초) 기다린다
+# shellcheck disable=SC2086
+phase() { pset ${BASE:-$(poc_base)} "$@"; [ "$CHANGED" -gt 0 ] && sleep 6; }
+
 # ── conf/*.yaml 의 ${{ env "DECK_…" }} 값 — apply-config.sh·verify.sh 가 같은 값을 쓴다 ──
 deck_env() {
   # 이 파드 안의 주소
