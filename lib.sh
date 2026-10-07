@@ -367,6 +367,20 @@ switch_value() {  # switch_value <이름> → on/off (설정 파일 값, 없으�
 KILL_SWITCHES="poc team-a-app team-b-app ocr agent-a agent-b"
 kill_var() { local n; n=$(printf '%s' "$1" | tr 'a-z-' 'A-Z_'); echo "DECK_KILL_$n"; }
 
+# ── 빌드 없이 코드 갱신 — 개발 파드의 bash remote.sh update 가 저장소를 유지 폴더 code/ 에 넣고, 새 환경의 run.sh 가 그 코드로 돈다
+code_info() {  # code_info <코드 폴더> — 그 코드의 출처 한 줄 (remote.sh update 가 적은 .code-info)
+  local d=$1
+  if [ ! -f "$d/run.sh" ]; then printf '빌드 스냅샷'; return 0; fi
+  if [ -f "$d/.code-info" ]; then
+    printf '커밋 %s · %s 에 넣음 · %s' "$(env_get commit "$d/.code-info")" "$(env_get at "$d/.code-info")" "$(env_get from "$d/.code-info")"
+  else printf '출처 정보 없음'; fi
+}
+code_where() {  # 지금 이 스크립트가 도는 코드
+  if [ "$ROOT" = "${DATA_DIR:-}/code" ]; then printf '유지 폴더의 코드 사본 — %s' "$(code_info "$ROOT")"
+  elif [ ! -w "$ROOT" ]; then printf '빌드 스냅샷 (%s)' "$ROOT"
+  else printf '저장소 (%s)' "$ROOT"; fi
+}
+
 # ── verify.sh 가 잠깐 바꾼 /poc 플러그인의 처음 값 — 데이터 폴더(DB 옆)에 적어, 점검이 끊겨도 다음 점검·적용이 먼저 되돌린다
 verify_restore_file() { echo "$DATA_DIR/verify-restore.json"; }
 verify_restore() {  # 처음 값으로 되돌린다 — 다 되돌렸으면 기록을 지운다

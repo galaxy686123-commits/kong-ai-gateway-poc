@@ -7,6 +7,12 @@ note "설정 파일  $ENV_FILE"
 license_state; note "라이선스   $LICENSE_FILE — $LIC_MSG"
 note "유지 폴더  $DATA_DIR"
 lock_read
+note "코드       $(code_where)"
+if [ "$ROOT" != "$DATA_DIR/code" ] && [ -f "$DATA_DIR/code/run.sh" ]; then
+  if [ "$LOCK_HOST" = "$HOST_ID" ] && [ ! -w "$ROOT" ]; then   # 빌드한 새 환경인데 사본이 아니라 스냅샷으로 도는 중
+    note "           유지 폴더의 코드 사본($(code_info "$DATA_DIR/code"))이 있지만 빌드 스냅샷으로 도는 중 — 사본이 연속 $(cat "$DATA_DIR/code-fails" 2>/dev/null || echo 0)회 기동에 실패함. 고쳐서 bash remote.sh update, 또는 bash remote.sh rollback"
+  else note "           유지 폴더에 코드 사본 있음 — $(code_info "$DATA_DIR/code") (빌드한 새 환경은 이 코드로 돈다)"; fi
+fi
 if [ -z "$LOCK_HOST" ]; then note "실행 환경  없음 (실행 기록 없음)"
 elif [ "$LOCK_HOST" = "$HOST_ID" ]; then note "실행 환경  이 환경 ($HOST_ID)"
 elif [ "$LOCK_AGE" -lt "$LOCK_STALE" ]; then note "실행 환경  다른 환경 $LOCK_HOST (${LOCK_AGE}초 전 확인) — 그쪽 일은 bash remote.sh 로 맡긴다"

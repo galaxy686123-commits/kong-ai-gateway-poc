@@ -3,6 +3,7 @@
 #   플랫폼의 시작 명령에:  bash /project/work/flow/kong-ai-gateway-poc/run.sh
 #   이 명령은 끝나지 않는다 (명령이 끝나면 환경이 끝난 것으로 보는 플랫폼이 많다). 개발 파드에서는 start.sh·stop.sh 를 쓴다.
 #   떠 있는 동안 같은 유지 폴더를 붙인 개발 파드에서  bash remote.sh status|apply|restart|verify  로 일을 맡길 수 있다.
+#   유지 폴더에 code/run.sh 가 있으면(bash remote.sh update 로 넣은 코드) 빌드 스냅샷 대신 그 코드로 돈다 — 빌드 없이 코드 갱신.
 source "$(dirname "$0")/lib.sh"
 
 env_report() {  # 기동하지 못했을 때 — 이 환경이 어떻게 생겼는지 기록에 남긴다 (다음 조치를 정하려고)
@@ -36,8 +37,37 @@ fi
 load_env; native_env
 set +e
 
+# ── 빌드 없이 코드 갱신 — 유지 폴더의 코드 사본이 있으면 그것으로 돈다 (exec 라 플랫폼이 보는 프로세스는 그대로) ──
+#   사본이 세 번 연속 기동에 실패하면(횟수 code-fails) 빌드 스냅샷으로 돈다. remote.sh update·rollback 이 횟수를 지운다.
+#   사본을 쓰기 시작할 때의 빌드 스냅샷을 기억해 두었다가(code/.snapshot-fp) 그 뒤 다시 빌드했으면 빌드한 코드로 돈다 —
+#   update 도 빌드도 개발 파드의 저장소를 넣는 것이라 나중에 한 쪽이 이긴다. 사본은 code.prev 로 비켜 두므로 rollback 으로 돌아갈 수 있다.
+CODE_DIR="$DATA_DIR/code"
+snap_fp() { (cd "$ROOT" && find . -type f ! -path './pkgs/*' ! -path './.git/*' ! -name '*.pyc' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16); }
+if [ "$ROOT" != "$CODE_DIR" ] && [ -f "$CODE_DIR/run.sh" ]; then
+  fp=$(snap_fp 2>/dev/null); seen=$(cat "$CODE_DIR/.snapshot-fp" 2>/dev/null)
+  if [ -z "$seen" ]; then echo "$fp" > "$CODE_DIR/.snapshot-fp"                   # 이 사본을 처음 쓴다 — 지금 스냅샷을 기억
+  elif [ "$seen" != "$fp" ]; then
+    say "사본을 넣은 뒤 다시 빌드했습니다 — 빌드한 코드로 돕니다 (유지 폴더의 사본은 code.prev 로 비켜 둠 · 돌아가려면 bash remote.sh rollback)"
+    rm -rf "$DATA_DIR/code.prev"; mv "$CODE_DIR" "$DATA_DIR/code.prev"
+    mkdir -p "$CODE_DIR" && echo "빌드 스냅샷" > "$CODE_DIR/.snapshot"; rm -f "$DATA_DIR/code-fails"
+  fi
+fi
+if [ "$ROOT" != "$CODE_DIR" ] && [ -f "$CODE_DIR/run.sh" ]; then
+  fails=$(cat "$DATA_DIR/code-fails" 2>/dev/null); [[ "$fails" =~ ^[0-9]+$ ]] || fails=0
+  if [ "$fails" -ge 3 ]; then
+    say "유지 폴더의 코드 사본이 세 번 연속 기동에 실패해 빌드 스냅샷으로 돕니다 — 고친 뒤 bash remote.sh update, 또는 bash remote.sh rollback"
+  elif bash -n "$CODE_DIR/run.sh" 2>/dev/null && bash -n "$CODE_DIR/lib.sh" 2>/dev/null && bash -n "$CODE_DIR/start.sh" 2>/dev/null; then
+    echo $((fails + 1)) > "$DATA_DIR/code-fails"
+    say "유지 폴더의 코드 사본으로 돕니다 — $(code_info "$CODE_DIR")"
+    export KONG_POC_SNAPSHOT="$ROOT" KONG_POC_DATA_DIR="$DATA_DIR"
+    exec bash "$CODE_DIR/run.sh"
+  else
+    say "유지 폴더의 코드 사본에 문법 오류가 있어 빌드 스냅샷으로 돕니다 — 고친 뒤 bash remote.sh update"
+  fi
+fi
+
 say "환경 확인 — $HOST_ID · $(id -un) (uid $(id -u))"
-note "저장소    $ROOT $([ -w "$ROOT" ] && echo '(쓰기 가능)' || echo '(읽기 전용 — 빌드 스냅샷)')"
+note "코드      $(code_where)"
 note "유지 폴더 $DATA_DIR $(df -PTh "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print "(" $2 " · " $5 " 남음)"}')"
 note "설정 파일 $ENV_FILE"
 if [ -n "$MANAGER_URL_T" ]; then note "외부 주소 $MANAGER_URL_T · $ADMIN_API_URL_T — 브라우저가 연 주소의 ID 에 맞춰 요청마다 정함"
@@ -62,6 +92,7 @@ while :; do
 done
 
 bash "$ROOT/start.sh" || { note "기동 실패 — 위 메시지를 확인하세요 (로그 $LOGS)"; env_report; exit 1; }
+if [ "$ROOT" = "$CODE_DIR" ]; then rm -f "$DATA_DIR/code-fails"; fi   # 유지 폴더의 코드 사본으로 잘 떴다
 
 # 처음 만든 DB 라 설정이 비어 있으면 요구사항 설정을 한 번 넣는다 (이미 있으면 그대로 — Manager 에서 바꾼 값을 지키려고)
 n=$(admin /routes | python3 -c 'import json, sys; print(len(json.load(sys.stdin).get("data") or []))' 2>/dev/null)
@@ -89,6 +120,7 @@ handle() {  # 개발 파드가 remote.sh 로 맡긴 일 — 정해진 것만 한
       verify)      bash "$ROOT/verify.sh" ;;
       verify-full) bash "$ROOT/verify.sh" --full ;;
       switch|switch\ *) set -f; set -- $cmd; set +f; shift; bash "$ROOT/switch.sh" "$@" ;;   # 이름·상태는 switch.sh 가 확인
+      reload)      echo "코드를 다시 읽어 새로 띄웁니다 — 지금 $(code_where) → 유지 폴더 $(code_info "$CODE_DIR")"; RELOAD=1 ;;
       *)           echo "모르는 요청: $cmd"; false ;;
     esac
     echo "== 끝 — 종료 코드 $? · $(date '+%F %T') · $HOST_ID"
@@ -100,7 +132,12 @@ say "실행 중 — 이 명령이 떠 있는 동안 Kong 이 돕니다 (개발 �
 tick=0
 while :; do
   sleep 3 & wait $!
-  for f in "$REQ"/*.req; do [ -f "$f" ] && handle "$f"; done
+  for f in "$REQ"/*.req; do [ -f "$f" ] && handle "$f"; [ "${RELOAD:-0}" = 1 ] && break; done
+  if [ "${RELOAD:-0}" = 1 ]; then   # remote.sh update·rollback — 내리고, 시작 명령(빌드 스냅샷의 run.sh)부터 다시 — 거기서 코드를 고른다
+    say "코드를 다시 읽어 새로 띄웁니다"
+    bash "$ROOT/stop.sh"
+    exec bash "${KONG_POC_SNAPSHOT:-$ROOT}/run.sh"
+  fi
   tick=$((tick + 1)); [ $((tick % 5)) = 0 ] || continue          # 약 15초마다 상태 확인
   if ! kong_up || ! pg_ready || { [ -f "$PII_APP" ] && ! pii_running; }; then
     note "$(date '+%F %T') 멈춘 프로그램이 있어 다시 띄웁니다"

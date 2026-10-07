@@ -71,12 +71,18 @@ fi
 # 빌드하면 저장소 폴더는 스냅샷(읽기 전용)이 된다 — 비밀값이 저장소에 남아 있지 않고, 바뀌는 것은 모두 유지 폴더에 쓰는지
 if [ "$DATA_DIR" != "$ROOT/data" ]; then
   left=$(repo_leftovers)
-  if [ ! -w "$ROOT" ]; then
+  if [ "$ROOT" = "$DATA_DIR/code" ]; then
+    ok "코드 — 유지 폴더의 코드 사본으로 돎 ($(code_info "$ROOT")) · 갱신은 개발 파드에서 bash remote.sh update"
+  elif [ ! -w "$ROOT" ]; then
     ok "저장소 폴더 읽기 전용 (빌드 스냅샷) — 설정·라이선스·DB·로그는 유지 폴더에 씀"
     if [ -n "$left" ]; then warn "스냅샷에 DB 사본·비밀값이 들어 있음: $left — 다음 빌드 전에 개발 파드의 저장소 폴더에서 지우세요"; fi
   elif [ -n "$left" ]; then
     warn "빌드 전에 저장소 폴더에서 치울 것: $left — 빌드하면 스냅샷에 그대로 들어감 (DB 사본·설정 백업·비밀값. .env 는 bash status.sh 한 번이면 옮겨짐)"
   else ok "빌드 준비 — 저장소 폴더에 DB 사본·비밀값 없음 (.env 에는 유지 폴더 위치만)"; fi
+  if [ "$ROOT" != "$DATA_DIR/code" ] && [ -f "$DATA_DIR/code/run.sh" ]; then
+    if [ -w "$ROOT" ]; then ok "유지 폴더에 코드 사본 있음 — $(code_info "$DATA_DIR/code") · 빌드한 새 환경은 이 코드로 돈다 (갱신: bash remote.sh update)"
+    else warn "유지 폴더에 코드 사본이 있는데 빌드 스냅샷으로 돌고 있음 — 사본이 기동에 실패했을 수 있음 (연속 실패 $(cat "$DATA_DIR/code-fails" 2>/dev/null || echo 0)회 · bash remote.sh rollback 또는 고쳐서 update)"; fi
+  fi
 fi
 
 sec "2. 설치"
