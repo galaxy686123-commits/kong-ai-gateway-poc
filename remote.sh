@@ -6,6 +6,7 @@
 #   bash remote.sh restart       다시 띄우기 (접속 주소·포트·LLM 주소·라이선스를 바꾼 뒤)
 #   bash remote.sh verify        점검 · verify-full = 70초 장기 응답까지
 #   bash remote.sh switch [<이름> on|off]   /poc 플러그인·긴급 차단 켜고 끄기 (이름 없이 = 지금 상태) — switch.sh
+#   bash remote.sh vectors ['문장']   벡터 DB 에 들어 있는 것 (문장을 주면 가까운 것과 거리) — vectors.sh
 #   bash remote.sh update        빌드 없이 코드 갱신 — 이 저장소(git pull 한 것)를 유지 폴더의 code/ 에 넣고 새 환경이 그 코드로 다시 뜬다
 #   bash remote.sh rollback      바로 전 코드로 되돌림 (처음 update 전이면 빌드 스냅샷으로)
 #   결과는 화면에 보여 주고 <유지 폴더>/requests/done/ 에도 남는다.
@@ -19,7 +20,12 @@ case "$cmd" in
     [ $# -eq 1 ] || { [ $# -eq 3 ] && [[ "$2" =~ ^[A-Za-z0-9_-]+$ ]] && [[ "$3" =~ ^(on|off)$ ]]; } \
       || die "사용법: bash remote.sh switch <이름> on|off   (목록: bash remote.sh switch)"
     if [ $# -eq 3 ]; then cmd="switch $2 $3"; fi ;;
-  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full | switch [<이름> on|off] | update | rollback" ;;
+  vectors)  # 문장은 한 줄 · 300자까지 (요청 파일 한 줄로 전달)
+    if [ $# -ge 2 ]; then
+      q="${*:2}"; [ "${#q}" -le 300 ] && [[ "$q" != *$'\n'* ]] || die "문장은 한 줄 · 300자까지입니다"
+      cmd="vectors $q"
+    fi ;;
+  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full | switch [<이름> on|off] | vectors ['문장'] | update | rollback" ;;
 esac
 lock_read
 [ "$LOCK_HOST" != "$HOST_ID" ] || die "이 환경에서 직접 돌고 있습니다 — remote.sh 대신 스크립트를 바로 실행하세요 (status.sh · apply-config.sh · verify.sh …)"
@@ -29,7 +35,7 @@ REQ="$DATA_DIR/requests"
 mkdir -p "$REQ/done"
 send() {  # send <일> <기다릴 초> — 새 환경에 맡기고 결과를 보여 준다
   local c=$1 wait=$2 id
-  id="$(date +%Y%m%d-%H%M%S)-$$-${c// /_}"
+  id="$(date +%Y%m%d-%H%M%S)-$$-${c%% *}"   # 파일 이름에는 일 이름만 (문장이 들어가지 않게)
   printf '%s\n' "$c" > "$REQ/$id.req.tmp" && mv -f "$REQ/$id.req.tmp" "$REQ/$id.req"
   say "$LOCK_HOST 에 '$c' 를 맡겼습니다 — 결과를 기다립니다 (최대 $((wait / 60))분)"
   for _ in $(seq 1 "$wait"); do [ -f "$REQ/done/$id.log" ] && break; sleep 1; done
