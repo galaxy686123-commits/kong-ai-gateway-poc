@@ -345,7 +345,7 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
 | `pgdata/` | DB — Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
 | `logs/` | Kong 로그 전부 (아래 「로그」 표) · PostgreSQL · PII 가드 로그 |
 | `backup/` · `reports/` | 설정 백업(`dump-config.sh`) · 점검 기록(`verify.sh` 를 돌릴 때마다 저장) |
-| `prometheus/` | 지표 기록 — Grafana 그래프 (15일 · 2GB 까지, 다시 빌드해도 이어짐 · 네트워크 파일 시스템이면 로컬 디스크) |
+| `prometheus/` · `prometheus.id` | 지표 기록 사본 — 다시 빌드한 새 환경이 되살려 Grafana 그래프가 이어짐 (15일 · 2GB 까지 · 아래 「모니터링」) |
 | `settings.env` · `secrets/license.json` | 설정·라이선스 **원본** — `bash set-env.sh` · `bash set-license.sh` 로 고침. 저장소 `.env` 에는 이 폴더 위치 한 줄만 |
 | `run.lock` · `requests/` | 지금 이 폴더로 돌고 있는 환경의 기록(20초마다 갱신) · `remote.sh` 가 맡긴 일과 결과 |
 | `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
@@ -480,10 +480,13 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 - Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
 - Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`).
-- 지표 기록은 유지 폴더의 `prometheus/` 에 남아 다시 빌드해도 그래프가 이어집니다. 보관은 `PROM_RETENTION`(15d) ·
-  `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
-  예전 판이 로컬 디스크에 쌓은 기록은 새 코드로 처음 뜰 때 옮깁니다. 유지 폴더가 네트워크 파일 시스템(NFS 등)이면 로컬 디스크에 둡니다
-  (Prometheus 저장소는 NFS 를 지원하지 않음 — 이때는 예전처럼 다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
+- **다시 빌드해도 그래프가 이어집니다.** Prometheus 는 로컬 디스크(`~/.kong-poc/prometheus`)에서 돌고(저장소가 NFS 를 지원하지 않음),
+  유지 폴더의 `prometheus/` 에 사본을 둡니다 — 완성된 블록(2시간 단위)은 5분마다, 아직 블록이 되지 않은 최근 기록은 종료할 때
+  (종료 신호 → `stop.sh`, Prometheus 가 내려간 뒤). 새 환경이 뜰 때 로컬 기록이 그 사본에서 이어진 게 아니면 사본으로 되살립니다
+  (`prometheus.id` 로 가림 — 바꾸기 전 로컬 기록은 `~/.kong-poc/prometheus.prev` 에 한 벌).
+  종료 신호 없이 끊기면 최근 기록(최대 약 3시간)은 빠집니다. 사본 상태는 `bash status.sh`(지표 사본 줄) · `verify.sh` 3-3 · `logs/prometheus-copy.log`.
+- 보관은 `PROM_RETENTION`(15d) · `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
+  사본을 두지 않으려면 `PROM_PERSIST=off`(다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).
 
 ## 로그

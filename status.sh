@@ -23,6 +23,11 @@ if pii_running; then note "PII 가드     실행 중 (127.0.0.1:$PII_PORT)"; els
 if mock_running; then note "모의 서버    실행 중 (127.0.0.1:$MOCK_PORT — 시험용)"; else note "모의 서버    멈춤"; fi
 if mon_on; then
   if prom_running; then note "Prometheus   실행 중 (127.0.0.1:$PROM_PORT — Kong 지표 수집)"; else note "Prometheus   멈춤"; fi
+  if prom_persist; then   # 다시 빌드한 새 환경이 되살리는 사본 (lib.sh prom_copy)
+    a=$(prom_copy_age)
+    if [ -z "$a" ]; then note "지표 사본    아직 없음 ($DATA_DIR/prometheus)"
+    else note "지표 사본    $DATA_DIR/prometheus — $((a / 60))분 전 · 블록 $(prom_blocks "$DATA_DIR/prometheus" | wc -l | tr -d ' ')개$(if [ "$LOCK_HOST" = "$HOST_ID" ] && ! prom_copy_running; then echo ' · 5분마다 고치는 프로세스가 멈춤 (다시 띄우면 돎)'; fi)"; fi
+  fi
   if grafana_running; then note "Grafana      실행 중 (127.0.0.1:$GRAFANA_PORT — 프록시의 /grafana)"; else note "Grafana      멈춤"; fi
 fi
 if kong_up; then note "Kong         실행 중 (프록시 :$PROXY_PORT · Admin $BIND:$ADMIN_PORT · Manager $BIND:$MANAGER_PORT · 지표 :$STATUS_PORT)"

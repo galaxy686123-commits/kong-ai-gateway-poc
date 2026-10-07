@@ -354,8 +354,18 @@ print("사용자=%s 모델=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consum
     gh=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$P/grafana/api/health")
     nd=$(curl -s -m 5 -u "admin:${GRAFANA_ADMIN_PASSWORD:-}" "$P/grafana/api/search?type=dash-db" \
          | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
+    # 지표 기록 사본 — 다시 빌드한 새 환경이 되살린다 (lib.sh prom_copy, 5분마다)
+    cp_msg=""; cp_bad=""
+    if prom_persist; then
+      cp_age=$(prom_copy_age)
+      if prom_copy_running && [ -n "$cp_age" ] && [ "$cp_age" -lt 900 ]; then
+        cp_msg=" · 기록 사본 $((cp_age / 60))분 전(유지 폴더, 블록 $(prom_blocks "$DATA_DIR/prometheus" | wc -l | tr -d ' ')개)"
+      elif ! prom_copy_running; then cp_bad="3-3 지표 기록 사본 — 사본을 만드는 프로세스가 멈춤 · 다시 빌드하면 그래프가 처음부터 시작함 (다시 띄우면 돎 · $LOGS/prometheus-copy.log)"
+      else cp_bad="3-3 지표 기록 사본 — 15분 넘게 고쳐지지 않음 ($LOGS/prometheus-copy.log)"; fi
+    fi
     if [ "$up" = 1 ] && [ "$gh" = 200 ] && [ "${nd:-0}" -ge 1 ]; then
-      ok "3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모음(경보 규칙 ${nr:-?}개 계산) · Grafana 프록시 /grafana 200 · 대시보드 ${nd}개"
+      ok "3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모음(경보 규칙 ${nr:-?}개 계산) · Grafana 프록시 /grafana 200 · 대시보드 ${nd}개${cp_msg}"
+      if [ -n "$cp_bad" ]; then warn "$cp_bad"; fi
     else bad "3-3 모니터링 화면 — Prometheus up=${up:-?} · /grafana ${gh} · 대시보드 ${nd:-?}개 (bash status.sh · $LOGS/grafana.log · $LOGS/prometheus.log)"; fi
   fi
 

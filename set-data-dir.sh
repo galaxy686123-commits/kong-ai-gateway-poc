@@ -179,7 +179,7 @@ cat <<MSG
    logs/      요청 로그(audit.log) · Kong · PostgreSQL 로그
    backup/    설정 백업 (bash dump-config.sh)
    reports/   점검 기록 (bash verify.sh 를 돌릴 때마다)
-   prometheus/  지표 기록 — Grafana 그래프 (15일 · 2GB 까지, 네트워크 파일 시스템이면 로컬 디스크)
+   prometheus/  지표 기록 사본 — 다시 빌드한 새 환경이 되살려 Grafana 그래프가 이어짐 (15일 · 2GB 까지)
    settings.env · secrets/license.json   설정·라이선스 원본 (bash set-env.sh · bash set-license.sh)
  파드를 다시 만들었으면: 저장소를 받고 → bash set-data-dir.sh $1
  다음: bash verify.sh

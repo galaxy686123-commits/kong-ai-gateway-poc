@@ -265,6 +265,113 @@ mon_on() { case "${MONITORING:-on}" in on|true|yes|1) return 0 ;; *) return 1 ;;
 prom_running()    { [ -f "$RUN_DIR/prometheus.pid" ] && kill -0 "$(cat "$RUN_DIR/prometheus.pid")" 2>/dev/null; }
 grafana_running() { [ -f "$RUN_DIR/grafana.pid" ] && kill -0 "$(cat "$RUN_DIR/grafana.pid")" 2>/dev/null; }
 
+# 지표 기록 사본 — Prometheus 는 로컬 디스크(~/.kong-poc/prometheus)에서 돈다 (저장소가 NFS 를 지원하지 않는다).
+#   새 환경을 만들면 로컬 디스크가 비므로 유지 폴더에 사본(<유지 폴더>/kong-poc/prometheus)을 두고, 새 환경이 뜰 때 되살린다.
+#   사본에 넣는 것: 완성된 블록(2시간 단위로 생기고 바뀌지 않음) — 떠 있는 동안 5분마다
+#                  + 아직 블록이 되지 않은 최근 기록(wal · chunks_head) — 종료할 때, Prometheus 가 내려간 뒤.
+#   종료 신호 없이 끝나면 최근 기록(최대 약 3시간)은 빠진다. PROM_PERSIST=off 면 사본을 두지 않는다 (다시 빌드하면 처음부터).
+#   prometheus.id — 사본을 고칠 때마다 새 값을 유지 폴더와 로컬에 함께 적는다. 둘이 다르면 로컬 기록은 그 사본에서 이어진 것이
+#   아니다(그 뒤 다른 환경이 돌았다) → 뜰 때 사본으로 바꾸고, 그때까지 사본을 덮어쓰지 않는다.
+prom_persist() { case "${PROM_PERSIST:-on}" in on|true|yes|1) return 0 ;; *) return 1 ;; esac; }
+prom_blocks() {  # prom_blocks <폴더> — 완성된 블록 이름 (ULID 26자 · meta.json 있음)
+  local d
+  for d in "$1"/*/; do
+    d=${d%/}; d=${d##*/}
+    if [[ "$d" =~ ^[0-9A-HJKMNP-TV-Z]{26}$ ]] && [ -f "$1/$d/meta.json" ]; then echo "$d"; fi
+  done
+  return 0
+}
+prom_has() { [ -n "$(prom_blocks "$1")" ] || [ -d "$1/wal" ]; }   # 기록이 들어 있나
+prom_copy_age() {  # 마지막 사본 뒤 지난 초 (없으면 빈 값)
+  local id; id=$(cat "$DATA_DIR/prometheus.id" 2>/dev/null) || return 0
+  if [[ "${id%%-*}" =~ ^[0-9]+$ ]]; then echo $(( $(date +%s) - ${id%%-*} )); fi
+  return 0
+}
+prom_copy() {  # prom_copy [final] — 로컬 기록 → 유지 폴더 사본. final: Prometheus 가 내려간 뒤에만 (최근 기록까지)
+  local src="$RUN_DIR/prometheus" dst="$DATA_DIR/prometheus" pv loc id b x keep rc=0 add=0 del=0
+  [ -d "$src" ] || return 0
+  pv=$(cat "$DATA_DIR/prometheus.id" 2>/dev/null) || pv=""
+  loc=$(cat "$RUN_DIR/prometheus.id" 2>/dev/null) || loc=""
+  if prom_has "$dst" && { [ -z "$pv" ] || [ "$pv" != "$loc" ]; }; then
+    echo "$(date '+%F %T') 유지 폴더의 사본이 이 환경 기록의 앞부분이 아니라 덮어쓰지 않음 (사본 ${pv:-표시 없음} · 이 환경 ${loc:-표시 없음}) — 다음에 뜰 때 사본으로 바꾼다"
+    return 1
+  fi
+  mkdir -p "$dst" || return 1
+  chmod 700 "$dst" 2>/dev/null || true
+  # 고치기 전에 새 표시부터 — 도중에 끊겨도 다음 번이 이어서 고친다
+  id="$(date +%s)-$HOST_ID"
+  { echo "$id" > "$RUN_DIR/prometheus.id" && echo "$id" > "$DATA_DIR/prometheus.id.tmp" && mv -f "$DATA_DIR/prometheus.id.tmp" "$DATA_DIR/prometheus.id"; } || return 1
+  rm -rf "$dst"/*.tmp-for-creation "$dst"/*.tmp-for-deletion "$dst"/*.part "$dst"/*.old "$dst/lock" "$dst/queries.active"
+  keep=$(prom_blocks "$src")
+  for b in $keep; do   # 새 블록 — 다른 이름으로 복사했다가 아래에서 자리를 잡는다 (Prometheus 는 *.tmp-for-creation 을 읽지 않고 뜰 때 지운다)
+    if [ -d "$dst/$b" ]; then continue; fi
+    if cp -R "$src/$b" "$dst/$b.tmp-for-creation" 2>/dev/null; then add=$((add + 1))
+    else
+      rm -rf "$dst/$b.tmp-for-creation"   # 복사하는 사이 합쳐져 없어진 블록 등 — 다음 번에
+      if [ -d "$src/$b" ]; then rc=1; fi
+    fi
+  done
+  for b in $(prom_blocks "$dst"); do   # 로컬에서 없어진 블록(합쳐짐 · 보관 기간 지남) — 지울 표시를 붙인 뒤 지운다
+    if ! grep -qxF "$b" <<<"$keep"; then
+      if mv "$dst/$b" "$dst/$b.tmp-for-deletion"; then del=$((del + 1)); else rc=1; fi
+    fi
+  done
+  for x in "$dst"/*.tmp-for-creation; do
+    if [ -d "$x" ]; then mv "$x" "${x%.tmp-for-creation}" || rc=1; fi
+  done
+  rm -rf "$dst"/*.tmp-for-deletion
+  if [ "${1:-}" = final ] && [ -d "$src/wal" ]; then   # 최근 기록 — 다 복사한 뒤 한꺼번에 바꾼다
+    rm -rf "$dst/head.part"
+    if mkdir -p "$dst/head.part" && cp -R "$src/wal" "$dst/head.part/wal" \
+       && { [ ! -d "$src/chunks_head" ] || cp -R "$src/chunks_head" "$dst/head.part/chunks_head"; }; then
+      rm -rf "$dst/wal" "$dst/chunks_head"
+      mv "$dst/head.part/wal" "$dst/wal" || rc=1
+      if [ -d "$dst/head.part/chunks_head" ]; then mv "$dst/head.part/chunks_head" "$dst/chunks_head" || rc=1; fi
+    else rc=1; fi
+    rm -rf "$dst/head.part"
+  fi
+  if [ "$add$del" != 00 ] || [ "$rc" != 0 ] || [ "${1:-}" = final ]; then
+    echo "$(date '+%F %T') 사본 $([ "$rc" = 0 ] && echo 갱신 || echo '일부 실패') — 블록 +$add · -$del$([ "${1:-}" = final ] && echo ' · 최근 기록 포함') (블록 $(prom_blocks "$dst" | wc -l | tr -d ' ')개)"
+  fi
+  return $rc
+}
+prom_restore() {  # Prometheus 가 내려가 있을 때 — 로컬 기록이 사본에서 이어진 게 아니면 사본으로 바꾼다 → 0 바꿈 · 1 그대로 · 2 실패
+  local src="$DATA_DIR/prometheus" dst="$RUN_DIR/prometheus" pv loc b x
+  prom_has "$src" || return 1
+  pv=$(cat "$DATA_DIR/prometheus.id" 2>/dev/null) || pv=""
+  loc=$(cat "$RUN_DIR/prometheus.id" 2>/dev/null) || loc=""
+  if [ -n "$pv" ] && [ "$pv" = "$loc" ] && prom_has "$dst"; then return 1; fi   # 로컬이 사본에서 이어짐 — 로컬이 더 새것
+  rm -rf "$dst.part"
+  mkdir -p "$dst.part" || return 2
+  for b in $(prom_blocks "$src"); do cp -R "$src/$b" "$dst.part/$b" || { rm -rf "$dst.part"; return 2; }; done
+  if [ -d "$src/wal" ]; then   # 최근 기록은 wal 이 있을 때만 (chunks_head 만 있으면 쓸 수 없다)
+    for x in wal chunks_head; do
+      if [ -d "$src/$x" ]; then cp -R "$src/$x" "$dst.part/$x" || { rm -rf "$dst.part"; return 2; }; fi
+    done
+  fi
+  rm -rf "$dst.prev"
+  if [ -e "$dst" ]; then mv "$dst" "$dst.prev" || { rm -rf "$dst.part"; return 2; }; fi   # 바꾸기 전 로컬 기록은 한 벌 남긴다
+  mv "$dst.part" "$dst" || return 2
+  chmod 700 "$dst"
+  if [ -z "$pv" ]; then   # 표시 없는 사본 (예전 판이 유지 폴더에서 바로 쓴 기록) — 이 환경의 것으로 표시
+    pv="$(date +%s)-$HOST_ID"; echo "$pv" > "$DATA_DIR/prometheus.id"
+  fi
+  echo "$pv" > "$RUN_DIR/prometheus.id"
+  return 0
+}
+prom_copy_running() { [ -f "$RUN_DIR/prom-copy.pid" ] && kill -0 "$(cat "$RUN_DIR/prom-copy.pid")" 2>/dev/null; }
+prom_copy_start() {  # 떠 있는 동안 5분마다 사본 (첫 사본은 바로) — 기록 $LOGS/prometheus-copy.log
+  if ! prom_persist || prom_copy_running; then return 0; fi
+  RUN_DIR=$RUN_DIR DATA_DIR=$DATA_DIR setsid nohup bash -c 'source "$1/lib.sh"; set +e
+    while :; do prom_copy; sleep "${PROM_COPY_EVERY:-300}"; done' _ "$ROOT" >> "$LOGS/prometheus-copy.log" 2>&1 < /dev/null &
+  echo $! > "$RUN_DIR/prom-copy.pid"
+}
+prom_copy_stop() {  # 사본을 만들던 중이면 복사(cp)까지 함께 내린다 — 남은 조각은 다음 prom_copy 가 치운다
+  local p; p=$(cat "$RUN_DIR/prom-copy.pid" 2>/dev/null) || p=""
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; fi
+  rm -f "$RUN_DIR/prom-copy.pid"
+}
+
 # ── PostgreSQL (ds_user 권한으로 실행, 데이터는 DATA_DIR) ─────────────
 psql_su() { PGOPTIONS="-c client_min_messages=warning" "$PG_BIN/psql" -h "$RUN_DIR" -p "$PG_PORT" -U postgres -v ON_ERROR_STOP=1 -qAt "$@"; }
 pg_ready() { "$PG_BIN/pg_isready" -q -h "$RUN_DIR" -p "$PG_PORT" 2>/dev/null; }
