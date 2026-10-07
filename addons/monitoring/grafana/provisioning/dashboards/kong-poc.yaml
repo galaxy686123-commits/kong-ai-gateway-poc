@@ -1,0 +1,10 @@
+# 대시보드 — 저장소의 JSON 을 그대로 읽는다 (화면에서 고쳐도 저장되지 않음, 고치려면 JSON 을 바꾼다)
+apiVersion: 1
+providers:
+  - name: kong-poc
+    folder: Kong AI Gateway PoC
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: ${KONG_POC_DASHBOARDS}

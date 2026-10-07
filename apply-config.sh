@@ -100,6 +100,8 @@ opt 60-otel     "${DECK_OTEL_ENDPOINT:-}" "분산 추적 → ${DECK_OTEL_ENDPOIN
 opt 61-http-log "${DECK_LOG_HTTP_URL:-}"  "중앙 로그 → ${DECK_LOG_HTTP_URL:-}"     "DECK_LOG_HTTP_URL 없음"
 EMB=""; [ -n "${DECK_EMBED_URL:-}" ] && [ -n "${DECK_EMBED_MODEL:-}" ] && EMB=1
 opt 70-semantic "$EMB" "의미 기반 가드·시맨틱 캐시" "임베딩 모델 없음 (DECK_EMBED_URL·DECK_EMBED_MODEL)"
+MON=""; mon_on && MON=1
+opt 80-monitoring "$MON" "모니터링 화면 /grafana — Prometheus · Grafana (3-3)" "MONITORING=off"
 FS=""; [ -n "$EMB" ] && [ -n "$F" ] && FS=1
 opt 21-areas-semantic "$FS" "영역 ④ 의미 기반 가드 — 질문(4-3)·답변(4-4)" \
     "$([ -z "$EMB" ] && echo '임베딩 모델 없음' || echo '영역별 시험 경로 없음')"

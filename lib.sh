@@ -218,12 +218,17 @@ KONG_VER=3.16.0.0
 KONG_DEB=kong-enterprise-edition_${KONG_VER}_amd64.deb
 DECK_VER=1.65.1
 DECK_TGZ=deck_${DECK_VER}_linux_amd64.tar.gz
+# 3-3 모니터링 — Prometheus(지표 모으기, Ubuntu 저장소에서 apt) · Grafana(대시보드)
+GRAFANA_VER=12.4.12
+GRAFANA_PKG=grafana-${GRAFANA_VER}.slim.tar.xz   # 공식 배포본에서 디버그 정보·소스맵·문서를 뺀 것 — pkgs/ 에 조각(.part-NN)으로
 
 native_env() {  # load_env 다음에 부른다
   : "${PKGS_DIR:=$ROOT/pkgs}"               # 설치 파일 (Kong .deb · decK) — 저장소에 포함
   : "${DATA_DIR:=$ROOT/data}"                # DB·로그 — 파드를 다시 만들어도 남는 곳 (bash set-data-dir.sh <유지 폴더>)
   : "${RUN_DIR:=$HOME/.kong-poc}"            # 실행 중에만 필요한 파일(소켓·pid) — 로컬 디스크
   : "${PG_PORT:=5432}" "${PII_PORT:=18080}" "${MOCK_PORT:=18090}" "${STATUS_PORT:=8100}" "${KONG_WORKERS:=2}"
+  : "${PROM_PORT:=9090}" "${GRAFANA_PORT:=3000}"
+  GRAFANA_HOME=$RUN_DIR/grafana-$GRAFANA_VER
   LOGS=$DATA_DIR/logs
   KONG_PREFIX=$RUN_DIR/kong
   PII_APP=$ROOT/addons/pii-guard/app.py
@@ -251,8 +256,14 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # 파드를 다시 만들면 apt 로 깐 프로그램은 사라진다 → 하나라도 없으면 install.sh 를 다시 돌린다
 installed() {
   [ -x "$PG_BIN/postgres" ] && [ -f "/usr/share/postgresql/$PG_VER/extension/vector.control" ] \
-    && have deck && [ "$(kong version 2>/dev/null | awk '{print $NF}')" = "$KONG_VER" ]
+    && have deck && [ "$(kong version 2>/dev/null | awk '{print $NF}')" = "$KONG_VER" ] \
+    && { ! mon_on || { have prometheus && [ -x "$GRAFANA_HOME/bin/grafana" ]; }; }
 }
+
+# ── 3-3 모니터링 — MONITORING=on(기본)이면 Prometheus 가 Kong 지표(:8100)를 모으고 Grafana 가 /grafana 로 보여 준다 ──
+mon_on() { case "${MONITORING:-on}" in on|true|yes|1) return 0 ;; *) return 1 ;; esac; }
+prom_running()    { [ -f "$RUN_DIR/prometheus.pid" ] && kill -0 "$(cat "$RUN_DIR/prometheus.pid")" 2>/dev/null; }
+grafana_running() { [ -f "$RUN_DIR/grafana.pid" ] && kill -0 "$(cat "$RUN_DIR/grafana.pid")" 2>/dev/null; }
 
 # ── PostgreSQL (ds_user 권한으로 실행, 데이터는 DATA_DIR) ─────────────
 psql_su() { PGOPTIONS="-c client_min_messages=warning" "$PG_BIN/psql" -h "$RUN_DIR" -p "$PG_PORT" -U postgres -v ON_ERROR_STOP=1 -qAt "$@"; }
@@ -342,7 +353,7 @@ deck_env() {
   # 이 파드 안의 주소
   DECK_AUDIT_LOG="$LOGS/audit.log"; DECK_PG_HOST=127.0.0.1; DECK_PG_PORT="$PG_PORT"
   DECK_PII_URL="http://127.0.0.1:$PII_PORT/check"; DECK_KONG_LOOPBACK="http://127.0.0.1:$PROXY_PORT"
-  DECK_MOCK_URL="http://127.0.0.1:$MOCK_PORT"
+  DECK_MOCK_URL="http://127.0.0.1:$MOCK_PORT"; DECK_GRAFANA_URL="http://127.0.0.1:$GRAFANA_PORT"
   # 정책 기본값 — .env 에서 바꿀 수 있다
   : "${DECK_RPM:=60}" "${DECK_RPD:=5000}" "${DECK_TPM:=20000}" "${DECK_OCR_MAX_MB:=50}"
   : "${DECK_DLP_PATTERN:=(?i)(?:대외비|기밀|사내\s*한정|confidential)}"

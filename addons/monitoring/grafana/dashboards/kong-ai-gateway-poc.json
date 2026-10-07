@@ -1,0 +1,979 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "개요",
+      "type": "row"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60"
+        }
+      ],
+      "title": "전체 요청 /분",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum(rate(kong_ai_llm_requests_total[5m]))*60"
+        }
+      ],
+      "title": "LLM 요청 /분",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum(rate(kong_ai_llm_tokens_total{token_type=\"total_tokens\"}[5m]))*60"
+        }
+      ],
+      "title": "토큰 /분",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 200
+              }
+            ]
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))"
+        }
+      ],
+      "title": "게이트웨이 오버헤드 p95",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "100*sum(rate(kong_http_requests_total{route!=\"grafana\",code=~\"4..\"}[5m]))/clamp_min(sum(rate(kong_http_requests_total{route!=\"grafana\"}[5m])),0.0001)"
+        }
+      ],
+      "title": "차단 비율 (4xx)",
+      "type": "stat"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 14
+              },
+              {
+                "color": "green",
+                "value": 45
+              }
+            ]
+          },
+          "unit": "suffix: 일"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "(kong_enterprise_license_expiration - time())/86400"
+        }
+      ],
+      "title": "라이선스 만료까지",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 101,
+      "title": "트래픽",
+      "type": "row"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "id": 10,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(ai_provider)(rate(kong_ai_llm_requests_total[5m]))*60",
+          "legendFormat": "{{ai_provider}}"
+        }
+      ],
+      "title": "프로바이더별 LLM 요청 /분",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 11,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(ai_model)(rate(kong_ai_llm_tokens_total{token_type=\"prompt_tokens\"}[5m]))*60",
+          "legendFormat": "{{ai_model}} prompt"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(ai_model)(rate(kong_ai_llm_tokens_total{token_type=\"completion_tokens\"}[5m]))*60",
+          "legendFormat": "{{ai_model}} completion"
+        }
+      ],
+      "title": "모델별 토큰 /분",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 102,
+      "title": "지연 — 게이트웨이 오버헤드와 LLM 응답을 분리해서 본다",
+      "type": "row"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 20,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "title": "게이트웨이 오버헤드 (Kong 자체)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 21,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by(le)(rate(kong_upstream_latency_ms_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_upstream_latency_ms_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "title": "업스트림 LLM 응답",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 22,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le,ai_provider)(rate(kong_ai_llm_provider_latency_ms_bucket[5m])))",
+          "legendFormat": "{{ai_provider}}"
+        }
+      ],
+      "title": "프로바이더별 응답 p95",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 23,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(rate(kong_ai_llm_ttft_latency_ms_bucket[5m])))",
+          "legendFormat": "{{ai_model}}"
+        }
+      ],
+      "title": "첫 토큰까지 (TTFT) p95",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 24,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(rate(kong_ai_llm_tpot_latency_ms_bucket[5m])))",
+          "legendFormat": "{{ai_model}}"
+        }
+      ],
+      "title": "토큰 간 지연 (TPOT) p95",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 103,
+      "title": "거버넌스 · 감사",
+      "type": "row"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 30,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(consumer)(rate(kong_http_requests_total{route!=\"grafana\",consumer!=\"\"}[5m]))*60",
+          "legendFormat": "{{consumer}}"
+        }
+      ],
+      "title": "팀(Consumer)별 요청 /분",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "id": 31,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(code)(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60",
+          "legendFormat": "{{code}}"
+        }
+      ],
+      "title": "응답 코드별 /분 — 4xx = 정책 차단",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "id": 32,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(route)(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "title": "라우트별 요청 /분",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 104,
+      "title": "시맨틱 캐시",
+      "type": "row"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 40,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(cache_status)(rate(kong_ai_llm_requests_total{cache_status!=\"\"}[5m]))*60",
+          "legendFormat": "{{cache_status}}"
+        }
+      ],
+      "title": "캐시 상태별 요청 /분",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "id": 41,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_cache_fetch_latency_ms_bucket[5m])))",
+          "legendFormat": "캐시 조회"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_cache_embeddings_latency_ms_bucket[5m])))",
+          "legendFormat": "임베딩 생성"
+        }
+      ],
+      "title": "캐시 조회 / 임베딩 지연 p95",
+      "type": "timeseries"
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "PoC — 사용자 · 모델 · 정책",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "panels": []
+    },
+    {
+      "id": 106,
+      "type": "timeseries",
+      "title": "사용자(부서)별 토큰 /분",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(consumer)(rate(kong_ai_llm_tokens_total{token_type=\"total_tokens\",consumer!=\"\"}[5m]))*60",
+          "legendFormat": "{{consumer}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "type": "timeseries",
+      "title": "모델별 LLM 요청 /분 — 요청의 model 로 고른 결과",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(ai_model)(rate(kong_ai_llm_requests_total{ai_model!=\"UNSPECIFIED\"}[5m]))*60",
+          "legendFormat": "{{ai_model}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "type": "bargauge",
+      "title": "사용자별 예상 비용 — 선택한 기간",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(consumer)(increase(kong_ai_llm_cost_total{consumer!=\"\"}[$__range]))",
+          "legendFormat": "{{consumer}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "type": "timeseries",
+      "title": "정책 차단 /분 — 400 가드 · 401·403 인증·접근 · 429 한도 · 503 긴급 차단",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(code)(rate(kong_http_requests_total{route!=\"grafana\",code=~\"400|401|403|429|503\"}[5m]))*60",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "type": "timeseries",
+      "title": "영역별 시험 경로 요청 /분 — /poc/1 ~ /poc/4",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "sum by(route)(rate(kong_http_requests_total{route=~\"poc-.*\"}[5m]))*60",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "type": "timeseries",
+      "title": "답변 검사(가드레일) 지연 p95",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_custom_guardrail_latency_ms_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "kong",
+    "ai-gateway",
+    "poc"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Kong AI Gateway PoC",
+  "uid": "kong-ai-gateway-poc",
+  "description": "요구사항 3-3 — 사용자·모델·경로별 호출, 토큰·비용, 게이트웨이 오버헤드와 LLM 지연, 정책 차단, 라이선스 남은 날"
+}

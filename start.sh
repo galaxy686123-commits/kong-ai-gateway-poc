@@ -5,7 +5,7 @@
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
 
-say "0/5 라이선스 확인"
+say "0/6 라이선스 확인"
 license_state
 case "$LIC_STATE" in
   valid) if [ "$LIC_DAYS" -le 30 ]; then note "⚠ 라이선스 만료 임박: $LIC_MSG"; else note "라이선스 $LIC_MSG"; fi ;;
@@ -13,11 +13,11 @@ case "$LIC_STATE" in
   *)     note "⚠ $LIC_MSG — Kong 이 읽기 전용으로 뜹니다 (설치·접속 시험은 가능, 설정 적용은 라이선스가 필요)" ;;
 esac
 
-say "1/5 프로그램 확인"
+say "1/6 프로그램 확인"
 if installed; then note "PostgreSQL·pgvector·Kong·decK 모두 있음"
 else note "빠진 프로그램이 있어 설치합니다"; "$ROOT/install.sh"; fi
 
-say "2/5 PostgreSQL"
+say "2/6 PostgreSQL"
 PGD=$(pg_datadir)
 # DB 폴더는 그 주인만 쓸 수 있다 — 빌드한 새 환경이 다른 사용자로 돌면 DB 가 뜨지 않는다
 if [ -f "$PGD/PG_VERSION" ] && [ "$(stat -c %u "$PGD")" != "$(id -u)" ]; then
@@ -79,7 +79,7 @@ if ! grep -qxF "$HBA" "$PGD/pg_hba.conf"; then
 fi
 note "DB 준비됨 (kong · kong-pgvector + vector)"
 
-say "3/5 Kong DB 마이그레이션"
+say "3/6 Kong DB 마이그레이션"
 kong_env
 out=$(kong migrations bootstrap 2>&1) || true
 if grep -qi "already bootstrapped" <<<"$out"; then
@@ -94,7 +94,7 @@ else
   echo "$out" | tail -5; die "마이그레이션 실패"
 fi
 
-say "4/5 보조 서비스 — 한국어 PII 가드 · 시험용 모의 서버"
+say "4/6 보조 서비스 — 한국어 PII 가드 · 시험용 모의 서버"
 start_py() {  # 이름 pid파일 포트 앱 [환경변수...]
   local name=$1 pidf=$2 port=$3 app=$4; shift 4
   if [ ! -f "$app" ]; then note "$name: 소스가 없어 건너뜀 ($app)"; return 0; fi
@@ -111,7 +111,7 @@ pii_env=(LLM_ENABLED="${PII_LLM_ENABLED:-false}" LLM_URL="${PII_LLM_URL:-}" LLM_
 start_py "PII 가드" "$RUN_DIR/pii.pid" "$PII_PORT" "$PII_APP" "${pii_env[@]}"
 start_py "모의 서버" "$RUN_DIR/mock.pid" "$MOCK_PORT" "$MOCK_APP"
 
-say "5/5 Kong Gateway"
+say "5/6 Kong Gateway"
 if kong_up; then note "이미 실행 중"
 else
   kong_hosts || true                         # LLM 주소의 IP 에 붙인 이름 (lib.sh)
@@ -123,6 +123,84 @@ else
 fi
 fix_log_path      # 유지 폴더가 다른 경로로 붙은 환경이면 요청 로그 위치를 맞춘다 (lib.sh)
 
+say "6/6 모니터링 — Prometheus · Grafana (3-3)"
+if ! mon_on; then note "건너뜀 (MONITORING=off)"
+else
+  # Prometheus — Kong 지표(:$STATUS_PORT)를 15초마다 모으고 경보 규칙(alerts/)을 계산한다. 기록은 로컬 디스크(다시 빌드하면 처음부터)
+  if prom_running; then note "Prometheus: 이미 실행 중 (127.0.0.1:$PROM_PORT)"
+  else
+    mkdir -p "$RUN_DIR/prometheus"
+    cat > "$RUN_DIR/prometheus.yml" <<YML
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+rule_files:
+  - $ROOT/alerts/kong-alerts.yml
+scrape_configs:
+  - job_name: kong
+    static_configs:
+      - targets: ["127.0.0.1:$STATUS_PORT"]
+YML
+    setsid nohup prometheus --config.file="$RUN_DIR/prometheus.yml" --storage.tsdb.path="$RUN_DIR/prometheus" \
+      --storage.tsdb.retention.time=15d --web.listen-address="127.0.0.1:$PROM_PORT" >> "$LOGS/prometheus.log" 2>&1 < /dev/null &
+    echo $! > "$RUN_DIR/prometheus.pid"
+    for _ in $(seq 1 30); do curl -s -m 2 "http://127.0.0.1:$PROM_PORT/-/ready" >/dev/null && break; sleep 1; done
+    curl -s -m 2 "http://127.0.0.1:$PROM_PORT/-/ready" >/dev/null || { tail -5 "$LOGS/prometheus.log" | sed 's/^/  | /'; die "Prometheus 기동 실패 ($LOGS/prometheus.log)"; }
+    note "Prometheus: 시작됨 (127.0.0.1:$PROM_PORT — Kong 지표 15초마다, 15일 보관)"
+  fi
+  # Grafana — 프록시의 /grafana 경로로 연다(Kong 이 넘김). 관리자 비밀번호가 없으면 만들어 설정 파일에 적는다
+  if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    GRAFANA_ADMIN_PASSWORD=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(20)))')
+    env_set GRAFANA_ADMIN_PASSWORD "$GRAFANA_ADMIN_PASSWORD" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
+    note "Grafana 관리자 비밀번호를 만들어 설정 파일에 적었습니다 (GRAFANA_ADMIN_PASSWORD)"
+  fi
+  if grafana_running; then note "Grafana: 이미 실행 중 (127.0.0.1:$GRAFANA_PORT)"
+  else
+    mkdir -p "$RUN_DIR/grafana-data/plugins"
+    cat > "$RUN_DIR/grafana.ini" <<INI
+[paths]
+data = $RUN_DIR/grafana-data
+logs = $LOGS
+plugins = $RUN_DIR/grafana-data/plugins
+provisioning = $ROOT/addons/monitoring/grafana/provisioning
+[server]
+http_addr = 127.0.0.1
+http_port = $GRAFANA_PORT
+root_url = %(protocol)s://%(domain)s/grafana/
+serve_from_sub_path = true
+[security]
+admin_user = admin
+[users]
+allow_sign_up = false
+[auth.anonymous]
+enabled = false
+[analytics]
+reporting_enabled = false
+check_for_updates = false
+check_for_plugin_updates = false
+feedback_links_enabled = false
+[news]
+news_feed_enabled = false
+[plugins]
+preinstall_disabled = true
+[dashboards]
+default_home_dashboard_path = $ROOT/addons/monitoring/grafana/dashboards/kong-ai-gateway-poc.json
+[log]
+mode = console
+level = warn
+INI
+    env GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" PROM_PORT="$PROM_PORT" \
+        KONG_POC_DASHBOARDS="$ROOT/addons/monitoring/grafana/dashboards" \
+      setsid nohup "$GRAFANA_HOME/bin/grafana" server --homepath "$GRAFANA_HOME" --config "$RUN_DIR/grafana.ini" \
+      >> "$LOGS/grafana.log" 2>&1 < /dev/null &
+    echo $! > "$RUN_DIR/grafana.pid"
+    for _ in $(seq 1 60); do curl -s -m 2 "http://127.0.0.1:$GRAFANA_PORT/grafana/api/health" | grep -q database && break; sleep 1; done
+    curl -s -m 2 "http://127.0.0.1:$GRAFANA_PORT/grafana/api/health" | grep -q database \
+      || { tail -5 "$LOGS/grafana.log" | sed 's/^/  | /'; die "Grafana 기동 실패 ($LOGS/grafana.log)"; }
+    note "Grafana: 시작됨 (127.0.0.1:$GRAFANA_PORT — 프록시의 /grafana 로 연다, admin / GRAFANA_ADMIN_PASSWORD)"
+  fi
+fi
+
 cat <<MSG
 
 ──────────────────────────────────────────────
@@ -131,6 +209,7 @@ cat <<MSG
  프록시        http://127.0.0.1:$PROXY_PORT   (파드 안) · http://<파드 IP>:$PROXY_PORT
  Kong Manager  $MANAGER_URL/
                kong_admin / 설정 파일의 KONG_ADMIN_PASSWORD
+ Grafana       <프록시 주소>/grafana/   admin / 설정 파일의 GRAFANA_ADMIN_PASSWORD  (MONITORING=on)
  설정 파일     $ENV_FILE
  데이터·로그   $DATA_DIR
  다음          bash apply-config.sh   요구사항별 설정 적용 (라이선스 필요)

@@ -117,7 +117,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | 2-4 | 토큰·비용 한도 429 | 사용자별 분당 토큰·예상 비용(`ai-rate-limiting-advanced` — `total_tokens`·`cost`) | 10 · 20 | ② `/poc/2` 분당 40토큰 · 예상 비용 0.1 |
 | 3-1 | 감사 로그 (MN-02-76) | 요청마다 한 줄(`file-log`) + 중앙 저장소 전송(`http-log`) · 관리 작업 이력(DB) | 00 · 61 | ③ `/poc/3` 추적 ID 로 기록 찾기 |
 | 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID |
-| 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 | 00 · `alerts/` | `:8100/metrics` |
+| 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
 | 3-4 | Kill-Switch (MN-01-73) | 계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단 | 00 · 10 · 20 · 40 | ③ `/poc/3` 스위치를 `--full` 에서 켰다 끔 |
 | 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (`pre-function`) | 00 | ④ `/poc/4` 모의 LLM 이 받은 질문 확인 |
 | 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 외부로 갈 수 있는 경로에서 400 (`ai-prompt-guard`) | 10 · 12 · 20 | ④ `/poc/4` |
@@ -316,11 +316,11 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력) |
 | `set-data-dir.sh` | **유지 폴더(PV) 지정** — 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
 | `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
-| `stop.sh` | 정지 (데이터는 남김) |
+| `stop.sh` | 정지 (데이터는 남김) — Kong·PostgreSQL·PII 가드·모의 서버·Prometheus·Grafana |
 | `install.sh` | 프로그램만 설치 (`start.sh` 가 필요할 때 부름) |
 | `kong-check.sh` | 설치 전 환경 점검 |
 
-- 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090`.
+- 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090` · Prometheus `127.0.0.1:9090` · Grafana `127.0.0.1:3000`(프록시의 `/grafana`).
 
 ### 유지 폴더 (파드를 다시 만들어도 남길 파일)
 
@@ -351,7 +351,7 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
   했더라도 유지 폴더의 설정을 쓰고 새로 만든 것은 `settings.env.from-repo-<시각>` 으로 보관합니다).
 - 예전 방식(저장소 `.env` 가 원본, 유지 폴더엔 사본)으로 쓰던 저장소는 새 버전을 받은 뒤 아무 스크립트나 한 번(`bash status.sh`) 실행하면
   설정·라이선스가 유지 폴더로 옮겨집니다.
-- 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090`.
+- 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090` · Prometheus `127.0.0.1:9090` · Grafana `127.0.0.1:3000`(프록시의 `/grafana`).
 
 ### 빌드해서 새 환경으로 돌리기
 
@@ -425,6 +425,24 @@ bash set-license.sh <새 라이선스 파일> && bash remote.sh restart         
   (Manager 에서 바꾼 값을 지키려고).
 
 ---
+
+## 모니터링 — Grafana (3-3)
+
+`MONITORING=on`(기본)이면 파드 안에 **Prometheus**(Kong 지표 `:8100` 를 15초마다 모으고 `alerts/kong-alerts.yml` 경보 규칙을 계산)와
+**Grafana 12.4.12** 가 뜹니다. 화면은 **프록시 주소의 `/grafana/`** 입니다 — 플랫폼이 이미 열어 준 8000 주소를 쓰므로 포트를 새로 열지 않습니다.
+
+```
+https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_ADMIN_PASSWORD (비어 있으면 처음 기동할 때 만들어 적음)
+```
+
+| 대시보드 | 내용 |
+|---|---|
+| Kong AI Gateway PoC (첫 화면) | 요청·LLM 요청·토큰 /분 · 게이트웨이 오버헤드와 LLM 지연(TTFT·TPOT) · 사용자·모델별 토큰·비용 · 정책 차단 · 영역별 시험 경로 · 라이선스 남은 날 |
+| Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
+
+- Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
+- Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`). 지표 기록은 로컬 디스크라 새 환경을 다시 만들면 처음부터입니다.
+- 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).
 
 ## 로그
 

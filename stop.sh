@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stop.sh — Kong·PII 가드·모의 서버·PostgreSQL 을 내린다. 데이터(DATA_DIR)는 남긴다.
+# stop.sh — Kong·PII 가드·모의 서버·Prometheus·Grafana·PostgreSQL 을 내린다. 데이터(DATA_DIR)는 남긴다.
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
 say "정지"
@@ -8,6 +8,10 @@ if pii_running; then kill "$(pii_pid)" && note "PII 가드 정지"; fi
 rm -f "$RUN_DIR/pii.pid"
 if mock_running; then kill "$(mock_pid)" && note "모의 서버 정지"; fi
 rm -f "$RUN_DIR/mock.pid"
+if grafana_running; then kill "$(cat "$RUN_DIR/grafana.pid")" && note "Grafana 정지"; fi
+rm -f "$RUN_DIR/grafana.pid"
+if prom_running; then kill "$(cat "$RUN_DIR/prometheus.pid")" && note "Prometheus 정지"; fi
+rm -f "$RUN_DIR/prometheus.pid"
 PGD=$(pg_datadir)
 if pg_ready; then "$PG_BIN/pg_ctl" -D "$PGD" -m fast -w stop >/dev/null && note "PostgreSQL 정지"; fi
 lock_release     # 실행 기록을 지운다 — 이제 다른 환경(빌드한 새 환경 등)이 이 유지 폴더로 뜰 수 있다

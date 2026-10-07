@@ -1,5 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 #  3-3 이상 징후 경보 — Prometheus 경보 규칙 예시 (고객 Prometheus·Alertmanager 에 넣어 쓴다)
+#  번들의 Prometheus(MONITORING=on)도 이 파일을 읽어 계산한다 — Grafana 의 Alerting 화면에서 상태를 본다 (알림 발송은 없음).
 #  수집 대상: http://<Kong 파드>:8100/metrics  (Kong prometheus 플러그인 — 사용자·라우트별 지표)
 #  임계값은 PoC 예시다. 평소 사용량을 보고 조정한다.
 # ─────────────────────────────────────────────────────────────
@@ -16,7 +17,7 @@ groups:
 
       # 토큰 사용 급증 — 비용 폭탄 징후
       - alert: KongConsumerTokenSpike
-        expr: sum by (consumer) (rate(kong_ai_llm_tokens_total[5m])) * 60 > 50000
+        expr: sum by (consumer) (rate(kong_ai_llm_tokens_total{token_type="total_tokens"}[5m])) * 60 > 50000
         for: 5m
         labels: {severity: warning}
         annotations:

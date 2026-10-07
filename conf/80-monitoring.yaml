@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────
+#  3-3 모니터링 화면 — 프록시 주소의 /grafana 를 파드 안 Grafana 로 넘긴다 (MONITORING=on 일 때)
+#  플랫폼이 이미 열어 준 8000(api-…) 주소를 그대로 쓰므로 포트를 새로 열 필요가 없다.
+#  키 인증은 없다 — Grafana 로그인(admin / GRAFANA_ADMIN_PASSWORD)이 막는다.
+#  preserve_host: Grafana 가 요청 주소와 Origin 을 비교해 로그인(POST)을 받는다 (CSRF 검사).
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+services:
+  - name: grafana
+    url: ${{ env "DECK_GRAFANA_URL" }}
+    routes:
+      - name: grafana
+        paths: [/grafana]
+        strip_path: false
+        preserve_host: true
+        protocols: [http, https]
+        plugins:
+          # 화면 요청(정적 파일·새로고침)은 요청 로그와 지표에 남기지 않는다 — 전역 플러그인을 이 경로에서만 덮어쓴다
+          - name: file-log
+            config:
+              path: /dev/null
+          - name: prometheus
+            config:
+              per_consumer: false
+              status_code_metrics: false
+              latency_metrics: false
+              bandwidth_metrics: false
+              ai_metrics: false

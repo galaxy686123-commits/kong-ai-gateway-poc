@@ -357,6 +357,19 @@ print("사용자=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consumer") or {}
   if grep -q 'consumer="team-a-app"' <<<"$mt" && grep -q '^kong_ai_llm' <<<"$mt"; then
     ok "3-3 지표 — :$STATUS_PORT/metrics 에 사용자별 호출·AI 토큰 지표 · 경보 규칙 예시 alerts/kong-alerts.yml"
   else warn "3-3 지표 — 사용자별·AI 지표가 아직 없음 (요청이 있어야 생김) · :$STATUS_PORT/metrics"; fi
+  # 3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모으고, Grafana 가 프록시의 /grafana 로 열리는지 (MONITORING=on)
+  if mon_on; then
+    up=$(curl -s -m 5 "http://127.0.0.1:$PROM_PORT/api/v1/query" --data-urlencode 'query=up{job="kong"}' \
+         | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "")' 2>/dev/null)
+    nr=$(curl -s -m 5 "http://127.0.0.1:$PROM_PORT/api/v1/rules" \
+         | python3 -c 'import json,sys; print(sum(len(g["rules"]) for g in json.load(sys.stdin)["data"]["groups"]))' 2>/dev/null)
+    gh=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$P/grafana/api/health")
+    nd=$(curl -s -m 5 -u "admin:${GRAFANA_ADMIN_PASSWORD:-}" "$P/grafana/api/search?type=dash-db" \
+         | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
+    if [ "$up" = 1 ] && [ "$gh" = 200 ] && [ "${nd:-0}" -ge 1 ]; then
+      ok "3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모음(경보 규칙 ${nr:-?}개 계산) · Grafana 프록시 /grafana 200 · 대시보드 ${nd}개"
+    else bad "3-3 모니터링 화면 — Prometheus up=${up:-?} · /grafana ${gh} · 대시보드 ${nd:-?}개 (bash status.sh · $LOGS/grafana.log · $LOGS/prometheus.log)"; fi
+  fi
   ks=$(admin /plugins?size=1000 | python3 -c 'import json,sys
 d = json.load(sys.stdin)["data"]; k = [p for p in d if (p.get("instance_name") or "").startswith("kill-switch--")]
 print(len(k), sum(1 for p in k if p["enabled"]))' 2>/dev/null)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — docker 없이 이 파드에 PostgreSQL·pgvector·Kong·decK 를 설치한다.
+# install.sh — docker 없이 이 파드에 PostgreSQL·pgvector·Kong·decK·Prometheus·Grafana 를 설치한다.
 #   여러 번 실행해도 안전하다 (있는 것은 건너뜀).
 #   파드를 다시 만들면 apt 로 깐 프로그램이 사라지는데, start.sh 가 알아서 이것을 다시 부른다.
 source "$(dirname "$0")/lib.sh"
@@ -28,7 +28,7 @@ apt_update() {  # 막힌 저장소(nodesource 등)가 섞여 있어도 Ubuntu �
   apt_ready=1
 }
 
-say "1/4 PostgreSQL $PG_VER"
+say "1/6 PostgreSQL $PG_VER"
 if [ -x "$PG_BIN/postgres" ]; then note "설치돼 있음"
 else
   apt_update
@@ -39,7 +39,7 @@ else
   note "설치 완료 ($("$PG_BIN/postgres" --version))"
 fi
 
-say "2/4 pgvector $PGVECTOR_TAG (시맨틱 캐시용)"
+say "2/6 pgvector $PGVECTOR_TAG (시맨틱 캐시용)"
 DIST="$DATA_DIR/pgvector-$PGVECTOR_TAG-pg$PG_VER"   # 빌드 결과를 남겨 두면 다음부터는 복사만 한다
 if [ -f "/usr/share/postgresql/$PG_VER/extension/vector.control" ]; then note "설치돼 있음"
 else
@@ -63,7 +63,7 @@ else
   note "설치 완료"
 fi
 
-say "3/4 Kong Gateway $KONG_VER"
+say "3/6 Kong Gateway $KONG_VER"
 if [ "$(kong version 2>/dev/null | awk '{print $NF}')" = "$KONG_VER" ]; then note "설치돼 있음"
 else
   apt_update
@@ -71,10 +71,32 @@ else
   note "설치 완료 ($(kong version))"
 fi
 
-say "4/4 decK $DECK_VER (설정 적용 도구)"
+say "4/6 decK $DECK_VER (설정 적용 도구)"
 if have deck && grep -q "$DECK_VER" <<<"$(deck version 2>/dev/null)"; then note "설치돼 있음"
 else
   run tar -xzf "$PKGS_DIR/$DECK_TGZ" -C "$RUN_DIR" deck
   run sudo install -m 0755 "$RUN_DIR/deck" /usr/local/bin/deck && rm -f "$RUN_DIR/deck"
   note "설치 완료 ($(deck version))"
+fi
+
+say "5/6 Prometheus (지표 모으기 — 3-3)"
+if ! mon_on; then note "건너뜀 (MONITORING=off)"
+elif have prometheus; then note "설치돼 있음 ($(prometheus --version 2>&1 | head -1))"
+else
+  apt_update
+  run "${APT[@]}" install --no-install-recommends prometheus   # Ubuntu 저장소 — 서비스로 띄우지 않고 start.sh 가 직접 띄운다
+  note "설치 완료 ($(prometheus --version 2>&1 | head -1))"
+fi
+
+say "6/6 Grafana $GRAFANA_VER (대시보드 — 3-3)"
+if ! mon_on; then note "건너뜀 (MONITORING=off)"
+elif [ -x "$GRAFANA_HOME/bin/grafana" ]; then note "설치돼 있음 ($GRAFANA_HOME)"
+else
+  ls "$PKGS_DIR/$GRAFANA_PKG".part-* >/dev/null 2>&1 || die "Grafana 설치 파일이 없습니다: $PKGS_DIR/$GRAFANA_PKG.part-*
+  git pull 로 저장소를 최신으로 받으세요 (pkgs/ 폴더)."
+  cat "$PKGS_DIR/$GRAFANA_PKG".part-* > "$RUN_DIR/$GRAFANA_PKG"           # GitHub 파일 크기 상한 때문에 나눠 둔 것을 합친다
+  (cd "$RUN_DIR" && sha256sum -c --quiet "$PKGS_DIR/grafana.sha256") || { rm -f "$RUN_DIR/$GRAFANA_PKG"; die "Grafana 설치 파일이 손상되었습니다 (pkgs/). git pull 로 다시 받으세요."; }
+  run tar -xJf "$RUN_DIR/$GRAFANA_PKG" -C "$RUN_DIR"
+  rm -f "$RUN_DIR/$GRAFANA_PKG"
+  note "설치 완료 ($("$GRAFANA_HOME/bin/grafana" server -v 2>/dev/null | head -1))"
 fi

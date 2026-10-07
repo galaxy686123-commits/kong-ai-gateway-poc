@@ -1,0 +1,10 @@
+# Grafana 데이터 원본 — 파드 안 Prometheus (start.sh 가 PROM_PORT 를 넘긴다)
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: kong-poc-prometheus
+    type: prometheus
+    access: proxy
+    url: http://127.0.0.1:${PROM_PORT}
+    isDefault: true
+    editable: false
