@@ -126,10 +126,37 @@ fix_log_path      # 유지 폴더가 다른 경로로 붙은 환경이면 요청
 say "6/6 모니터링 — Prometheus · Grafana (3-3)"
 if ! mon_on; then note "건너뜀 (MONITORING=off)"
 else
-  # Prometheus — Kong 지표(:$STATUS_PORT)를 15초마다 모으고 경보 규칙(alerts/)을 계산한다. 기록은 로컬 디스크(다시 빌드하면 처음부터)
-  if prom_running; then note "Prometheus: 이미 실행 중 (127.0.0.1:$PROM_PORT)"
+  # Prometheus — Kong 지표(:$STATUS_PORT)를 15초마다 모으고 경보 규칙(alerts/)을 계산한다.
+  #   기록은 유지 폴더(<유지 폴더>/kong-poc/prometheus) — 다시 빌드해 새 환경이 떠도 이어진다.
+  #   보관은 PROM_RETENTION(기본 15d) · PROM_RETENTION_SIZE(기본 2GB) 가운데 먼저 닿는 쪽 — 유지 폴더가 차지 않게.
+  #   두 환경이 같은 기록을 함께 쓰는 일은 실행 기록(run.lock)이 막는다 (한쪽만 뜸).
+  #   유지 폴더가 네트워크 파일 시스템(NFS 등)이면 로컬 디스크에 둔다 — Prometheus 저장소는 NFS 를 지원하지 않는다.
+  #   PROM_STORAGE=local 이면 늘 로컬 디스크(예전 방식 — 다시 빌드하면 처음부터).
+  PROM_DATA="$DATA_DIR/prometheus"; prom_fs=$(df -PT "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $2}')
+  case "${PROM_STORAGE:-auto}:$prom_fs" in
+    local:*) PROM_DATA="$RUN_DIR/prometheus" ;;
+    *:nfs*|*:ceph*|*:glusterfs|*:lustre|*:fuse*|*:cifs|*:smb*|*:9p)
+      PROM_DATA="$RUN_DIR/prometheus"
+      note "Prometheus: 유지 폴더가 네트워크 파일 시스템($prom_fs)이라 지표 기록은 로컬 디스크에 둡니다 (다시 빌드하면 처음부터)" ;;
+  esac
+  if prom_running && ! tr '\0' '\n' < "/proc/$(cat "$RUN_DIR/prometheus.pid")/cmdline" 2>/dev/null \
+       | grep -qxF -- "--storage.tsdb.path=$PROM_DATA"; then   # 예전 판(로컬 디스크 기록)으로 떠 있으면 내렸다가 옮겨 띄운다
+    kill "$(cat "$RUN_DIR/prometheus.pid")" 2>/dev/null
+    for _ in $(seq 1 30); do prom_running || break; sleep 0.5; done
+    rm -f "$RUN_DIR/prometheus.pid"; note "Prometheus: 기록 위치를 유지 폴더로 바꾸려고 잠시 내림"
+  fi
+  if [ "$PROM_DATA" != "$RUN_DIR/prometheus" ] && [ ! -d "$PROM_DATA" ] && [ -n "$(ls -A "$RUN_DIR/prometheus" 2>/dev/null)" ] && ! prom_running; then
+    # 예전 판이 로컬 디스크에 쌓은 기록을 옮긴다 — 원래 자리는 prometheus.moved-<시각> 으로 남김 (새 환경에선 어차피 사라짐)
+    if cp -a "$RUN_DIR/prometheus" "$PROM_DATA.part" && mv "$PROM_DATA.part" "$PROM_DATA"; then
+      mv "$RUN_DIR/prometheus" "$RUN_DIR/prometheus.moved-$(date +%Y%m%d-%H%M%S)"
+      note "Prometheus: 지금까지 쌓인 기록을 유지 폴더로 옮김 ($PROM_DATA)"
+    else
+      rm -rf "$PROM_DATA.part"; note "Prometheus: 기록을 옮기지 못해 유지 폴더에서 새로 시작합니다 (옛 기록은 $RUN_DIR/prometheus)"
+    fi
+  fi
+  if prom_running; then note "Prometheus: 이미 실행 중 (127.0.0.1:$PROM_PORT · 기록 $PROM_DATA)"
   else
-    mkdir -p "$RUN_DIR/prometheus"
+    mkdir -p "$PROM_DATA" && chmod 700 "$PROM_DATA"
     cat > "$RUN_DIR/prometheus.yml" <<YML
 global:
   scrape_interval: 15s
@@ -141,12 +168,13 @@ scrape_configs:
     static_configs:
       - targets: ["127.0.0.1:$STATUS_PORT"]
 YML
-    setsid nohup prometheus --config.file="$RUN_DIR/prometheus.yml" --storage.tsdb.path="$RUN_DIR/prometheus" \
-      --storage.tsdb.retention.time=15d --web.listen-address="127.0.0.1:$PROM_PORT" >> "$LOGS/prometheus.log" 2>&1 < /dev/null &
+    setsid nohup prometheus --config.file="$RUN_DIR/prometheus.yml" --storage.tsdb.path="$PROM_DATA" \
+      --storage.tsdb.retention.time="${PROM_RETENTION:-15d}" --storage.tsdb.retention.size="${PROM_RETENTION_SIZE:-2GB}" \
+      --web.listen-address="127.0.0.1:$PROM_PORT" >> "$LOGS/prometheus.log" 2>&1 < /dev/null &
     echo $! > "$RUN_DIR/prometheus.pid"
     for _ in $(seq 1 30); do curl -s -m 2 "http://127.0.0.1:$PROM_PORT/-/ready" >/dev/null && break; sleep 1; done
     curl -s -m 2 "http://127.0.0.1:$PROM_PORT/-/ready" >/dev/null || { tail -5 "$LOGS/prometheus.log" | sed 's/^/  | /'; die "Prometheus 기동 실패 ($LOGS/prometheus.log)"; }
-    note "Prometheus: 시작됨 (127.0.0.1:$PROM_PORT — Kong 지표 15초마다, 15일 보관)"
+    note "Prometheus: 시작됨 (127.0.0.1:$PROM_PORT — Kong 지표 15초마다 · 보관 ${PROM_RETENTION:-15d}·${PROM_RETENTION_SIZE:-2GB} · 기록 $PROM_DATA)"
   fi
   # Grafana — 프록시의 /grafana 경로로 연다(Kong 이 넘김). 관리자 비밀번호가 없으면 만들어 설정 파일에 적는다
   if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then

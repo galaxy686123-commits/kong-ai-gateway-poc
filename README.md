@@ -345,6 +345,7 @@ bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /data
 | `pgdata/` | DB — Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
 | `logs/` | Kong 로그 전부 (아래 「로그」 표) · PostgreSQL · PII 가드 로그 |
 | `backup/` · `reports/` | 설정 백업(`dump-config.sh`) · 점검 기록(`verify.sh` 를 돌릴 때마다 저장) |
+| `prometheus/` | 지표 기록 — Grafana 그래프 (15일 · 2GB 까지, 다시 빌드해도 이어짐 · 네트워크 파일 시스템이면 로컬 디스크) |
 | `settings.env` · `secrets/license.json` | 설정·라이선스 **원본** — `bash set-env.sh` · `bash set-license.sh` 로 고침. 저장소 `.env` 에는 이 폴더 위치 한 줄만 |
 | `run.lock` · `requests/` | 지금 이 폴더로 돌고 있는 환경의 기록(20초마다 갱신) · `remote.sh` 가 맡긴 일과 결과 |
 | `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
@@ -478,7 +479,11 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
 
 - Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
-- Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`). 지표 기록은 로컬 디스크라 새 환경을 다시 만들면 처음부터입니다.
+- Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`).
+- 지표 기록은 유지 폴더의 `prometheus/` 에 남아 다시 빌드해도 그래프가 이어집니다. 보관은 `PROM_RETENTION`(15d) ·
+  `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
+  예전 판이 로컬 디스크에 쌓은 기록은 새 코드로 처음 뜰 때 옮깁니다. 유지 폴더가 네트워크 파일 시스템(NFS 등)이면 로컬 디스크에 둡니다
+  (Prometheus 저장소는 NFS 를 지원하지 않음 — 이때는 예전처럼 다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).
 
 ## 로그

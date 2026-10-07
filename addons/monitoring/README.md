@@ -17,8 +17,12 @@
 - 로그인: `admin` / 설정 파일의 `GRAFANA_ADMIN_PASSWORD` (비어 있으면 처음 기동할 때 만들어 적음).
 - 대시보드·데이터 원본은 이 폴더의 파일로 들어갑니다(`grafana/provisioning`, `grafana/dashboards`). 화면에서 고친 내용은 저장되지 않으니
   JSON 을 고쳐 다시 띄웁니다.
-- 지표 기록과 Grafana 내부 DB 는 로컬 디스크(`~/.kong-poc`)에 둡니다 — 빌드한 새 환경을 다시 만들면 기록이 처음부터 시작합니다
-  (Prometheus 저장소는 NFS 를 지원하지 않음).
+- 지표 기록(Prometheus)은 유지 폴더의 `prometheus/` 에 둡니다 — 빌드한 새 환경이 떠도 그래프가 이어집니다.
+  보관은 `PROM_RETENTION`(15d) · `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지. 예전 판이 로컬 디스크에 쌓은 기록은 처음 뜰 때 옮깁니다.
+  유지 폴더가 네트워크 파일 시스템(NFS 등)이면 로컬 디스크(`~/.kong-poc/prometheus`)에 둡니다 — Prometheus 저장소는 NFS 를 지원하지 않음.
+  `PROM_STORAGE=local` 이면 늘 로컬 디스크.
+- Grafana 내부 DB 는 로컬 디스크(`~/.kong-poc/grafana-data`)에 둡니다 — 대시보드·데이터 원본은 파일로 다시 만들어지므로 잃는 것은
+  화면에서 바꾼 설정(비밀번호 포함 — 로그인은 늘 설정 파일 값으로 돌아옴)뿐입니다.
 - 외부로 나가는 호출(업데이트 확인·사용 통계·뉴스·플러그인 자동 설치)은 모두 끕니다.
 
 ## Grafana 설치 파일
