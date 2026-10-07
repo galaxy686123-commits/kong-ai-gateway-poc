@@ -88,6 +88,7 @@ handle() {  # 개발 파드가 remote.sh 로 맡긴 일 — 정해진 것만 한
       restart)     bash "$ROOT/stop.sh" && bash "$ROOT/start.sh" ;;
       verify)      bash "$ROOT/verify.sh" ;;
       verify-full) bash "$ROOT/verify.sh" --full ;;
+      switch|switch\ *) set -f; set -- $cmd; set +f; shift; bash "$ROOT/switch.sh" "$@" ;;   # 이름·상태는 switch.sh 가 확인
       *)           echo "모르는 요청: $cmd"; false ;;
     esac
     echo "== 끝 — 종료 코드 $? · $(date '+%F %T') · $HOST_ID"

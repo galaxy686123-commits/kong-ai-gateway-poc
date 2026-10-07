@@ -4,7 +4,8 @@
 #   bash remote.sh status        상태
 #   bash remote.sh apply         설정 적용 (bash set-env.sh 로 값을 바꾼 뒤) · apply-dry = 바뀔 내용만 보기
 #   bash remote.sh restart       다시 띄우기 (접속 주소·포트·LLM 주소·라이선스를 바꾼 뒤)
-#   bash remote.sh verify        점검 · verify-full = 장기 응답·긴급 차단 시험까지
+#   bash remote.sh verify        점검 · verify-full = 70초 장기 응답까지
+#   bash remote.sh switch [<이름> on|off]   /poc 플러그인·긴급 차단 켜고 끄기 (이름 없이 = 지금 상태) — switch.sh
 #   결과는 화면에 보여 주고 <유지 폴더>/requests/done/ 에도 남는다.
 source "$(dirname "$0")/lib.sh"
 load_env; native_env
@@ -12,7 +13,11 @@ load_env; native_env
 cmd=${1:-}
 case "$cmd" in
   status|apply|apply-dry|restart|verify|verify-full) ;;
-  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full" ;;
+  switch)   # 이름은 글자·숫자·- _ 만, 상태는 on/off — 새 환경의 switch.sh 가 아는 이름인지 다시 확인한다
+    [ $# -eq 1 ] || { [ $# -eq 3 ] && [[ "$2" =~ ^[A-Za-z0-9_-]+$ ]] && [[ "$3" =~ ^(on|off)$ ]]; } \
+      || die "사용법: bash remote.sh switch <이름> on|off   (목록: bash remote.sh switch)"
+    if [ $# -eq 3 ]; then cmd="switch $2 $3"; fi ;;
+  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full | switch [<이름> on|off]" ;;
 esac
 lock_read
 if [ -z "$LOCK_HOST" ] || [ "$LOCK_AGE" -ge "$LOCK_STALE" ]; then
@@ -23,7 +28,7 @@ fi
 
 REQ="$DATA_DIR/requests"
 mkdir -p "$REQ/done"
-id="$(date +%Y%m%d-%H%M%S)-$$-$cmd"
+id="$(date +%Y%m%d-%H%M%S)-$$-${cmd// /_}"
 printf '%s\n' "$cmd" > "$REQ/$id.req.tmp" && mv -f "$REQ/$id.req.tmp" "$REQ/$id.req"
 say "$LOCK_HOST 에 '$cmd' 를 맡겼습니다 — 결과를 기다립니다 (최대 15분)"
 for _ in $(seq 1 900); do [ -f "$REQ/done/$id.log" ] && break; sleep 1; done

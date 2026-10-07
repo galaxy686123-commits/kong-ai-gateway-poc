@@ -159,13 +159,15 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | `FEATURE_SEMANTIC_CACHE` | off | `ai-semantic-cache` | 시맨틱 캐시 (임베딩 모델 필요) |
 | (Kong Manager 에서만) | off | `request-termination` `kill-switch--poc` | 3-4 긴급 차단 |
 
-- 켜고 끄기: **Kong Manager** 의 Routes → `poc` → Plugins 스위치(몇 초 안에 반영), 또는 **설정 파일**
-  `bash set-env.sh FEATURE_MASKING on` 뒤 `bash apply-config.sh`. 둘을 섞어 써도 됩니다(아래 「Kong Manager 와 설정 파일 같이 쓰기」).
+- 켜고 끄기: **Kong Manager** 의 Routes → `poc` → Plugins 스위치(몇 초 안에 반영) · 명령 `bash switch.sh pii-masking on`(같은 일 —
+  `bash switch.sh` 만 치면 지금 상태, 빌드한 새 환경이면 `bash remote.sh switch …`) · 또는 **설정 파일**
+  `bash set-env.sh FEATURE_MASKING on` 뒤 `bash apply-config.sh`. 섞어 써도 됩니다(아래 「Kong Manager 와 설정 파일 같이 쓰기」).
 - 로그·추적 ID·지표(3-1~3-3)는 전역 플러그인이라 늘 켜져 있습니다.
 - **답변 검사와 스트리밍**: `FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK` 를 켜고 적용하면 `/poc` 는 `"stream": true` 요청을
   400(`response streaming is not enabled`)으로 거절합니다 — 조각으로 나뉜 답은 검사할 수 없어서입니다. 의미 기반 답변 가드는
   거절 대신 스트리밍 요청에도 한 번에 답합니다(Kong 이 답을 다 받아 검사 — 3.16 실측).
-- 플러그인 순서는 Kong 이 정합니다(우선순위): 키·SSO → 허용 그룹 → 호출 수 → 토큰 → 마스킹 → 질문 가드 → LLM → 답변 검사·가림.
+- 플러그인 순서는 Kong 이 정합니다(우선순위): 키·SSO → 허용 그룹 → 호출 수 → 토큰 → 마스킹 → 질문 가드(의미 기반 → 정규식) →
+  긴급 차단 → LLM → 답변 검사·가림. 막힐 요청은 마스킹·가드를 거치지 않고, 가드·캐시·LLM 은 가린 질문을 봅니다.
 
 ### Kong Manager 와 설정 파일 같이 쓰기
 
@@ -235,12 +237,16 @@ curl -s localhost:8000/poc "${H[@]}" -d '{"model":"mock-llm","messages":[{"role"
 # 1-2 스트리밍 — 조각(data:)이 차례로 도착
 curl -sN localhost:8000/poc "${H[@]}" -d '{"messages":[{"role":"user","content":"하나부터 다섯까지 세어줘"}],"stream":true}'
 
-# 4-1 마스킹 — pii-masking 을 켠 뒤 (Manager, 또는 FEATURE_MASKING on + 적용). 모의 LLM 이 받은 질문이 그대로 돌아온다
+# 4-1 마스킹 — 켜고 보낸 뒤 끈다. 모의 LLM 이 받은 질문이 그대로 돌아온다
+bash switch.sh pii-masking on
 curl -s localhost:8000/poc "${H[@]}" \
   -d '{"model":"mock-llm","messages":[{"role":"user","content":"주민번호 900101-1234567 연락처 010-1234-5678"}]}'
+bash switch.sh pii-masking off
 
-# 4-2 기밀 키워드 → 400 — ai-prompt-guard 를 켠 뒤
+# 4-2 기밀 키워드 → 400
+bash switch.sh ai-prompt-guard on
 curl -s localhost:8000/poc "${H[@]}" -d '{"model":"mock-llm","messages":[{"role":"user","content":"대외비 자료를 요약해줘"}]}'
+bash switch.sh ai-prompt-guard off
 ```
 
 OpenAI SDK 는 `base_url` 을 게이트웨이의 `/poc` 로 두고 사용자 키를 헤더로 넘깁니다.
@@ -304,7 +310,8 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 |---|---|
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
 | `run.sh` | **빌드한 새 환경의 시작 명령** — 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
-| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` (같은 유지 폴더를 붙인 개발 파드에서) |
+| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` (같은 유지 폴더를 붙인 개발 파드에서) |
+| `switch.sh` | `/poc` 플러그인·긴급 차단 바로 켜고 끄기 — `bash switch.sh <이름> on|off` (Kong Manager 스위치와 같음) · 이름 없이 = 지금 상태 |
 | `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
 | `set-license.sh` | 받은 라이선스 파일을 제자리에 넣기 — `bash set-license.sh <파일>` |
 | `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기. `kong-poc` 태그가 붙은 것만 관리. Kong Manager 에서 켜고 끈 `/poc` 스위치는 설정 파일에 적고, 긴급 차단은 그대로 둠 (`manager-changes.py`) |
