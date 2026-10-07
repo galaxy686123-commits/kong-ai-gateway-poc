@@ -348,6 +348,40 @@ pii_running() { local p; p=$(pii_pid) && [ -n "$p" ] && kill -0 "$p" 2>/dev/null
 mock_pid()     { cat "$RUN_DIR/mock.pid" 2>/dev/null; }
 mock_running() { local p; p=$(mock_pid) && [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
 
+# ── /poc 플러그인 스위치 — 「이름:처음 값:플러그인」. 설정 파일의 FEATURE_<이름>=on/off 로 켜고 끈다 (처음에는 키 인증만 켬)
+#    Kong Manager 에서 켜고 꺼도 된다 — 다음 적용 때 그 상태를 설정 파일에 적고 유지한다 (apply-config.sh)
+POC_SWITCHES="KEY_AUTH:on:key-auth SSO:off:openid-connect ACL:off:acl RATE_LIMIT:off:rate-limiting TOKEN_LIMIT:off:ai-rate-limiting-advanced
+  MASKING:off:pii-masking PROMPT_GUARD:off:ai-prompt-guard OUTPUT_GUARD:off:ai-custom-guardrail OUTPUT_MASK:off:response-masking
+  SEMANTIC_GUARD:off:ai-semantic-prompt-guard SEMANTIC_RESPONSE_GUARD:off:ai-semantic-response-guard SEMANTIC_CACHE:off:ai-semantic-cache"
+switch_value() {  # switch_value <이름> → on/off (설정 파일 값, 없으면 처음 값)
+  local f v d
+  for f in $POC_SWITCHES; do
+    [ "${f%%:*}" = "$1" ] || continue
+    v="FEATURE_$1"; d=${f#*:}; d=${d%%:*}
+    case "${!v:-$d}" in on|true|yes|1) echo on ;; *) echo off ;; esac
+    return 0
+  done
+  echo off
+}
+# ── 긴급 차단 스위치(instance_name kill-switch--<이름>) — 켜고 끄기는 Kong Manager 몫. 적용해도 지금 상태 그대로 둔다
+KILL_SWITCHES="poc team-a-app team-b-app ocr agent-a agent-b"
+kill_var() { local n; n=$(printf '%s' "$1" | tr 'a-z-' 'A-Z_'); echo "DECK_KILL_$n"; }
+
+# ── verify.sh 가 잠깐 바꾼 /poc 플러그인의 처음 값 — 데이터 폴더(DB 옆)에 적어, 점검이 끊겨도 다음 점검·적용이 먼저 되돌린다
+verify_restore_file() { echo "$DATA_DIR/verify-restore.json"; }
+verify_restore() {  # 처음 값으로 되돌린다 — 다 되돌렸으면 기록을 지운다
+  local f id patch c left=0
+  f=$(verify_restore_file); [ -f "$f" ] || return 0
+  while read -r id patch; do
+    [ -n "$id" ] || continue
+    c=$(admin "/plugins/$id" -X PATCH -H 'Content-Type: application/json' -d "$patch" -o /dev/null -w '%{http_code}')
+    [ "$c" = 200 ] || [ "$c" = 404 ] || left=$((left+1))   # 404 = 그사이 설정을 다시 적용해 플러그인이 새로 만들어짐
+  done < <(python3 -c 'import json,sys
+for s in json.load(open(sys.argv[1])): print(s["id"], json.dumps(s["patch"], ensure_ascii=False))' "$f" 2>/dev/null)
+  [ "$left" = 0 ] && rm -f "$f"
+  return 0
+}
+
 # ── conf/*.yaml 의 ${{ env "DECK_…" }} 값 — apply-config.sh·verify.sh 가 같은 값을 쓴다 ──
 deck_env() {
   # 이 파드 안의 주소
@@ -361,31 +395,28 @@ deck_env() {
   : "${DECK_OCR_URL:=$DECK_MOCK_URL/ocr}" "${DECK_AGENT_A_URL:=$DECK_MOCK_URL/agents/a}" "${DECK_AGENT_B_URL:=$DECK_MOCK_URL/agents/b}"
   : "${DECK_AZURE_API_VERSION:=2024-06-01}" "${DECK_GCP_LOCATION:=asia-northeast3}" "${DECK_EMBED_DIMS:=1024}"
   : "${DECK_CHAT_MODEL:=}" "${DECK_EXT_MODEL:=}"
-  # 요청의 model 로 LLM 고르기 — OpenAI 호환 LLM(사내 · 외부 · 3번부터)이 둘 이상이면 켠다.
-  # DECK_SELECT_MODELS = 고를 수 있는 모델 이름(쉼표로) — chat-preprocess 가 이 이름만 남기고, apply-config 가 대상을 만든다
-  local n uv mv av names="" cnt=0
+  # /poc 에서 요청의 model 로 고를 수 있는 이름(쉼표로) — 실제 주소를 넣은 LLM · 클라우드 · 시험용 mock-llm
+  #   chat-preprocess 가 이 이름만 남기고(그 밖은 지움 → 기본 대상), apply-config 가 같은 규칙으로 대상을 만든다
+  local n uv mv av names=""
   while read -r n uv mv av; do
-    [ -n "$n" ] || continue
-    cnt=$((cnt + 1)); names="${names:+$names,}${!mv:-}"
+    [ -n "$n" ] && llm_connected "$uv" && names="${names:+$names,}${!mv:-}"
   done <<<"$(llm_list)"
-  DECK_SELECT_MODELS=$names; DECK_MODEL_SELECT=false
-  if [ "$cnt" -ge 2 ]; then DECK_MODEL_SELECT=true; fi
-  # 통합 경로 기능 스위치 — .env 의 FEATURE_xxx=on/off → DECK_ON_xxx=true/false
-  local f d v
-  for f in MASKING:on ACL:on RATE_LIMIT:on TOKEN_LIMIT:on PROMPT_GUARD:on OUTPUT_GUARD:off OUTPUT_MASK:off \
-           SEMANTIC_GUARD:off SEMANTIC_CACHE:off; do
-    d=${f#*:}; f=${f%%:*}; v="FEATURE_$f"
-    case "${!v:-$d}" in on|true|yes|1) printf -v "DECK_ON_$f" true ;; *) printf -v "DECK_ON_$f" false ;; esac
+  if [ -n "${DECK_AZURE_INSTANCE:-}" ]; then names="${names:+$names,}${DECK_AZURE_DEPLOYMENT:-}"; fi
+  if [ -n "${DECK_GCP_PROJECT:-}" ]; then names="${names:+$names,}${DECK_GCP_MODEL:-}"; fi
+  if [ -n "${DECK_AWS_REGION:-}" ]; then names="${names:+$names,}${DECK_AWS_MODEL:-}"; fi
+  DECK_SELECT_MODELS="${names:+$names,}mock-llm"
+  # /poc 서비스 주소 — 실제로 보낼 곳은 AI Proxy Advanced 대상이 정한다 (LLM 을 넣기 전에는 모의 LLM)
+  if llm_connected DECK_CHAT_URL; then DECK_POC_URL=$DECK_CHAT_URL; else DECK_POC_URL="$DECK_MOCK_URL/v1/chat/completions"; fi
+  # /poc 플러그인 스위치 — 설정 파일의 FEATURE_xxx=on/off → DECK_ON_xxx=true/false (POC_SWITCHES)
+  local f v
+  for f in $POC_SWITCHES; do
+    printf -v "DECK_ON_${f%%:*}" '%s' "$( [ "$(switch_value "${f%%:*}")" = on ] && echo true || echo false)"
   done
-  # 답변을 다 받아 검사·수정하는 기능을 켜면 통합 경로는 스트리밍 요청을 받지 않는다 (조각으로 나뉜 답은 검사할 수 없다)
+  # 긴급 차단 — apply-config 가 Kong 의 지금 상태를 DECK_KILL_<이름> 에 넣는다. 없으면(처음 적용) 꺼 둠
+  for f in $KILL_SWITCHES; do v=$(kill_var "$f"); [ -n "${!v:-}" ] || printf -v "$v" false; done
+  # 답변을 다 받아 검사·수정하는 기능을 켜면 /poc 는 스트리밍 요청을 받지 않는다 (조각으로 나뉜 답은 검사할 수 없다)
   DECK_LLM_STREAMING=allow
   if [ "$DECK_ON_OUTPUT_GUARD" = true ] || [ "$DECK_ON_OUTPUT_MASK" = true ]; then DECK_LLM_STREAMING=deny; fi
-  # 영역별 시험 경로(/poc/1~4)가 부를 LLM — 기본은 모의 LLM(결과가 늘 같음), FEATURE_UPSTREAM=llm 이면 사내 LLM
-  if [ "${FEATURE_UPSTREAM:-mock}" = llm ]; then
-    DECK_FEATURE_URL="$DECK_CHAT_URL"; DECK_FEATURE_MODEL="$DECK_CHAT_MODEL"; DECK_FEATURE_AUTH="{vault://env/llm-auth-header}"
-  else
-    DECK_FEATURE_URL="$DECK_MOCK_URL/v1/chat/completions"; DECK_FEATURE_MODEL=mock-llm; DECK_FEATURE_AUTH="Bearer mock"
-  fi
   # SSO 토큰 캐시용 고정값 — 세션 비밀값에서 만들어 동기화마다 바뀌지 않게
   DECK_OIDC_SALT=$(printf '%s' "$KONG_SESSION_SECRET" | sha256sum | cut -c1-32)
   local v; for v in $(compgen -v DECK_); do export "${v?}"; done
@@ -396,7 +427,7 @@ deck_env() {
 # (서비스 주소의 호스트로 감) 장애 대체도 하지 않는다. 이름 주소는 정상 동작한다.
 # → IP 에는 이름(ip-10-1-2-3.kong-poc)을 붙여 Kong 에 넘기고, 그 이름은 Kong 만 읽는 hosts 파일에 적는다.
 #   시스템 /etc/hosts 는 건드리지 않는다. LLM 서버가 받는 Host 헤더도 이 이름이 된다.
-AI_URL_VARS="DECK_CHAT_URL DECK_EXT_URL DECK_EMBED_URL DECK_FEATURE_URL DECK_MOCK_URL"
+AI_URL_VARS="DECK_CHAT_URL DECK_EXT_URL DECK_EMBED_URL DECK_POC_URL DECK_MOCK_URL"
 # ── LLM 목록 — 1 사내(DECK_CHAT_*) · 2 외부(DECK_EXT_*) · 3번부터 DECK_LLM<n>_URL · DECK_LLM<n>_MODEL · LLM<n>_AUTH_HEADER ──
 # 세 번째부터는 설정 파일에 번호만 늘려 넣으면 된다 (빌드 불필요 — 키를 넣었으면 Kong 을 다시 띄운 뒤 적용).
 llm_extra_nums() { compgen -v | sed -nE 's/^DECK_LLM([0-9]+)_URL$/\1/p' | sort -n | while read -r n; do v="DECK_LLM${n}_URL"; [ "$n" -ge 3 ] && [ -n "${!v}" ] && echo "$n"; done; }
@@ -406,6 +437,7 @@ llm_list() {  # 줄마다 "번호 주소변수 모델변수 키변수" — 주�
   if [ -n "${DECK_EXT_URL:-}" ]; then echo "2 DECK_EXT_URL DECK_EXT_MODEL EXT_AUTH_HEADER"; fi
   for n in $(llm_extra_nums); do echo "$n DECK_LLM${n}_URL DECK_LLM${n}_MODEL LLM${n}_AUTH_HEADER"; done
 }
+llm_connected() { local v=${!1:-}; [ -n "$v" ] && [[ "$v" != *example* ]]; }   # 주소변수 — 예시 주소가 아닌 실제 주소인지
 ai_url_vars() { echo "$AI_URL_VARS $(for n in $(llm_extra_nums); do printf 'DECK_LLM%s_URL ' "$n"; done)"; }
 ip_name() { printf 'ip-%s.kong-poc' "${1//./-}"; }
 url_ip()  { [[ "$1" =~ ^[a-z]+://([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)([:/]|$) ]] && printf '%s' "${BASH_REMATCH[1]}"; }
@@ -436,6 +468,10 @@ kong_env() {
   export KONG_ADMIN_GUI_AUTH=basic-auth
   export KONG_ADMIN_GUI_SESSION_CONF="{\"secret\":\"$KONG_SESSION_SECRET\",\"cookie_secure\":$secure}"
   export KONG_PROXY_LISTEN="0.0.0.0:$PROXY_PORT"
+  # 이 번들 전용 플러그인 — 4-1 개인정보 마스킹(pii-masking) · 4-5 답변 속 내부 정보 가림(response-masking)
+  #   다른 플러그인처럼 Kong Manager 에서 켜고 끌 수 있게 Kong 플러그인으로 만들었다 (addons/kong-plugins)
+  export KONG_PLUGINS="bundled,pii-masking,response-masking"
+  export KONG_LUA_PACKAGE_PATH="$ROOT/addons/kong-plugins/?.lua;;"
   # Admin API·Manager — 주피터 프록시 경유면 파드 안(127.0.0.1)만, 플랫폼 포트 노출이면 모든 주소
   export KONG_ADMIN_LISTEN="$BIND:$ADMIN_PORT"
   export KONG_ADMIN_GUI_LISTEN="$BIND:$MANAGER_PORT"

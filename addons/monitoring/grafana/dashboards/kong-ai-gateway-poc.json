@@ -885,7 +885,7 @@
     {
       "id": 110,
       "type": "timeseries",
-      "title": "영역별 시험 경로 요청 /분 — /poc/1 ~ /poc/4",
+      "title": "/poc 응답 코드별 /분 — 켠 플러그인이 막은 결과",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -914,11 +914,12 @@
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "sum by(route)(rate(kong_http_requests_total{route=~\"poc-.*\"}[5m]))*60",
-          "legendFormat": "{{route}}",
+          "expr": "sum by(code)(rate(kong_http_requests_total{route=\"poc\"}[5m]))*60",
+          "legendFormat": "{{code}}",
           "refId": "A"
         }
-      ]
+      ],
+      "description": "/poc 한 경로의 응답 코드. 200 통과 · 400 가드레일 · 401 키·SSO · 403 허용 그룹 · 429 한도 · 503 긴급 차단. 플러그인을 켜고 끄면(Kong Manager 또는 FEATURE_…) 여기서 바로 보인다."
     },
     {
       "id": 111,

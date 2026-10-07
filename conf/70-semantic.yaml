@@ -1,11 +1,11 @@
 # ─────────────────────────────────────────────────────────────
 #  임베딩 모델이 있을 때 (DECK_EMBED_URL·DECK_EMBED_MODEL) — 의미 기반 기능
 #
-#  4-3 의미 기반 가드: 금지 예문과 의미가 가까운 질문을 막는다 (표현을 바꾼 우회도 잡는다)
+#  4-3 의미 기반 질문 가드: 금지 예문과 의미가 가까운 질문을 막는다 (표현을 바꾼 우회도 잡는다)
+#  4-4 의미 기반 답변 가드: 금지 예문과 의미가 가까운 답변을 표준 문구로 바꾼다 — 켜면 스트리밍 요청에도 한 번에 답한다
 #  시맨틱 캐시: 의미가 같은 질문은 LLM 호출 없이 저장된 답으로 응답한다
-#  통합 경로(llm)에는 스위치로 붙고 (FEATURE_SEMANTIC_GUARD · FEATURE_SEMANTIC_CACHE, 기본 off — 매 요청 임베딩 계산),
-#  의미 기반 가드는 영역 ④ 시험 경로(/poc/4)에서 따로 시험할 수 있다 (21-areas-semantic.yaml — 답변 가드 포함).
-#  시맨틱 캐시는 통합 경로에서 스위치를 켜고 확인한다 (verify.sh 는 켜져 있을 때만 점검).
+#  셋 다 /poc 에 붙고 처음에는 꺼 둔다 (FEATURE_SEMANTIC_GUARD · FEATURE_SEMANTIC_RESPONSE_GUARD · FEATURE_SEMANTIC_CACHE
+#  — 켜면 요청마다 임베딩을 계산). verify.sh 는 잠깐 켜서 확인하고 원래대로 돌린다.
 #  임베딩은 게이트웨이 자신의 /ai/embed 를 거친다 — 파드 안에서만 받는다(ip-restriction).
 #  벡터 DB(kong-pgvector)는 파드 안에서만 비밀번호 없이 접속한다 (start.sh — Kong 3.16 의미 기반 가드가
 #  vault 로 넣은 DB 비밀번호를 읽지 못해서). 바깥 PostgreSQL 을 쓰려면 pgvector 아래에 password 를 넣는다.
@@ -57,9 +57,12 @@ services:
                   upstream_url: ${{ env "DECK_EMBED_URL" }}
 
 plugins:
-  # 통합 경로에 붙는 의미 기반 가드·캐시 (스위치)
+  # /poc 에 붙는 의미 기반 가드(질문·답변)·시맨틱 캐시 — 스위치로 켜고 끈다 (처음에는 꺼 둠)
+  #   기준 거리는 bge-m3 로 시험 문장을 재서 정한 값 — 고객 임베딩 모델로 바꾸면 다시 확인한다
+  #     질문 0.42: 막을 우회 문장 0.33 · 나머지 시험 문장 0.46 이상 / 답변 0.40: 유해 답변 0.20~0.30 · 정상 답변 0.46 이상
+  # 4-3 의미 기반 질문 가드 — 정규식(ai-prompt-guard)을 피해 표현을 바꾼 우회도 잡는다
   - name: ai-semantic-prompt-guard
-    route: llm
+    route: poc
     enabled: ${{ env "DECK_ON_SEMANTIC_GUARD" }}   # FEATURE_SEMANTIC_GUARD
     config:
       embeddings:
@@ -89,8 +92,42 @@ plugins:
           database: kong-pgvector
           user: kong
 
+  # 4-4 의미 기반 답변 가드 — 키워드 검사에 없는 표현의 유해 답변도 막는다.
+  #   Kong 3.16.0.0 은 막으면 400 {"error":{"message":"bad response"}} (공식 문서에는 403, 검사 중 오류도 막음) —
+  #   00-base.yaml 의 block-message 가 본문을 표준 문구(DECK_BLOCK_MESSAGE)로 바꾼다. 임베딩 서버가 멈추면 답변이 모두 막힐 수 있다.
+  - name: ai-semantic-response-guard
+    route: poc
+    enabled: ${{ env "DECK_ON_SEMANTIC_RESPONSE_GUARD" }}   # FEATURE_SEMANTIC_RESPONSE_GUARD
+    config:
+      embeddings:
+        model:
+          provider: openai
+          name: ${{ env "DECK_EMBED_MODEL" }}
+          options:
+            upstream_url: ${{ env "DECK_KONG_LOOPBACK" }}/ai/embed
+      rules:
+        max_response_body_size: 0       # 답변 전체를 검사 (기본 8 KB 까지만)
+        deny_responses:
+          - 폭발물이나 무기를 만드는 구체적인 방법을 설명하는 답변
+          - 마약을 만들거나 구하는 방법을 알려 주는 답변
+          - 자해나 자살 방법을 구체적으로 알려 주는 답변
+          - 특정 집단을 비하하거나 혐오와 차별을 부추기는 답변
+      search:
+        threshold: 0.40                 # 코사인 거리 — 작을수록 엄격
+      vectordb:
+        strategy: pgvector
+        dimensions: ${{ env "DECK_EMBED_DIMS" }}
+        distance_metric: cosine
+        threshold: 0.40
+        pgvector:
+          host: ${{ env "DECK_PG_HOST" }}
+          port: ${{ env "DECK_PG_PORT" }}
+          database: kong-pgvector
+          user: kong
+
+  # 시맨틱 캐시 — 뜻이 같은 질문이면 LLM 을 부르지 않고 저장된 답을 돌려준다
   - name: ai-semantic-cache
-    route: llm
+    route: poc
     enabled: ${{ env "DECK_ON_SEMANTIC_CACHE" }}   # FEATURE_SEMANTIC_CACHE
     config:
       cache_ttl: 3600

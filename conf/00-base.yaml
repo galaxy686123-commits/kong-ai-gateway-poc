@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 #  공통 — 사용자·키·그룹(2-1·2-2), 요청 로그(3-1), 추적 ID(3-2), 지표(3-3), 계정 긴급 차단(3-4),
-#         채팅 요청 공통 전처리(클라이언트 model 무시 · 4-1 개인정보 마스킹 — FEATURE_MASKING 으로 켜고 끔)
+#         /poc 요청 공통 전처리(모델 이름) · 막은 답변을 표준 문구로 (항상 켬)
 #  값은 .env 의 DECK_* 로 채워진다 (apply-config.sh 가 적용).
 #  select_tags 때문에 kong-poc 태그가 붙은 것만 관리한다 — Kong Manager 에서 직접 만든 것은 건드리지 않는다.
 # ─────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ consumers:
       # 3-4 계정 긴급 차단 — 평소 꺼 둔다. Kong Manager 에서 이 플러그인을 켜면 이 계정의 모든 호출이 즉시 403
       - name: request-termination
         instance_name: kill-switch--team-a-app
-        enabled: false
+        enabled: ${{ env "DECK_KILL_TEAM_A_APP" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
         config:
           status_code: 403
           message: "이 계정은 관리자에 의해 차단되었습니다."
@@ -41,7 +41,7 @@ consumers:
     plugins:
       - name: request-termination
         instance_name: kill-switch--team-b-app
-        enabled: false
+        enabled: ${{ env "DECK_KILL_TEAM_B_APP" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
         config:
           status_code: 403
           message: "이 계정은 관리자에 의해 차단되었습니다."
@@ -75,85 +75,43 @@ plugins:
       bandwidth_metrics: true
       ai_metrics: true
 
-  # 채팅 요청 공통 전처리 (항상 켬 — 끄지 마세요)
-  #  ① 1-1·1-4 모델은 게이트웨이가 정한다 — 클라이언트가 보낸 model 은 지운다.
-  #     남겨 두면 설정과 다른 이름은 400("cannot use own model"), 같은 이름이어도 장애 대체가 일어나지 않는다
-  #     (Kong 3.16 실측). OpenAI SDK 등은 model 을 항상 보내므로 필요하다.
-  #     예외 — LLM 이 둘 이상(사내 · 외부 · 3번부터)이면 통합 경로(llm)에서는 model 이 등록된 이름일 때 그대로 둔다.
-  #     ai-proxy-advanced 의 model_alias 가 그 LLM 을 고른다 (apply-config.sh 가 만든 대상). 헤더 x-ai-target 으로도 고를 수 있다.
-  #     실제로 답한 모델은 응답 헤더 X-Kong-LLM-Model, 클라이언트가 보낸 이름은 요청 로그의 client_model.
-  #  ② 4-1 개인정보 마스킹 (FEATURE_MASKING) — LLM 으로 보내기 전에 프롬프트 속 개인정보를 라벨로 바꾼다
-  #     예) "주민번호 900101-1234567" → "주민번호 [주민등록번호]". 무엇을 가렸는지는 X-PII-Masked 헤더·요청 로그에.
+  # /poc 요청 공통 전처리 (항상 켬 — 끄지 마세요) — 요청 본문의 model
+  #   등록된 모델 이름(DECK_SELECT_MODELS — 실제 LLM 들 + 시험용 mock-llm)이면 그대로 둬 AI Proxy Advanced 가 그 대상을 고르게 하고
+  #   (model_alias), 그 밖의 이름은 지운다 — 남겨 두면 400(cannot use own model). OpenAI SDK 처럼 model 을 늘 보내는 앱도 그대로 붙고,
+  #   model 이 없거나 다른 이름이면 기본 대상(1순위 → 장애 시 2순위)이 답한다. 클라이언트가 보낸 이름은 요청 로그의 client_model.
+  #   4-1 개인정보 마스킹은 /poc 경로의 pii-masking 플러그인이 맡는다 (켜고 끄기 쉽게 따로 뺐다).
   - name: pre-function
     instance_name: chat-preprocess
     config:
       access:
         - |
-          local MASKING = ${{ env "DECK_ON_MASKING" }}   -- FEATURE_MASKING (4-1)
-          local SELECT = ${{ env "DECK_MODEL_SELECT" }}   -- 요청의 model 로 LLM 을 고름 (LLM 이 둘 이상일 때)
-          local path = kong.request.get_path()
-          if not path:find("/chat/completions$") then return end
+          local r = kong.router.get_route()
+          if r == nil or r.name ~= "poc" then return end
           local body = kong.request.get_body("application/json")
-          if type(body) ~= "table" then return end
-          local changed = false
-
-          -- ① 클라이언트가 보낸 모델 이름은 지운다 — 통합 경로에서 등록된 LLM 의 이름이면 그대로 둔다(그 LLM 을 고름)
-          if body.model ~= nil then
-            local m = tostring(body.model)
-            kong.log.set_serialize_value("client_model", m)
-            local keep = false
-            if SELECT and m ~= "" then
-              local r = kong.router.get_route()
-              if r ~= nil and r.name == "llm" then
-                for name in ([[${{ env "DECK_SELECT_MODELS" }}]]):gmatch("[^,]+") do
-                  if name == m then keep = true; break end
-                end
-              end
-            end
-            if not keep then
-              body.model = nil
-              changed = true
-            end
+          if type(body) ~= "table" or body.model == nil then return end
+          local m = tostring(body.model)
+          kong.log.set_serialize_value("client_model", m)
+          for name in ([[${{ env "DECK_SELECT_MODELS" }}]]):gmatch("[^,]+") do
+            if name == m then return end
           end
+          body.model = nil
+          kong.service.request.set_body(body, "application/json")
 
-          -- ② 개인정보 마스킹
-          if MASKING and type(body.messages) == "table" then
-            -- 순서가 중요하다: 긴 형식(주민번호·카드)을 먼저 가려야 짧은 형식(계좌)에 잘못 걸리지 않는다
-            local RULES = {
-              { "rrn",      "[주민등록번호]", "%d%d%d%d%d%d%s*%-%s*[1-8]%d%d%d%d%d%d" },
-              { "card",     "[카드번호]",     "%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d" },
-              { "mobile",   "[휴대전화]",     "01[016789][%-%. ]?%d%d%d%d?[%-%. ]?%d%d%d%d" },
-              { "landline", "[전화번호]",     "0[2-6]%d?[%-%. ]%d%d%d%d?[%-%. ]%d%d%d%d" },
-              -- 계좌: 숫자 묶음 3개(2~6 · 2~6 · 4~7자리). 날짜(2026-10-01)는 마지막 묶음이 짧아 걸리지 않는다
-              { "account",  "[계좌번호]",     "%d%d%d?%d?%d?%d?%-%d%d%d?%d?%d?%d?%-%d%d%d%d%d?%d?%d?" },
-              { "email",    "[이메일]",       "[%w%.%+%-_]+@[%w%-]+%.[%w%.%-]+" },
-            }
-            local total, seen, kinds = 0, {}, {}
-            local function mask(s)
-              for _, r in ipairs(RULES) do
-                local n
-                s, n = s:gsub(r[3], r[2])
-                if n > 0 then
-                  total = total + n
-                  if not seen[r[1]] then seen[r[1]] = true; kinds[#kinds + 1] = r[1] end
-                end
-              end
-              return s
-            end
-            for _, m in ipairs(body.messages) do
-              if type(m.content) == "string" then
-                m.content = mask(m.content)
-              elseif type(m.content) == "table" then      -- 멀티모달: 글자 부분만
-                for _, part in ipairs(m.content) do
-                  if type(part) == "table" and type(part.text) == "string" then part.text = mask(part.text) end
-                end
-              end
-            end
-            if total > 0 then
-              changed = true
-              kong.response.set_header("X-PII-Masked", table.concat(kinds, ","))
-              kong.log.set_serialize_value("pii_masked", { count = total, types = table.concat(kinds, ",") })
-            end
+  # /poc 에서 의미 기반 답변 가드(70-semantic.yaml)가 막은 답변을 표준 문구로 바꾼다 (항상 켬)
+  #   Kong 3.16.0.0 실측: 막으면 400 {"error":{"message":"bad response"}} (공식 문서에는 403 — ACL 403 과 섞이지 않게 400 만 본다)
+  - name: post-function
+    instance_name: block-message
+    config:
+      header_filter:
+        - |
+          local r = kong.router.get_route()
+          if r ~= nil and r.name == "poc" and kong.response.get_status() == 400 then kong.response.clear_header("Content-Length") end
+      body_filter:
+        - |
+          local r = kong.router.get_route()
+          if r == nil or r.name ~= "poc" or kong.response.get_status() ~= 400 then return end
+          local body = kong.response.get_raw_body()
+          if body and body:find('"bad response"', 1, true) then
+            local cjson = require "cjson.safe"
+            kong.response.set_raw_body(cjson.encode({ error = { message = [[${{ env "DECK_BLOCK_MESSAGE" }}]] } }))
           end
-
-          if changed then kong.service.request.set_body(body, "application/json") end

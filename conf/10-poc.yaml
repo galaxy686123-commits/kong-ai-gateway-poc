@@ -1,0 +1,108 @@
+# ─────────────────────────────────────────────────────────────
+#  /poc — PoC 의 채팅 경로 하나. 요구사항 플러그인을 모두 붙여 두고, 시연·검증할 것만 켠다.
+#    처음 상태: 키 인증(2-1)과 LLM 연결(AI Proxy Advanced, 11-targets — apply-config.sh 가 만든다)만 켬, 나머지는 꺼 둠.
+#    켜고 끄기: Kong Manager → Routes → poc → Plugins 의 스위치 — 다음 적용 때 그 상태를 설정 파일 FEATURE_… 에 적어 유지
+#              또는 설정 파일의 FEATURE_… 스위치 + bash apply-config.sh
+#    그 밖의 값(한도·패턴 등)은 이 파일·설정 파일 기준 — Manager 에서 바꾸면 다음 적용 때 되돌아간다 (적용 전에 목록을 보여 줌)
+#    verify.sh 는 영역마다 필요한 플러그인만 잠깐 켜서 확인하고 원래대로 돌린다.
+#  모델: 요청의 model 로 고른다 — 실제 LLM 들의 모델 이름, 시험용 mock-llm(모의 LLM · 장애 대체 시연). 없거나 다른 이름이면 기본 대상.
+#  OpenAI SDK 는 base_url 을 https://<게이트웨이>/poc 로 두면 /poc/chat/completions 를 부른다 (/poc 아래 어느 주소든 이 경로).
+# ─────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_info:
+  select_tags:
+    - kong-poc
+
+services:
+  - name: poc
+    url: ${{ env "DECK_POC_URL" }}          # 실제로 보낼 곳은 AI Proxy Advanced 의 대상들이 정한다 (11-targets)
+    read_timeout: 300000
+    routes:
+      - name: poc
+        paths: [/poc]
+        protocols: [http, https]
+        response_buffering: false   # 스트리밍 조각을 받는 즉시 넘긴다 (1-2)
+        plugins:
+          # 2-1 부서·프로젝트 키 — 늘 켬 (헤더 apikey). SSO(50-sso.yaml)를 시험할 때만 끈다
+          - name: key-auth
+            enabled: ${{ env "DECK_ON_KEY_AUTH" }}
+            config:
+              key_names: [apikey]
+              hide_credentials: true
+          # 2-2 허용 그룹만 (FEATURE_ACL)
+          - name: acl
+            enabled: ${{ env "DECK_ON_ACL" }}
+            config:
+              allow: [team-a, team-b]
+              hide_groups_header: true
+          # 2-3 사용자별 분당·일일 호출 수 (FEATURE_RATE_LIMIT · DECK_RPM · DECK_RPD)
+          - name: rate-limiting
+            enabled: ${{ env "DECK_ON_RATE_LIMIT" }}
+            config:
+              minute: ${{ env "DECK_RPM" }}
+              day: ${{ env "DECK_RPD" }}
+              limit_by: consumer
+              policy: local
+          # 2-4 사용자별 분당 토큰 (FEATURE_TOKEN_LIMIT · DECK_TPM). 예상 비용 한도는 모델 단가가 있을 때 policies 에 더한다
+          - name: ai-rate-limiting-advanced
+            enabled: ${{ env "DECK_ON_TOKEN_LIMIT" }}
+            config:
+              strategy: local
+              policies:
+                - match:
+                    - type: consumer
+                      partition_by: true
+                  limits:
+                    - limit: ${{ env "DECK_TPM" }}
+                      window_size: 60
+                      tokens_count_strategy: total_tokens
+          # 3-4 긴급 차단 — 켜면 이 경로의 모든 호출이 503 (계정별 차단은 00-base.yaml 의 kill-switch--<계정>). Kong Manager 에서 켜고 끈다
+          - name: request-termination
+            instance_name: kill-switch--poc
+            enabled: ${{ env "DECK_KILL_POC" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
+            config:
+              status_code: 503
+              message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
+          # 4-1 프롬프트 속 개인정보 → 라벨 (FEATURE_MASKING) — 이 번들 전용 플러그인 addons/kong-plugins
+          - name: pii-masking
+            enabled: ${{ env "DECK_ON_MASKING" }}
+          # 4-2 기밀 키워드 · 4-3 프롬프트 인젝션·탈옥 (FEATURE_PROMPT_GUARD · DECK_DLP_PATTERN)
+          - name: ai-prompt-guard
+            enabled: ${{ env "DECK_ON_PROMPT_GUARD" }}
+            config:
+              match_all_roles: false
+              deny_patterns:
+                - '(?i)(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instruction|prompt|rule)'
+                - '(?i)(?:이전|앞의|위의)\s*(?:지시|명령|규칙|지침).{0,10}(?:무시|잊어|따르지)'
+                - '(?i)(?:시스템\s*프롬프트|system\s+prompt).{0,20}(?:알려|보여|출력|공개|reveal|show|print)'
+                - '(?i)(?:jailbreak|탈옥|DAN\s+mode|developer\s+mode)'
+                - '(?i)<\s*script|javascript:|\bon(?:error|load)\s*='
+                - 'sk-[A-Za-z0-9_\-]{20,}'
+                - '${{ env "DECK_DLP_PATTERN" }}'
+          # 4-4 유해 답변 → 표준 문구 (FEATURE_OUTPUT_GUARD) — 답변을 한국어 PII 가드로 검사. 켜면 스트리밍이 꺼진다
+          - name: ai-custom-guardrail
+            enabled: ${{ env "DECK_ON_OUTPUT_GUARD" }}
+            config:
+              guarding_mode: OUTPUT
+              stop_on_error: true           # 검사 서비스가 응답하지 않으면 답변을 내보내지 않는다
+              timeout: 5000
+              request:
+                url: ${{ env "DECK_PII_URL" }}
+                body:
+                  text: "$(content)"
+                  source: "$(source)"
+              functions:
+                # 답변 검사 단계에서는 검사 서비스 응답이 문자열로 들어온다 → 직접 읽는다
+                verdict: |
+                  return function(resp)
+                    if type(resp) == "string" then
+                      return { block = resp:find('"block"%s*:%s*true') ~= nil }
+                    end
+                    return resp or {}
+                  end
+              response:
+                block: "$(verdict.block)"
+                block_message: ${{ env "DECK_BLOCK_MESSAGE" }}
+          # 4-5 답변 속 사설 IP · API 키 · DB 접속 정보 → 가림 (FEATURE_OUTPUT_MASK) — 이 번들 전용 플러그인. 켜면 스트리밍이 꺼진다
+          - name: response-masking
+            enabled: ${{ env "DECK_ON_OUTPUT_MASK" }}

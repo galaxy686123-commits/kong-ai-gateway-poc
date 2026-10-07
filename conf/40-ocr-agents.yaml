@@ -39,7 +39,7 @@ services:
               require_content_length: false
           - name: request-termination
             instance_name: kill-switch--ocr
-            enabled: false
+            enabled: ${{ env "DECK_KILL_OCR" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
             config:
               status_code: 503
               message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
@@ -62,7 +62,7 @@ services:
               hide_groups_header: true
           - name: request-termination
             instance_name: kill-switch--agent-a
-            enabled: false
+            enabled: ${{ env "DECK_KILL_AGENT_A" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
             config:
               status_code: 503
               message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."
@@ -85,7 +85,7 @@ services:
               hide_groups_header: true
           - name: request-termination
             instance_name: kill-switch--agent-b
-            enabled: false
+            enabled: ${{ env "DECK_KILL_AGENT_B" }}   # 적용해도 지금 상태 그대로 (apply-config 가 Kong 에서 읽어 넘김)
             config:
               status_code: 503
               message: "이 AI 서비스는 관리자에 의해 긴급 차단되었습니다."

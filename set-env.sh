@@ -22,7 +22,7 @@ case "$v" in *$'\n'*) die "값에 줄바꿈을 넣을 수 없습니다" ;; esac
 if [[ "$v" =~ [[:space:]]# ]]; then note "⚠ 값 안의 ' #' 뒤는 주석으로 읽혀 그 앞까지만 값이 됩니다"; fi
 
 env_set "$k" "$v" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
-case "$k" in *PASSWORD*|*SECRET*|*KEY*|*AUTH*|*TOKEN*) shown="(${#v}자 — 화면에 안 보임)" ;; *) shown=$v ;; esac
+case "$k" in FEATURE_*) shown=$v ;; *PASSWORD*|*SECRET*|*KEY*|*AUTH*|*TOKEN*) shown="(${#v}자 — 화면에 안 보임)" ;; *) shown=$v ;; esac   # 스위치(FEATURE_TOKEN_LIMIT 등)는 비밀값이 아님
 note "$k = $shown  → $ENV_FILE"
 note "반영: Kong 설정 값이면 bash apply-config.sh · 접속 주소·포트·LLM 주소면 bash stop.sh && bash start.sh"
 note "      (빌드한 새 환경이 돌고 있으면 bash remote.sh apply · bash remote.sh restart)"
