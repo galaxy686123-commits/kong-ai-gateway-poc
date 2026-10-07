@@ -184,7 +184,8 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 - 비교 기준은 지난 적용 직후의 Kong 상태입니다(데이터 폴더 `state/applied.json`, `manager-changes.py` 가 비교).
 - `bash apply-config.sh --dry-run` 으로 무엇이 설정 파일에 적히고 무엇이 되돌아가는지 먼저 봅니다.
-- Manager 에서 시험해 본 값을 계속 쓰려면 그 값을 설정 파일(`DECK_RPM` 등)이나 `conf/*.yaml` 로 옮깁니다.
+- Manager 에서 시험해 본 값을 계속 쓰려면 그 값을 설정 파일(`DECK_RPM` 등)이나 `conf/*.yaml` 로 옮깁니다. 적용 화면이 설정 키가 있는
+  값은 넣을 명령(`bash set-env.sh DECK_RPM 100` 등)까지 보여 주고, 설정 파일에 옮긴 값은 목록에서 빠집니다(적용해도 유지).
 - 지금 상태 전체를 파일로 남기려면 `bash dump-config.sh`(→ `backup/`). 그 파일을 `deck gateway sync` 하면 그 시점으로 돌아갑니다.
 - `verify.sh` 가 잠깐 켠 플러그인은 점검이 끝나면(끊겨도 다음 점검·적용 때) 처음 상태로 돌아가므로 Manager 에서 바꾼 것으로 잡히지 않습니다.
 

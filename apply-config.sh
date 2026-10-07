@@ -48,9 +48,9 @@ kdump() { deck gateway dump --select-tag kong-poc --format json -o "$1" --yes "$
 if [ -f "$(verify_restore_file)" ]; then   # Manager 에서 바꾼 것으로 오해하지 않게 먼저
   verify_restore; note "지난 점검(verify.sh)이 중간에 끊겨 바뀐 채 남은 /poc 플러그인을 먼저 되돌렸습니다"
 fi
-NOW="$STATE_DIR/now.json"; trap 'rm -f "$NOW"' EXIT
+NOW="$STATE_DIR/now.json"; WANT="$STATE_DIR/want.json"; trap 'rm -f "$NOW" "$WANT"' EXIT   # want = 이번에 적용할 설정(키 포함)
 kdump "$NOW" || die "지금 Kong 설정을 읽지 못했습니다 — 긴급 차단 상태를 모른 채 적용하면 차단이 풀릴 수 있어 멈춥니다"
-ADOPT=(); FIRST=(); KILLED=(); VALS=()
+ADOPT=(); FIRST=(); KILLED=()
 while IFS= read -r l; do
   case "$l" in
     "SW "*)
@@ -60,7 +60,6 @@ while IFS= read -r l; do
     "KILL "*)
       read -r _ n st <<<"$l"; printf -v "$(kill_var "$n")" '%s' "$([ "$st" = on ] && echo true || echo false)"
       [ "$st" = on ] && KILLED+=("kill-switch--$n") ;;
-    "VAL "*) VALS+=("${l#VAL }") ;;
   esac
 done < <(python3 "$ROOT/manager-changes.py" "$STATE_DIR/applied.json" "$NOW" "$POC_SWITCHES" "$KILL_SWITCHES" 2>/dev/null)
 if [ "$DRY" = 0 ]; then
@@ -69,17 +68,6 @@ fi
 [ ${#ADOPT[@]} -gt 0 ] && note "Kong Manager 에서 켜고 끈 /poc 스위치를 설정 파일에 $([ "$DRY" = 1 ] && echo '적을 예정(미리 보기)' || echo '적었습니다'): ${ADOPT[*]}"
 [ ${#FIRST[@]} -gt 0 ] && note "지난 적용 기록이 없어 설정 파일 값으로 맞춥니다: ${FIRST[*]} (다음부터는 Manager 에서 바꾼 스위치를 유지)"
 [ ${#KILLED[@]} -gt 0 ] && note "긴급 차단이 켜져 있어 그대로 둡니다: ${KILLED[*]} (풀려면 Kong Manager 에서 끄세요)"
-if [ ${#VALS[@]} -gt 0 ]; then
-  bk=""
-  if [ "$DRY" = 0 ]; then
-    mkdir -p "$DATA_DIR/backup"; bk="$DATA_DIR/backup/kong-before-apply-$(date +%Y%m%d-%H%M%S).json"
-    cp "$NOW" "$bk" && chmod 600 "$bk"
-  fi
-  note "Kong Manager 에서 바꾼 값 ${#VALS[@]}개 — 설정 파일 기준이라 $([ "$DRY" = 1 ] && echo '적용하면' || echo '이번 적용으로') 되돌아갑니다 (지난 적용 값 → 지금 값):"
-  for v in "${VALS[@]:0:20}"; do note "  · $v"; done
-  [ ${#VALS[@]} -gt 20 ] && note "  · … 외 $(( ${#VALS[@]} - 20 ))개"
-  note "  계속 쓰려면 그 값을 설정 파일(bash set-env.sh)이나 conf/*.yaml 에 옮기세요$([ -n "$bk" ] && echo " — 되돌리기 전 상태: $bk")"
-fi
 deck_env
 
 files=(conf/00-base.yaml conf/10-poc.yaml)
@@ -256,6 +244,26 @@ for p in load("plugins.json")["data"]:
 PY
   rm -rf "$t"
 }
+
+# Manager 에서 바꾼 그 밖의 값 — 이번에 적용할 값과 다른 것만 (설정 파일에 이미 옮긴 값은 유지되므로 빠진다)
+VALS=()
+if env "${AENV[@]}" deck file render --populate-env-vars --format json "${files[@]}" > "$WANT" 2>/dev/null; then
+  chmod 600 "$WANT"
+  while IFS= read -r l; do VALS+=("${l#VAL }"); done < <(python3 "$ROOT/manager-changes.py" "$STATE_DIR/applied.json" "$NOW" \
+    "$POC_SWITCHES" "$KILL_SWITCHES" "$WANT" 2>/dev/null | grep '^VAL ')
+fi
+if [ ${#VALS[@]} -gt 0 ]; then
+  say "Kong Manager 에서 바꾼 값 ${#VALS[@]}개 — 설정 파일 기준이라 $([ "$DRY" = 1 ] && echo '적용하면' || echo '이번 적용으로') 되돌아감 (지난 적용 값 → 지금 값)"
+  bk=""
+  if [ "$DRY" = 0 ]; then
+    mkdir -p "$DATA_DIR/backup"; bk="$DATA_DIR/backup/kong-before-apply-$(date +%Y%m%d-%H%M%S).json"
+    cp "$NOW" "$bk" && chmod 600 "$bk"
+  fi
+  for v in "${VALS[@]:0:20}"; do note "· $v"; done
+  [ ${#VALS[@]} -gt 20 ] && note "· … 외 $(( ${#VALS[@]} - 20 ))개"
+  note "계속 쓰려면 그 값을 설정 파일(bash set-env.sh — 키가 있는 값은 위에 명령을 적었음)이나 conf/*.yaml 에 옮긴 뒤 적용하세요"
+  [ -n "$bk" ] && note "되돌리기 전 상태: $bk"
+fi
 
 if [ "$DRY" = 1 ]; then
   say "바뀔 내용 (적용하지 않음)"
