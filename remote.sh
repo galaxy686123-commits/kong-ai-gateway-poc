@@ -72,7 +72,7 @@ PY
       echo "at=$(date '+%F %T')"; echo "from=$HOST_ID"; } > "$new/.code-info"
     rm -rf "$DATA_DIR/code.prev"
     if [ -d "$CODE" ]; then mv "$CODE" "$DATA_DIR/code.prev"
-    else mkdir -p "$DATA_DIR/code.prev" && echo "빌드 스냅샷" > "$DATA_DIR/code.prev/.snapshot"; fi
+    else mkdir -p "$DATA_DIR/code.prev" && echo "빌드 스냅샷" > "$DATA_DIR/code.prev/.from-build"; fi   # .snapshot 은 NetApp NFS 가 모든 폴더에 두는 이름이라 쓰지 않는다
     mv "$new" "$CODE"
     say "유지 폴더에 코드를 넣었습니다 — $(code_info "$CODE")"
   else

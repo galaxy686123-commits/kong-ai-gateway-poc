@@ -49,7 +49,7 @@ if [ "$ROOT" != "$CODE_DIR" ] && [ -f "$CODE_DIR/run.sh" ]; then
   elif [ "$seen" != "$fp" ]; then
     say "사본을 넣은 뒤 다시 빌드했습니다 — 빌드한 코드로 돕니다 (유지 폴더의 사본은 code.prev 로 비켜 둠 · 돌아가려면 bash remote.sh rollback)"
     rm -rf "$DATA_DIR/code.prev"; mv "$CODE_DIR" "$DATA_DIR/code.prev"
-    mkdir -p "$CODE_DIR" && echo "빌드 스냅샷" > "$CODE_DIR/.snapshot"; rm -f "$DATA_DIR/code-fails"
+    mkdir -p "$CODE_DIR" && echo "빌드 스냅샷" > "$CODE_DIR/.from-build"; rm -f "$DATA_DIR/code-fails"
   fi
 fi
 if [ "$ROOT" != "$CODE_DIR" ] && [ -f "$CODE_DIR/run.sh" ]; then
