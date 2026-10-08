@@ -493,7 +493,7 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   임베딩 호출은 LLM 패널에서 뺍니다 — `start.sh` 가 대시보드를 로컬 디스크(`~/.kong-poc/grafana-dashboards`)로 옮기며 `DECK_EMBED_MODEL` 을 채웁니다.
 - **요청 기록**(`addons/reqlog`): 요청 로그(`logs/audit.log`)를 10초마다 같은 PostgreSQL 의 DB `reqlog` 로 옮겨 「요청 기록」 대시보드가 읽습니다.
   질문 · 답변은 Kong Manager 에서 대상(Target)의 **Log payloads** 를 켠 요청만 남습니다(스트리밍 답변도 이어 붙여 남음).
-  DB 에는 `REQLOG_KEEP_DAYS`(7)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
+  DB 에는 `REQLOG_KEEP_DAYS`(30)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
   Grafana 는 읽기 전용 계정 `reqlog_reader`(비밀번호 `REQLOG_DB_PASSWORD`, 처음 기동할 때 만듦)로 읽습니다.
   질문 · 답변 원문이 그대로 쌓이므로, 볼 사람(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).

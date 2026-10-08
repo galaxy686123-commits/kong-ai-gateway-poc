@@ -212,7 +212,7 @@ SELECT format('ALTER ROLE reqlog_reader PASSWORD %L', :'pw') \gexec
 SELECT 'CREATE DATABASE reqlog' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'reqlog') \gexec
 SQL
   psql_su -d reqlog < "$ROOT/addons/reqlog/schema.sql"
-  if reqlog_on; then reqlog_start; note "요청 기록: 요청 로그 → DB reqlog (10초마다 · ${REQLOG_KEEP_DAYS:-7}일 보관) — Grafana 「요청 기록」"
+  if reqlog_on; then reqlog_start; note "요청 기록: 요청 로그 → DB reqlog (10초마다 · ${REQLOG_KEEP_DAYS:-30}일 보관) — Grafana 「요청 기록」"
   else note "요청 기록: 옮기지 않음 (REQLOG=off)"; fi
   # Grafana — 프록시의 /grafana 경로로 연다(Kong 이 넘김). 관리자 비밀번호가 없으면 만들어 설정 파일에 적는다
   if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then

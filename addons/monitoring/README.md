@@ -6,7 +6,7 @@
 |---|---|---|
 | Prometheus (Ubuntu 저장소, apt) | `127.0.0.1:9090` (파드 안) | Kong 지표 `:8100/metrics` 를 15초마다 모으고 `alerts/kong-alerts.yml` 경보 규칙을 계산. 15일 · 2GB 보관 |
 | Grafana 12.4.12 (`pkgs/` 에 포함) | `127.0.0.1:3000` → Kong 경로 **`/grafana`** | 대시보드 세 개 — 화면은 프록시 주소(8000)의 `/grafana/` |
-| 요청 기록 (`addons/reqlog/reqlog.py`) | 같은 PostgreSQL 의 DB `reqlog` | 요청 로그(`audit.log`)를 10초마다 표로 옮김 — 「요청 기록」 대시보드가 읽음. `REQLOG_KEEP_DAYS`(7)일 보관 |
+| 요청 기록 (`addons/reqlog/reqlog.py`) | 같은 PostgreSQL 의 DB `reqlog` | 요청 로그(`audit.log`)를 10초마다 표로 옮김 — 「요청 기록」 대시보드가 읽음. `REQLOG_KEEP_DAYS`(30)일 보관 |
 
 대시보드 (`grafana/dashboards/`, 폴더 「Kong AI Gateway PoC」):
 

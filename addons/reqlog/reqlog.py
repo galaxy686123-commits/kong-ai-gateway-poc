@@ -7,7 +7,7 @@
   python3 reqlog.py          지금까지 쌓인 것을 옮기고 끝
   python3 reqlog.py --loop   10초마다 옮김 · 1시간마다 보관 기간이 지난 행을 지움 (start.sh 가 띄운다)
 
-환경변수: LOGS · DATA_DIR · RUN_DIR · PG_BIN · PG_PORT · REQLOG_KEEP_DAYS(기본 7)
+환경변수: LOGS · DATA_DIR · RUN_DIR · PG_BIN · PG_PORT · REQLOG_KEEP_DAYS(기본 30)
 어디까지 옮겼는지는 유지 폴더의 state/reqlog.pos(파일 번호 · 위치)에 적는다 — 새 환경이 떠도 이어서 옮긴다.
 """
 import hashlib
@@ -22,7 +22,7 @@ LOG = os.path.join(os.environ["LOGS"], "audit.log")
 POS = os.path.join(os.environ["DATA_DIR"], "state", "reqlog.pos")
 PSQL = [os.path.join(os.environ["PG_BIN"], "psql"), "-h", os.environ["RUN_DIR"], "-p", os.environ.get("PG_PORT") or "5432",
         "-U", "postgres", "-d", "reqlog", "-v", "ON_ERROR_STOP=1", "-qAt", "-f", "-"]
-KEEP_DAYS = int(os.environ.get("REQLOG_KEEP_DAYS") or 7)
+KEEP_DAYS = int(os.environ.get("REQLOG_KEEP_DAYS") or 30)
 BATCH = 16 * 1024 * 1024           # 한 번에 읽는 양
 MAX_FIELD = 2 * 1024 * 1024        # 본문 한 칸 상한 — 넘으면 잘라 둔다
 SKIP_ROUTES = {"ai-embed"}         # 게이트웨이 안에서만 쓰는 임베딩 호출 — 사람이 볼 기록이 아니다
