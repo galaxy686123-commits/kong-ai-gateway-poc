@@ -1,26 +1,71 @@
 {
+  "uid": "kong-ai-gateway-poc",
+  "title": "Kong AI Gateway PoC",
+  "tags": [
+    "kong",
+    "ai-gateway",
+    "poc"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "description": "요구사항 3-3 — 건수 · 토큰 · 비용은 요청 기록(DB, 한 건도 빠짐없이), 지연 · 라이선스는 Prometheus 지표. 모델 · 사용자별 사용량, 정책 차단, 게이트웨이 오버헤드와 LLM 지연, 시맨틱 캐시",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "timezone": "browser",
   "annotations": {
     "list": []
   },
-  "editable": true,
+  "links": [
+    {
+      "title": "요청 기록 — 질문 · 답변",
+      "type": "link",
+      "url": "/d/kong-poc-reqlog/request-log",
+      "keepTime": true,
+      "icon": "doc",
+      "tooltip": "요청 한 건씩 — 사용자 · 모델 · 상태 · 질문 · 답변",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "type": "constant",
+        "name": "embed",
+        "label": "임베딩 모델",
+        "hide": 2,
+        "query": "__EMBED_MODEL__",
+        "description": "LLM 패널에서 뺄 임베딩 모델 — start.sh 가 설정 파일의 DECK_EMBED_MODEL 로 채운다"
+      }
+    ]
+  },
   "panels": [
     {
+      "id": 1,
+      "type": "row",
+      "title": "개요 — 고른 기간",
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 100,
-      "title": "개요",
-      "type": "row"
+      "panels": []
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none"
-        }
+      "id": 2,
+      "type": "stat",
+      "title": "요청",
+      "description": "고른 기간의 모든 요청 — 막힌 요청 포함 (요청 기록 기준 — 게이트웨이 내부 임베딩 호출은 뺌)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
       "gridPos": {
         "h": 5,
@@ -28,32 +73,52 @@
         "x": 0,
         "y": 1
       },
-      "id": 1,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"요청\" FROM requests WHERE $__timeFilter(ts)",
+          "refId": "A"
         }
-      ],
-      "title": "전체 요청 /분",
-      "type": "stat"
+      ]
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none"
-        }
+      "id": 3,
+      "type": "stat",
+      "title": "LLM 요청",
+      "description": "LLM 이 답한 요청 (요청 기록 기준)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
       "gridPos": {
         "h": 5,
@@ -61,32 +126,52 @@
         "x": 4,
         "y": 1
       },
-      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum(rate(kong_ai_llm_requests_total[5m]))*60"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FILTER (WHERE model IS NOT NULL) AS \"LLM 요청\" FROM requests WHERE $__timeFilter(ts)",
+          "refId": "A"
         }
-      ],
-      "title": "LLM 요청 /분",
-      "type": "stat"
+      ]
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "unit": "none"
-        }
+      "id": 4,
+      "type": "stat",
+      "title": "토큰",
+      "description": "질문 + 답변 토큰 (요청 기록 기준)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
       "gridPos": {
         "h": 5,
@@ -94,31 +179,65 @@
         "x": 8,
         "y": 1
       },
-      "id": 3,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum(rate(kong_ai_llm_tokens_total{token_type=\"total_tokens\"}[5m]))*60"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(total_tokens), 0) AS \"토큰\" FROM requests WHERE $__timeFilter(ts)",
+          "refId": "A"
         }
-      ],
-      "title": "토큰 /분",
-      "type": "stat"
+      ]
     },
     {
+      "id": 5,
+      "type": "stat",
+      "title": "오버헤드 p95",
+      "description": "게이트웨이 오버헤드 — Kong 이 요청을 처리하느라 더한 시간(LLM 응답 시간은 뺌), 고른 기간의 95%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
+          "unit": "ms",
           "decimals": 1,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -134,22 +253,24 @@
               }
             ]
           },
-          "unit": "ms"
-        }
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 12,
-        "y": 1
-      },
-      "id": 4,
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
@@ -157,17 +278,34 @@
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))"
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_kong_latency_ms_bucket{route!~\"grafana|ai-embed\"}[$__range])))",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
-      ],
-      "title": "게이트웨이 오버헤드 p95",
-      "type": "stat"
+      ]
     },
     {
+      "id": 6,
+      "type": "stat",
+      "title": "차단 비율 (4xx)",
+      "description": "고른 기간 요청 가운데 4xx(가드레일 · 인증 · 허용 그룹 · 한도)로 막힌 비율 (요청 기록 기준)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
+          "unit": "percent",
           "decimals": 1,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -183,40 +321,60 @@
               }
             ]
           },
-          "unit": "percent"
-        }
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 1
-      },
-      "id": 5,
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "100*sum(rate(kong_http_requests_total{route!=\"grafana\",code=~\"4..\"}[5m]))/clamp_min(sum(rate(kong_http_requests_total{route!=\"grafana\"}[5m])),0.0001)"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE status BETWEEN 400 AND 499) / greatest(count(*), 1) AS \"차단 비율\" FROM requests WHERE $__timeFilter(ts)",
+          "refId": "A"
         }
-      ],
-      "title": "차단 비율 (4xx)",
-      "type": "stat"
+      ]
     },
     {
+      "id": 7,
+      "type": "stat",
+      "title": "라이선스 만료까지",
+      "description": "Kong Enterprise 라이선스가 끝나기까지 남은 날",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
+          "unit": "suffix: 일",
           "decimals": 0,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "red",
@@ -232,22 +390,24 @@
               }
             ]
           },
-          "unit": "suffix: 일"
-        }
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 1
-      },
-      "id": 6,
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
       },
       "targets": [
         {
@@ -255,449 +415,1088 @@
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "(kong_enterprise_license_expiration - time())/86400"
+          "expr": "(kong_enterprise_license_expiration - time())/86400",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
-      ],
-      "title": "라이선스 만료까지",
-      "type": "stat"
+      ]
     },
     {
+      "id": 8,
+      "type": "row",
+      "title": "사용량 — 모델 · 사용자 (요청 기록 기준, 막대 하나 = 5분)",
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 6
       },
-      "id": 101,
-      "title": "트래픽",
-      "type": "row"
+      "panels": []
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "none"
-        }
+      "id": 9,
+      "type": "timeseries",
+      "title": "모델별 LLM 요청 수 — 요청의 model 로 고른 결과",
+      "description": "어느 모델이 답했는지. 목록 밖 이름이나 빈 model 은 기본 대상이 답한다. 막대를 누르면 그 모델의 요청 기록",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
+      "interval": "5m",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
         "y": 7
       },
-      "id": 10,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "links": [
+            {
+              "title": "이 모델의 요청 기록",
+              "url": "/d/kong-poc-reqlog/request-log?var-model=${__field.name}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum by(ai_provider)(rate(kong_ai_llm_requests_total[5m]))*60",
-          "legendFormat": "{{ai_provider}}"
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), model AS metric, count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND model IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
         }
-      ],
-      "title": "프로바이더별 LLM 요청 /분",
-      "type": "timeseries"
+      ]
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never"
-          },
-          "unit": "none"
-        }
+      "id": 10,
+      "type": "timeseries",
+      "title": "모델별 토큰 — 질문 · 답변",
+      "description": "모델마다 질문(prompt) · 답변(completion) 토큰",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
+      "interval": "5m",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 7
       },
-      "id": 11,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum by(ai_model)(rate(kong_ai_llm_tokens_total{token_type=\"prompt_tokens\"}[5m]))*60",
-          "legendFormat": "{{ai_model}} prompt"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(ai_model)(rate(kong_ai_llm_tokens_total{token_type=\"completion_tokens\"}[5m]))*60",
-          "legendFormat": "{{ai_model}} completion"
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, metric, v FROM (\n  SELECT $__timeGroup(ts, $__interval, 0) AS time, model || ' · 질문' AS metric, sum(prompt_tokens) AS v\n  FROM requests WHERE $__timeFilter(ts) AND model IS NOT NULL GROUP BY 1, 2\n  UNION ALL\n  SELECT $__timeGroup(ts, $__interval, 0), model || ' · 답변', sum(completion_tokens)\n  FROM requests WHERE $__timeFilter(ts) AND model IS NOT NULL GROUP BY 1, 2\n) x ORDER BY 1",
+          "refId": "A"
         }
-      ],
-      "title": "모델별 토큰 /분",
-      "type": "timeseries"
+      ]
     },
     {
+      "id": 11,
+      "type": "timeseries",
+      "title": "사용자별 요청 수",
+      "description": "사용자(컨슈머 — 부서 · 프로젝트 키)별 요청. 인증 전에 막힌 요청은 사용자가 없어 빠진다. 막대를 누르면 그 사용자의 요청 기록",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "interval": "5m",
       "gridPos": {
-        "h": 1,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
         "y": 15
       },
-      "id": 102,
-      "title": "지연 — 게이트웨이 오버헤드와 LLM 응답을 분리해서 본다",
-      "type": "row"
-    },
-    {
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
           "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           },
-          "unit": "ms"
+          "links": [
+            {
+              "title": "이 사용자의 요청 기록",
+              "url": "/d/kong-poc-reqlog/request-log?var-user=${__field.name}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
         }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), consumer AS metric, count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND consumer IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "사용자별 토큰",
+      "description": "사용자별 질문 + 답변 토큰. 막대를 누르면 그 사용자의 요청 기록",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "links": [
+            {
+              "title": "이 사용자의 요청 기록",
+              "url": "/d/kong-poc-reqlog/request-log?var-user=${__field.name}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), consumer AS metric, sum(total_tokens) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND consumer IS NOT NULL AND total_tokens IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "정책 · 결과",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "응답 결과 — 통과 · 정책 차단 · 오류",
+      "description": "응답 코드별. 400 가드레일 · 401 키 · SSO · 403 허용 그룹 · 429 한도 · 503 긴급 차단(Kong Manager 에서 켬). 플러그인을 켜고 끄면 여기서 바로 보인다",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "200"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "200 통과"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "400"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "400 가드레일"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "401"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "401 인증"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "403"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "403 허용 그룹 밖"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "429"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "429 한도"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "503"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "503 긴급 차단 등"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "500"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "500 오류"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "502"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "502 오류"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), status::text AS metric, count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND status IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "사용자별 예상 비용 — 고른 기간",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 16
+        "w": 6,
+        "x": 12,
+        "y": 24
       },
+      "description": "대상(Target)에 넣은 토큰 단가로 Kong 이 계산한 값 — 단가를 비워 두면 0",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "예상 비용"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "토큰"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT consumer AS \"사용자\", coalesce(sum(total_tokens), 0) AS \"토큰\", coalesce(sum(cost), 0) AS \"예상 비용\"\nFROM requests WHERE $__timeFilter(ts) AND consumer IS NOT NULL\nGROUP BY 1 ORDER BY 3 DESC, 2 DESC",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "경로별 요청 수",
+      "description": "Kong 경로(route)별 요청 — 채팅은 poc",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), coalesce(route, '(경로 없음)') AS metric, count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts)\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "지연 — 게이트웨이 오버헤드와 LLM 응답을 나눠서 본다 (Prometheus 지표, 점 하나 = 5분)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "게이트웨이 쪽 — Kong 자체 · 답변 검사",
+      "description": "Kong 이 더한 시간(플러그인 처리 포함, LLM 응답은 뺌)과 답변 검사(가드레일 — 켰을 때만) 시간",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by(le)(increase(kong_kong_latency_ms_bucket{route!~\"grafana|ai-embed\"}[$__interval])))",
+          "refId": "A",
+          "legendFormat": "Kong p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_kong_latency_ms_bucket{route!~\"grafana|ai-embed\"}[$__interval])))",
+          "refId": "B",
+          "legendFormat": "Kong p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_ai_custom_guardrail_latency_ms_bucket[$__interval])))",
+          "refId": "C",
+          "legendFormat": "답변 검사 p95"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "LLM 응답 시간",
+      "description": "Kong 이 LLM(업스트림)에 보내고 답을 다 받기까지",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by(le)(increase(kong_upstream_latency_ms_bucket{route!~\"grafana|ai-embed\"}[$__interval])))",
+          "refId": "A",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_upstream_latency_ms_bucket{route!~\"grafana|ai-embed\"}[$__interval])))",
+          "refId": "B",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
       "id": 20,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.50, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_kong_latency_ms_bucket[5m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "title": "게이트웨이 오버헤드 (Kong 자체)",
-      "type": "timeseries"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
-          },
-          "unit": "ms"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 16
-      },
-      "id": 21,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.50, sum by(le)(rate(kong_upstream_latency_ms_bucket[5m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_upstream_latency_ms_bucket[5m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "title": "업스트림 LLM 응답",
-      "type": "timeseries"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
-          },
-          "unit": "ms"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 16
-      },
-      "id": 22,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by(le,ai_provider)(rate(kong_ai_llm_provider_latency_ms_bucket[5m])))",
-          "legendFormat": "{{ai_provider}}"
-        }
-      ],
-      "title": "프로바이더별 응답 p95",
-      "type": "timeseries"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
-          },
-          "unit": "ms"
-        }
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 24
-      },
-      "id": 23,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(rate(kong_ai_llm_ttft_latency_ms_bucket[5m])))",
-          "legendFormat": "{{ai_model}}"
-        }
-      ],
+      "type": "timeseries",
       "title": "첫 토큰까지 (TTFT) p95",
-      "type": "timeseries"
-    },
-    {
+      "description": "스트리밍 답변의 첫 글자가 나오기까지 — 모델별 (임베딩 호출은 뺌)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 33
+      },
       "fieldConfig": {
         "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "min": 0,
           "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
-          },
-          "unit": "ms"
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 24
-      },
-      "id": 24,
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(rate(kong_ai_llm_tpot_latency_ms_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(increase(kong_ai_llm_ttft_latency_ms_bucket{ai_model!~\"$embed|UNSPECIFIED|\"}[$__interval])))",
+          "refId": "A",
           "legendFormat": "{{ai_model}}"
         }
-      ],
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
       "title": "토큰 간 지연 (TPOT) p95",
-      "type": "timeseries"
-    },
-    {
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 31
+      "description": "답변 토큰 하나가 나오는 간격 — 모델별 (임베딩 호출은 뺌)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
       },
-      "id": 103,
-      "title": "거버넌스 · 감사",
-      "type": "row"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "none"
-        }
-      },
+      "interval": "5m",
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 32
+        "w": 6,
+        "x": 18,
+        "y": 33
       },
-      "id": 30,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "sum by(consumer)(rate(kong_http_requests_total{route!=\"grafana\",consumer!=\"\"}[5m]))*60",
-          "legendFormat": "{{consumer}}"
+          "expr": "histogram_quantile(0.95, sum by(le,ai_model)(increase(kong_ai_llm_tpot_latency_ms_bucket{ai_model!~\"$embed|UNSPECIFIED|\"}[$__interval])))",
+          "refId": "A",
+          "legendFormat": "{{ai_model}}"
         }
-      ],
-      "title": "팀(Consumer)별 요청 /분",
-      "type": "timeseries"
+      ]
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "none"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 32
-      },
-      "id": 31,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(code)(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60",
-          "legendFormat": "{{code}}"
-        }
-      ],
-      "title": "응답 코드별 /분 — 4xx = 정책 차단",
-      "type": "timeseries"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "none"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 32
-      },
-      "id": 32,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(route)(rate(kong_http_requests_total{route!=\"grafana\"}[5m]))*60",
-          "legendFormat": "{{route}}"
-        }
-      ],
-      "title": "라우트별 요청 /분",
-      "type": "timeseries"
-    },
-    {
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 40
-      },
-      "id": 104,
+      "id": 22,
+      "type": "row",
       "title": "시맨틱 캐시",
-      "type": "row"
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "panels": []
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "none"
-        }
+      "id": 23,
+      "type": "timeseries",
+      "title": "캐시 결과별 요청 수",
+      "description": "시맨틱 캐시를 켰을 때 — hit 는 LLM 을 부르지 않고 저장된 답을 돌려줌 (요청 기록 기준)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
       },
+      "interval": "5m",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 42
       },
-      "id": 40,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hit"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "hit — 저장된 답"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "miss"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "miss — LLM 호출"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "refresh"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "refresh — 만료돼 다시 부름"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
           },
-          "expr": "sum by(cache_status)(rate(kong_ai_llm_requests_total{cache_status!=\"\"}[5m]))*60",
-          "legendFormat": "{{cache_status}}"
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval, 0), cache_status AS metric, count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND coalesce(cache_status, '') <> ''\nGROUP BY 1, 2\nORDER BY 1",
+          "refId": "A"
         }
-      ],
-      "title": "캐시 상태별 요청 /분",
-      "type": "timeseries"
+      ]
     },
     {
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 5,
-            "showPoints": "never"
-          },
-          "unit": "ms"
-        }
+      "id": 24,
+      "type": "timeseries",
+      "title": "캐시 조회 · 임베딩 시간 p95",
+      "description": "캐시를 찾는 시간과 질문을 임베딩하는 시간",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
       },
+      "interval": "5m",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 41
+        "y": 42
       },
-      "id": 41,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_cache_fetch_latency_ms_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_ai_cache_fetch_latency_ms_bucket[$__interval])))",
+          "refId": "A",
           "legendFormat": "캐시 조회"
         },
         {
@@ -705,276 +1504,11 @@
             "type": "prometheus",
             "uid": "kong-poc-prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_cache_embeddings_latency_ms_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by(le)(increase(kong_ai_cache_embeddings_latency_ms_bucket[$__interval])))",
+          "refId": "B",
           "legendFormat": "임베딩 생성"
-        }
-      ],
-      "title": "캐시 조회 / 임베딩 지연 p95",
-      "type": "timeseries"
-    },
-    {
-      "id": 105,
-      "type": "row",
-      "title": "PoC — 사용자 · 모델 · 정책",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 48
-      },
-      "panels": []
-    },
-    {
-      "id": 106,
-      "type": "timeseries",
-      "title": "사용자(부서)별 토큰 /분",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 49
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(consumer)(rate(kong_ai_llm_tokens_total{token_type=\"total_tokens\",consumer!=\"\"}[5m]))*60",
-          "legendFormat": "{{consumer}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 107,
-      "type": "timeseries",
-      "title": "모델별 LLM 요청 /분 — 요청의 model 로 고른 결과",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 49
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(ai_model)(rate(kong_ai_llm_requests_total{ai_model!=\"UNSPECIFIED\"}[5m]))*60",
-          "legendFormat": "{{ai_model}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 108,
-      "type": "bargauge",
-      "title": "사용자별 예상 비용 — 선택한 기간",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 57
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(consumer)(increase(kong_ai_llm_cost_total{consumer!=\"\"}[$__range]))",
-          "legendFormat": "{{consumer}}",
-          "refId": "A",
-          "instant": true
-        }
-      ]
-    },
-    {
-      "id": 109,
-      "type": "timeseries",
-      "title": "정책 차단 /분 — 400 가드 · 401·403 인증·접근 · 429 한도 · 503 긴급 차단",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 57
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(code)(rate(kong_http_requests_total{route!=\"grafana\",code=~\"400|401|403|429|503\"}[5m]))*60",
-          "legendFormat": "{{code}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 110,
-      "type": "timeseries",
-      "title": "/poc 응답 코드별 /분 — 켠 플러그인이 막은 결과",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 65
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "sum by(code)(rate(kong_http_requests_total{route=\"poc\"}[5m]))*60",
-          "legendFormat": "{{code}}",
-          "refId": "A"
-        }
-      ],
-      "description": "/poc 한 경로의 응답 코드. 200 통과 · 400 가드레일 · 401 키·SSO · 403 허용 그룹 · 429 한도 · 503 긴급 차단. 플러그인을 켜고 끄면(Kong Manager 또는 FEATURE_…) 여기서 바로 보인다."
-    },
-    {
-      "id": 111,
-      "type": "timeseries",
-      "title": "답변 검사(가드레일) 지연 p95",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 65
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "kong-poc-prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by(le)(rate(kong_ai_custom_guardrail_latency_ms_bucket[5m])))",
-          "legendFormat": "p95",
-          "refId": "A"
         }
       ]
     }
-  ],
-  "refresh": "30s",
-  "schemaVersion": 39,
-  "tags": [
-    "kong",
-    "ai-gateway",
-    "poc"
-  ],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "title": "Kong AI Gateway PoC",
-  "uid": "kong-ai-gateway-poc",
-  "description": "요구사항 3-3 — 사용자·모델·경로별 호출, 토큰·비용, 게이트웨이 오버헤드와 LLM 지연, 정책 차단, 라이선스 남은 날"
+  ]
 }

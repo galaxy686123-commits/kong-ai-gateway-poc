@@ -12,7 +12,7 @@
 
 | 대시보드 | 내용 |
 |---|---|
-| **Kong AI Gateway PoC** (첫 화면) | 요청·LLM 요청·토큰 /분 · 게이트웨이 오버헤드와 LLM 지연(TTFT·TPOT) · 사용자·모델별 토큰·비용 · 정책 차단(400·401·403·429·503) · /poc 응답 코드(켠 플러그인이 막은 결과) · 라이선스 남은 날 |
+| **Kong AI Gateway PoC** (첫 화면) | 고른 기간의 요청 · LLM 요청 · 토큰 · 차단 비율 · 오버헤드 · 라이선스 남은 날 / 모델 · 사용자별 요청 수 · 토큰 / 응답 결과(200 통과 · 400 가드레일 · 401 인증 · 403 허용 그룹 · 429 한도 · 503 긴급 차단) · 사용자별 예상 비용 · 경로별 요청 / 지연(Kong 자체 · 답변 검사 · LLM 응답 · TTFT · TPOT) / 시맨틱 캐시. **건수 · 토큰 · 비용은 요청 기록(DB)**, 지연 · 라이선스는 Prometheus. 막대를 누르면 그 사용자 · 모델의 요청 기록. 임베딩 모델(`__EMBED_MODEL__` → `start.sh` 가 `DECK_EMBED_MODEL` 로 채움)은 LLM 패널에서 뺌 |
 | **요청 기록 — 질문 · 답변** | 요청 한 건이 한 줄 — 시각 · 사용자 · 모델 · 상태 · 토큰 · 지연 · 질문 · 답변(질문 · 답변은 대상의 Log payloads 를 켠 요청만). 질문이나 답변을 누르면 아래에 전문, 접힌 줄에 요청 · 응답 원문 JSON. 데이터 원본 「요청 기록」(PostgreSQL, 읽기 전용 계정 `reqlog_reader`) |
 | **Kong (official)** | Kong 공식 대시보드 그대로 — 요청·지연·대역폭·연결·메모리. [Kong/kong](https://github.com/Kong/kong/blob/master/kong/plugins/prometheus/grafana/kong-official.json) 의 `kong-official.json`(Apache-2.0, grafana.com 대시보드 7424 와 같은 계열)에서 데이터 원본만 연결. 업스트림 상태 패널은 이 번들이 업스트림을 쓰지 않아 비어 있음 |
 

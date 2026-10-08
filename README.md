@@ -475,7 +475,7 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 | 대시보드 | 내용 |
 |---|---|
-| Kong AI Gateway PoC (첫 화면) | 요청·LLM 요청·토큰 /분 · 게이트웨이 오버헤드와 LLM 지연(TTFT·TPOT) · 사용자·모델별 토큰·비용 · 정책 차단 · `/poc` 응답 코드(켠 플러그인이 막은 결과) · 라이선스 남은 날 |
+| Kong AI Gateway PoC (첫 화면) | 고른 기간의 요청 · LLM 요청 · 토큰 · 차단 비율 · 게이트웨이 오버헤드 · 라이선스 남은 날, 모델 · 사용자별 요청 수와 토큰, 응답 결과(통과 · 정책 차단 · 오류), 사용자별 예상 비용, 경로별 요청, 지연(Kong 자체 · 답변 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시. 막대를 누르면 그 사용자 · 모델의 요청 기록 |
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
 | 요청 기록 — 질문 · 답변 | 요청 한 건이 한 줄 — 시각 · 사용자 · 모델 · 상태 · 토큰 · 지연 · 질문 · 답변. 질문이나 답변을 누르면 아래에 전문. 사용자 · 모델 · 상태 · 글자로 고름 |
 
@@ -488,6 +488,9 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   종료 신호 없이 끊기면 최근 기록(최대 약 3시간)은 빠집니다. 사본 상태는 `bash status.sh`(지표 사본 줄) · `verify.sh` 3-3 · `logs/prometheus-copy.log`.
 - 보관은 `PROM_RETENTION`(15d) · `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
   사본을 두지 않으려면 `PROM_PERSIST=off`(다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
+- **건수 · 토큰 · 비용은 요청 기록(DB) 기준**입니다. Prometheus 지표는 새로 생긴 사용자 · 응답 코드의 첫 요청을 세지 못해 요청이 드문 PoC에서는
+  적게 나오기 때문입니다(재현 환경 6시간: 요청 기록 102건 · 지표 61건). 지연 · 라이선스는 Prometheus 지표입니다. 의미 기반 가드 · 캐시가 부르는
+  임베딩 호출은 LLM 패널에서 뺍니다 — `start.sh` 가 대시보드를 로컬 디스크(`~/.kong-poc/grafana-dashboards`)로 옮기며 `DECK_EMBED_MODEL` 을 채웁니다.
 - **요청 기록**(`addons/reqlog`): 요청 로그(`logs/audit.log`)를 10초마다 같은 PostgreSQL 의 DB `reqlog` 로 옮겨 「요청 기록」 대시보드가 읽습니다.
   질문 · 답변은 Kong Manager 에서 대상(Target)의 **Log payloads** 를 켠 요청만 남습니다(스트리밍 답변도 이어 붙여 남음).
   DB 에는 `REQLOG_KEEP_DAYS`(7)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.

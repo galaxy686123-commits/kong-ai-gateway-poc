@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS requests (
   response_body     text                       -- 응답 본문 원문 (JSON)
 );
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts DESC);
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS cost double precision;   -- 예상 비용 (대상에 넣은 토큰 단가로 Kong 이 계산, 단가가 없으면 0)
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE reqlog TO reqlog_reader;

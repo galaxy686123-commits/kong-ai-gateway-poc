@@ -28,7 +28,7 @@ MAX_FIELD = 2 * 1024 * 1024        # 본문 한 칸 상한 — 넘으면 잘라 
 SKIP_ROUTES = {"ai-embed"}         # 게이트웨이 안에서만 쓰는 임베딩 호출 — 사람이 볼 기록이 아니다
 COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "model", "provider",
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
-        "client_ip", "question", "answer", "request_body", "response_body")
+        "client_ip", "question", "answer", "request_body", "response_body", "cost")
 
 
 def log(*a):
@@ -164,6 +164,7 @@ def row_of(line):
         "answer": keep_indent(answer_of(rs)) if rs else None,
         "request_body": rq,
         "response_body": rs,
+        "cost": usage.get("cost") if isinstance(usage.get("cost"), (int, float)) and not isinstance(usage.get("cost"), bool) else None,
     }
 
 

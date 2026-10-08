@@ -223,6 +223,16 @@ SQL
   if grafana_running; then note "Grafana: 이미 실행 중 (127.0.0.1:$GRAFANA_PORT)"
   else
     mkdir -p "$RUN_DIR/grafana-data/plugins"
+    # 대시보드 — 저장소의 JSON 을 로컬 디스크로 옮기며 임베딩 모델 이름(DECK_EMBED_MODEL)을 채운다.
+    #   LLM 패널에서 의미 기반 가드 · 캐시가 부르는 임베딩 호출을 빼려고 (지표에 경로 라벨이 없어 모델 이름으로만 가를 수 있다)
+    GF_DASH="$RUN_DIR/grafana-dashboards"; rm -rf "$GF_DASH"; mkdir -p "$GF_DASH"
+    EMBED="${DECK_EMBED_MODEL:-}" python3 - "$ROOT/addons/monitoring/grafana/dashboards" "$GF_DASH" <<'PY' || die "Grafana 대시보드를 준비하지 못했습니다"
+import json, os, pathlib, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+embed = json.dumps(os.environ.get("EMBED") or "-")[1:-1]   # 임베딩이 없으면 아무것도 빼지 않는 값
+for f in sorted(src.glob("*.json")):
+    (dst / f.name).write_text(f.read_text(encoding="utf-8").replace("__EMBED_MODEL__", embed), encoding="utf-8")
+PY
     cat > "$RUN_DIR/grafana.ini" <<INI
 [paths]
 data = $RUN_DIR/grafana-data
@@ -250,13 +260,13 @@ news_feed_enabled = false
 [plugins]
 preinstall_disabled = true
 [dashboards]
-default_home_dashboard_path = $ROOT/addons/monitoring/grafana/dashboards/kong-ai-gateway-poc.json
+default_home_dashboard_path = $GF_DASH/kong-ai-gateway-poc.json
 [log]
 mode = console
 level = warn
 INI
     env GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" PROM_PORT="$PROM_PORT" PG_PORT="$PG_PORT" REQLOG_DB_PASSWORD="$REQLOG_DB_PASSWORD" \
-        KONG_POC_DASHBOARDS="$ROOT/addons/monitoring/grafana/dashboards" \
+        KONG_POC_DASHBOARDS="$GF_DASH" \
       setsid nohup "$GRAFANA_HOME/bin/grafana" server --homepath "$GRAFANA_HOME" --config "$RUN_DIR/grafana.ini" \
       >> "$LOGS/grafana.log" 2>&1 < /dev/null &
     echo $! > "$RUN_DIR/grafana.pid"
