@@ -477,6 +477,7 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 |---|---|
 | Kong AI Gateway PoC (첫 화면) | 요청·LLM 요청·토큰 /분 · 게이트웨이 오버헤드와 LLM 지연(TTFT·TPOT) · 사용자·모델별 토큰·비용 · 정책 차단 · `/poc` 응답 코드(켠 플러그인이 막은 결과) · 라이선스 남은 날 |
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
+| 요청 기록 — 질문 · 답변 | 요청 한 건이 한 줄 — 시각 · 사용자 · 모델 · 상태 · 토큰 · 지연 · 질문 · 답변. 질문이나 답변을 누르면 아래에 전문. 사용자 · 모델 · 상태 · 글자로 고름 |
 
 - Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
 - Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`).
@@ -487,6 +488,11 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   종료 신호 없이 끊기면 최근 기록(최대 약 3시간)은 빠집니다. 사본 상태는 `bash status.sh`(지표 사본 줄) · `verify.sh` 3-3 · `logs/prometheus-copy.log`.
 - 보관은 `PROM_RETENTION`(15d) · `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
   사본을 두지 않으려면 `PROM_PERSIST=off`(다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
+- **요청 기록**(`addons/reqlog`): 요청 로그(`logs/audit.log`)를 10초마다 같은 PostgreSQL 의 DB `reqlog` 로 옮겨 「요청 기록」 대시보드가 읽습니다.
+  질문 · 답변은 Kong Manager 에서 대상(Target)의 **Log payloads** 를 켠 요청만 남습니다(스트리밍 답변도 이어 붙여 남음).
+  DB 에는 `REQLOG_KEEP_DAYS`(7)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
+  Grafana 는 읽기 전용 계정 `reqlog_reader`(비밀번호 `REQLOG_DB_PASSWORD`, 처음 기동할 때 만듦)로 읽습니다.
+  질문 · 답변 원문이 그대로 쌓이므로, 볼 사람(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).
 
 ## 로그

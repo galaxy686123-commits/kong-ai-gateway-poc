@@ -10,6 +10,7 @@ if mock_running; then kill "$(mock_pid)" && note "모의 서버 정지"; fi
 rm -f "$RUN_DIR/mock.pid"
 if grafana_running; then kill "$(cat "$RUN_DIR/grafana.pid")" && note "Grafana 정지"; fi
 rm -f "$RUN_DIR/grafana.pid"
+reqlog_stop      # 요청 로그를 DB 로 옮기던 프로세스 (DB 보다 먼저)
 prom_copy_stop   # 5분마다 지표 기록 사본을 만들던 프로세스
 prom_was=0
 if prom_running; then kill "$(cat "$RUN_DIR/prometheus.pid")"; prom_was=1; fi   # 내려가는 동안 PostgreSQL 을 먼저 내린다

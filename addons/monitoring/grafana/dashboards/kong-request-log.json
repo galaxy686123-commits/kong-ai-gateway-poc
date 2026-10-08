@@ -1,0 +1,688 @@
+{
+  "uid": "kong-poc-reqlog",
+  "title": "요청 기록 — 질문 · 답변",
+  "description": "요청 로그를 한 건씩 — 사용자 · 모델 · 상태 · 토큰 · 지연, Log payloads 를 켠 대상은 질문 · 답변까지 (addons/reqlog)",
+  "tags": [
+    "kong-poc"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "user",
+        "label": "사용자",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "kong-poc-reqlog"
+        },
+        "query": "SELECT DISTINCT coalesce(consumer, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1",
+        "definition": "SELECT DISTINCT coalesce(consumer, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "type": "query",
+        "name": "model",
+        "label": "모델",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "kong-poc-reqlog"
+        },
+        "query": "SELECT DISTINCT coalesce(model, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1",
+        "definition": "SELECT DISTINCT coalesce(model, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "type": "custom",
+        "name": "status",
+        "label": "상태",
+        "query": "전체 : all,성공 (2xx · 3xx) : ok,차단 · 오류 (4xx · 5xx) : err",
+        "current": {
+          "selected": true,
+          "text": "전체",
+          "value": "all"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "type": "textbox",
+        "name": "q",
+        "label": "질문 · 답변 검색",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "type": "textbox",
+        "name": "rid",
+        "label": "선택한 요청",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "요청",
+      "description": "고른 기간 · 조건의 요청 수 (막힌 요청 포함)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS v\nFROM requests\nWHERE $__timeFilter(ts)\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${model:sqlstring}) OR coalesce(model, '-') IN (${model:sqlstring}))\n  AND ('${status}' = 'all' OR ('${status}' = 'ok' AND status < 400) OR ('${status}' = 'err' AND status >= 400))\n  AND (${q:sqlstring} = '' OR question ILIKE '%' || ${q:sqlstring} || '%' OR answer ILIKE '%' || ${q:sqlstring} || '%')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "사용자",
+      "description": "고른 기간에 요청한 사용자(컨슈머) 수 — 인증 전에 막힌 요청은 세지 않음",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(DISTINCT consumer) AS v\nFROM requests\nWHERE $__timeFilter(ts)\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${model:sqlstring}) OR coalesce(model, '-') IN (${model:sqlstring}))\n  AND ('${status}' = 'all' OR ('${status}' = 'ok' AND status < 400) OR ('${status}' = 'err' AND status >= 400))\n  AND (${q:sqlstring} = '' OR question ILIKE '%' || ${q:sqlstring} || '%' OR answer ILIKE '%' || ${q:sqlstring} || '%')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "차단 · 오류",
+      "description": "인증 · 허용 그룹 · 한도 · 가드에 막혔거나 LLM 오류",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FILTER (WHERE status >= 400) AS v\nFROM requests\nWHERE $__timeFilter(ts)\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${model:sqlstring}) OR coalesce(model, '-') IN (${model:sqlstring}))\n  AND ('${status}' = 'all' OR ('${status}' = 'ok' AND status < 400) OR ('${status}' = 'err' AND status >= 400))\n  AND (${q:sqlstring} = '' OR question ILIKE '%' || ${q:sqlstring} || '%' OR answer ILIKE '%' || ${q:sqlstring} || '%')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "토큰 합계",
+      "description": "질문 + 답변 토큰",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(total_tokens), 0) AS v\nFROM requests\nWHERE $__timeFilter(ts)\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${model:sqlstring}) OR coalesce(model, '-') IN (${model:sqlstring}))\n  AND ('${status}' = 'all' OR ('${status}' = 'ok' AND status < 400) OR ('${status}' = 'err' AND status >= 400))\n  AND (${q:sqlstring} = '' OR question ILIKE '%' || ${q:sqlstring} || '%' OR answer ILIKE '%' || ${q:sqlstring} || '%')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**보는 법** — 아래 표의 질문 · 답변을 누르면 그 요청의 전문이 맨 아래에 나옵니다. 칸의 눈 모양(값 보기)으로도 볼 수 있습니다.\n\n질문 · 답변은 Kong Manager 에서 대상(Target)의 **Log payloads** 를 켠 요청만 남습니다. 요청 로그에서 10초마다 옮기고 7일 둡니다."
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "요청 목록 — 최근 500건",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS \"시각\",\n  coalesce(consumer, '-') AS \"사용자\",\n  coalesce(model, '-') AS \"모델\",\n  status AS \"상태\",\n  total_tokens AS \"토큰\",\n  latency_ms AS \"지연 ms\",\n  left(regexp_replace(coalesce(question, ''), '\\s+', ' ', 'g'), 300) AS \"질문\",\n  left(regexp_replace(coalesce(answer, ''), '\\s+', ' ', 'g'), 400) AS \"답변\",\n  request_id\nFROM requests\nWHERE $__timeFilter(ts)\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${model:sqlstring}) OR coalesce(model, '-') IN (${model:sqlstring}))\n  AND ('${status}' = 'all' OR ('${status}' = 'ok' AND status < 400) OR ('${status}' = 'err' AND status >= 400))\n  AND (${q:sqlstring} = '' OR question ILIKE '%' || ${q:sqlstring} || '%' OR answer ILIKE '%' || ${q:sqlstring} || '%')\nORDER BY ts DESC\nLIMIT 500",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "inspect": true,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "시각"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "unit",
+                "value": "time:YYYY-MM-DD HH:mm:ss"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "사용자"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "모델"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 64
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 400
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "토큰"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 72
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "지연 ms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 76
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "질문"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 280
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "전문 보기",
+                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "답변"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 320
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "전문 보기",
+                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "request_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "시각",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "선택한 요청 — 질문 · 답변 전문 (위 표에서 질문이나 답변을 누르세요)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT \"항목\", \"내용\" FROM (\n  SELECT 1 AS o, '요청' AS \"항목\",\n    format('%s · 사용자 %s · 모델 %s · 상태 %s · 토큰 %s (질문 %s · 답변 %s) · 지연 %s ms (LLM %s ms) · %s %s',\n      to_char(ts AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS'), coalesce(consumer, '-'), coalesce(model, '-'), status,\n      coalesce(total_tokens::text, '-'), coalesce(prompt_tokens::text, '-'), coalesce(completion_tokens::text, '-'),\n      coalesce(latency_ms::text, '-'), coalesce(llm_latency_ms::text, '-'), coalesce(method, ''), coalesce(path, '')) AS \"내용\"\n  FROM requests WHERE request_id = ${rid:sqlstring}\n  UNION ALL\n  SELECT 2, '질문', coalesce(question, '(남지 않음 — 이 요청을 받은 대상은 Log payloads 가 꺼져 있었음)') FROM requests WHERE request_id = ${rid:sqlstring}\n  UNION ALL\n  SELECT 3, '답변', coalesce(answer, '(남지 않음)') FROM requests WHERE request_id = ${rid:sqlstring}\n) x ORDER BY o",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "inspect": true,
+            "wrapText": true,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "항목"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 72
+              },
+              {
+                "id": "custom.wrapText",
+                "value": false
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": false,
+        "cellHeight": "md",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "원문 JSON — 요청 · 응답 본문 그대로",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "panels": [
+        {
+          "id": 9,
+          "type": "table",
+          "title": "선택한 요청의 원문 — 칸의 눈 모양(값 보기)으로 펼쳐 봄",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 38
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "kong-poc-reqlog"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT \"항목\", \"내용\" FROM (\n  SELECT 1 AS o, '요청 본문' AS \"항목\", coalesce(request_body, '(남지 않음)') AS \"내용\" FROM requests WHERE request_id = ${rid:sqlstring}\n  UNION ALL\n  SELECT 2, '응답 본문', coalesce(response_body, '(남지 않음)') FROM requests WHERE request_id = ${rid:sqlstring}\n) x ORDER BY o",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "inspect": true,
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "항목"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 90
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": false,
+            "cellHeight": "md",
+            "footer": {
+              "show": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

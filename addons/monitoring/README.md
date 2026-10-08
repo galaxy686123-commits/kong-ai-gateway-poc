@@ -5,13 +5,15 @@
 | 프로그램 | 받는 곳 | 하는 일 |
 |---|---|---|
 | Prometheus (Ubuntu 저장소, apt) | `127.0.0.1:9090` (파드 안) | Kong 지표 `:8100/metrics` 를 15초마다 모으고 `alerts/kong-alerts.yml` 경보 규칙을 계산. 15일 · 2GB 보관 |
-| Grafana 12.4.12 (`pkgs/` 에 포함) | `127.0.0.1:3000` → Kong 경로 **`/grafana`** | 대시보드 두 개 — 화면은 프록시 주소(8000)의 `/grafana/` |
+| Grafana 12.4.12 (`pkgs/` 에 포함) | `127.0.0.1:3000` → Kong 경로 **`/grafana`** | 대시보드 세 개 — 화면은 프록시 주소(8000)의 `/grafana/` |
+| 요청 기록 (`addons/reqlog/reqlog.py`) | 같은 PostgreSQL 의 DB `reqlog` | 요청 로그(`audit.log`)를 10초마다 표로 옮김 — 「요청 기록」 대시보드가 읽음. `REQLOG_KEEP_DAYS`(7)일 보관 |
 
 대시보드 (`grafana/dashboards/`, 폴더 「Kong AI Gateway PoC」):
 
 | 대시보드 | 내용 |
 |---|---|
 | **Kong AI Gateway PoC** (첫 화면) | 요청·LLM 요청·토큰 /분 · 게이트웨이 오버헤드와 LLM 지연(TTFT·TPOT) · 사용자·모델별 토큰·비용 · 정책 차단(400·401·403·429·503) · /poc 응답 코드(켠 플러그인이 막은 결과) · 라이선스 남은 날 |
+| **요청 기록 — 질문 · 답변** | 요청 한 건이 한 줄 — 시각 · 사용자 · 모델 · 상태 · 토큰 · 지연 · 질문 · 답변(질문 · 답변은 대상의 Log payloads 를 켠 요청만). 질문이나 답변을 누르면 아래에 전문, 접힌 줄에 요청 · 응답 원문 JSON. 데이터 원본 「요청 기록」(PostgreSQL, 읽기 전용 계정 `reqlog_reader`) |
 | **Kong (official)** | Kong 공식 대시보드 그대로 — 요청·지연·대역폭·연결·메모리. [Kong/kong](https://github.com/Kong/kong/blob/master/kong/plugins/prometheus/grafana/kong-official.json) 의 `kong-official.json`(Apache-2.0, grafana.com 대시보드 7424 와 같은 계열)에서 데이터 원본만 연결. 업스트림 상태 패널은 이 번들이 업스트림을 쓰지 않아 비어 있음 |
 
 - 로그인: `admin` / 설정 파일의 `GRAFANA_ADMIN_PASSWORD` (비어 있으면 처음 기동할 때 만들어 적음).

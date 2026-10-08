@@ -1,0 +1,18 @@
+# Grafana 데이터 원본 — 요청 기록 DB (start.sh 가 PG_PORT · REQLOG_DB_PASSWORD 를 넘긴다). 읽기 전용 계정 reqlog_reader
+apiVersion: 1
+datasources:
+  - name: 요청 기록
+    uid: kong-poc-reqlog
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: 127.0.0.1:${PG_PORT}
+    user: reqlog_reader
+    jsonData:
+      database: reqlog
+      sslmode: disable
+      postgresVersion: 1400
+      timescaledb: false
+      maxOpenConns: 5
+    secureJsonData:
+      password: ${REQLOG_DB_PASSWORD}
+    editable: false

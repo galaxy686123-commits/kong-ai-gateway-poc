@@ -201,6 +201,19 @@ YML
   fi
   if prom_persist; then prom_copy_start; note "Prometheus: 기록 사본 → $DATA_DIR/prometheus (5분마다 · 종료할 때 최근 기록까지)"
   else note "Prometheus: 기록 사본 안 둠 (PROM_PERSIST=off — 다시 빌드하면 처음부터)"; fi
+  # 요청 기록 — 요청 로그를 DB(reqlog)로 옮겨 Grafana 「요청 기록」이 표로 보여 준다. Grafana 는 읽기 전용 계정(비밀번호)으로 읽는다
+  if [ -z "${REQLOG_DB_PASSWORD:-}" ]; then
+    REQLOG_DB_PASSWORD=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(24)))')
+    env_set REQLOG_DB_PASSWORD "$REQLOG_DB_PASSWORD" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
+  fi
+  psql_su -d postgres -v pw="$REQLOG_DB_PASSWORD" <<'SQL'
+SELECT format('CREATE ROLE reqlog_reader LOGIN PASSWORD %L', :'pw') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reqlog_reader') \gexec
+SELECT format('ALTER ROLE reqlog_reader PASSWORD %L', :'pw') \gexec
+SELECT 'CREATE DATABASE reqlog' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'reqlog') \gexec
+SQL
+  psql_su -d reqlog < "$ROOT/addons/reqlog/schema.sql"
+  if reqlog_on; then reqlog_start; note "요청 기록: 요청 로그 → DB reqlog (10초마다 · ${REQLOG_KEEP_DAYS:-7}일 보관) — Grafana 「요청 기록」"
+  else note "요청 기록: 옮기지 않음 (REQLOG=off)"; fi
   # Grafana — 프록시의 /grafana 경로로 연다(Kong 이 넘김). 관리자 비밀번호가 없으면 만들어 설정 파일에 적는다
   if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
     GRAFANA_ADMIN_PASSWORD=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(20)))')
@@ -242,7 +255,7 @@ default_home_dashboard_path = $ROOT/addons/monitoring/grafana/dashboards/kong-ai
 mode = console
 level = warn
 INI
-    env GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" PROM_PORT="$PROM_PORT" \
+    env GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" PROM_PORT="$PROM_PORT" PG_PORT="$PG_PORT" REQLOG_DB_PASSWORD="$REQLOG_DB_PASSWORD" \
         KONG_POC_DASHBOARDS="$ROOT/addons/monitoring/grafana/dashboards" \
       setsid nohup "$GRAFANA_HOME/bin/grafana" server --homepath "$GRAFANA_HOME" --config "$RUN_DIR/grafana.ini" \
       >> "$LOGS/grafana.log" 2>&1 < /dev/null &

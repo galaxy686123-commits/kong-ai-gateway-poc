@@ -366,6 +366,20 @@ prom_copy_start() {  # 떠 있는 동안 5분마다 사본 (첫 사본은 바로
     while :; do prom_copy; sleep "${PROM_COPY_EVERY:-300}"; done' _ "$ROOT" >> "$LOGS/prometheus-copy.log" 2>&1 < /dev/null &
   echo $! > "$RUN_DIR/prom-copy.pid"
 }
+# 요청 기록 — 요청 로그(audit.log)를 DB(reqlog)로 옮겨 Grafana 「요청 기록」이 사람이 읽는 표로 보여 준다 (addons/reqlog).
+#   질문 · 답변은 Kong Manager 에서 대상(Target)의 Log payloads 를 켠 요청만. REQLOG=off 면 옮기지 않는다. 보관 REQLOG_KEEP_DAYS(7)일
+reqlog_on()      { mon_on && case "${REQLOG:-on}" in on|true|yes|1) true ;; *) false ;; esac; }
+reqlog_running() { [ -f "$RUN_DIR/reqlog.pid" ] && kill -0 "$(cat "$RUN_DIR/reqlog.pid")" 2>/dev/null; }
+reqlog_start() {
+  if ! reqlog_on || reqlog_running; then return 0; fi
+  LOGS=$LOGS DATA_DIR=$DATA_DIR RUN_DIR=$RUN_DIR PG_BIN=$PG_BIN PG_PORT=$PG_PORT REQLOG_KEEP_DAYS=${REQLOG_KEEP_DAYS:-7} \
+    setsid nohup python3 "$ROOT/addons/reqlog/reqlog.py" --loop >> "$LOGS/reqlog.log" 2>&1 < /dev/null &
+  echo $! > "$RUN_DIR/reqlog.pid"
+}
+reqlog_stop() {
+  if reqlog_running; then kill "$(cat "$RUN_DIR/reqlog.pid")" 2>/dev/null || true; fi
+  rm -f "$RUN_DIR/reqlog.pid"
+}
 prom_copy_stop() {  # 사본을 만들던 중이면 복사(cp)까지 함께 내린다 — 남은 조각은 다음 prom_copy 가 치운다
   local p; p=$(cat "$RUN_DIR/prom-copy.pid" 2>/dev/null) || p=""
   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; fi

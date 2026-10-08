@@ -29,6 +29,12 @@ if mon_on; then
     else note "지표 사본    $DATA_DIR/prometheus — $((a / 60))분 전 · 블록 $(prom_blocks "$DATA_DIR/prometheus" | wc -l | tr -d ' ')개$(if [ "$LOCK_HOST" = "$HOST_ID" ] && ! prom_copy_running; then echo ' · 5분마다 고치는 프로세스가 멈춤 (다시 띄우면 돎)'; fi)"; fi
   fi
   if grafana_running; then note "Grafana      실행 중 (127.0.0.1:$GRAFANA_PORT — 프록시의 /grafana)"; else note "Grafana      멈춤"; fi
+  if reqlog_on && pg_ready; then   # 요청 로그를 옮겨 둔 DB — Grafana 「요청 기록」 (addons/reqlog)
+    r=$(psql_su -d reqlog -F ' ' -c "SELECT count(*), count(*) FILTER (WHERE question IS NOT NULL OR answer IS NOT NULL), coalesce(to_char(max(ts) AT TIME ZONE 'Asia/Seoul', 'MM-DD HH24:MI'), '-') FROM requests" 2>/dev/null) || r=""
+    set -- $r
+    if [ -n "$r" ]; then note "요청 기록    ${1}건 (질문 · 답변 ${2}건) · 마지막 ${3} ${4:-} — Grafana 「요청 기록」$(if ! reqlog_running; then echo ' · 옮기는 프로세스가 멈춤 (다시 띄우면 돎)'; fi)"
+    else note "요청 기록    DB 를 읽지 못함 ($LOGS/reqlog.log)"; fi
+  fi
 fi
 if kong_up; then note "Kong         실행 중 (프록시 :$PROXY_PORT · Admin $BIND:$ADMIN_PORT · Manager $BIND:$MANAGER_PORT · 지표 :$STATUS_PORT)"
 else note "Kong         멈춤"; exit 0; fi
