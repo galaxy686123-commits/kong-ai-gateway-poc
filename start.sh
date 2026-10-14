@@ -212,6 +212,19 @@ SELECT format('ALTER ROLE reqlog_reader PASSWORD %L', :'pw') \gexec
 SELECT 'CREATE DATABASE reqlog' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'reqlog') \gexec
 SQL
   psql_su -d reqlog < "$ROOT/addons/reqlog/schema.sql"
+  # 팀 Grafana(GRAFANA_TEAMS) — 팀마다 그 워크스페이스 행만 읽히는 DB 계정 (schema.sql 의 행 단위 제한 · 비밀번호는 세션 비밀값에서)
+  while read -r tn tw; do
+    [ -n "$tn" ] || continue
+    psql_su -d reqlog -v r="$(reqlog_team_role "$tn")" -v pw="$(reqlog_team_pw "$tn")" -v ws="$tw" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'r', :'pw') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'r') \gexec
+SELECT format('ALTER ROLE %I PASSWORD %L', :'r', :'pw') \gexec
+SELECT format('GRANT CONNECT ON DATABASE reqlog TO %I', :'r') \gexec
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'r') \gexec
+SELECT format('GRANT SELECT ON requests TO %I', :'r') \gexec
+SELECT format('DROP POLICY IF EXISTS %I ON requests', 'team_' || :'r') \gexec
+SELECT format('CREATE POLICY %I ON requests FOR SELECT TO %I USING (coalesce(workspace, %L) = %L)', 'team_' || :'r', :'r', 'default', :'ws') \gexec
+SQL
+  done < <(grafana_teams)
   if reqlog_on; then reqlog_start; note "요청 기록: 요청 로그 → DB reqlog (10초마다 · ${REQLOG_KEEP_DAYS:-30}일 보관) — Grafana 「요청 기록」"
   else note "요청 기록: 옮기지 않음 (REQLOG=off)"; fi
   # Grafana — 프록시의 /grafana 경로로 연다(Kong 이 넘김). 관리자 비밀번호가 없으면 만들어 설정 파일에 적는다
@@ -275,8 +288,31 @@ INI
       || { tail -5 "$LOGS/grafana.log" | sed 's/^/  | /'; die "Grafana 기동 실패 ($LOGS/grafana.log)"; }
     note "Grafana: 시작됨 (127.0.0.1:$GRAFANA_PORT — 프록시의 /grafana 로 연다, admin / GRAFANA_ADMIN_PASSWORD)"
   fi
+  # 팀 Grafana(GRAFANA_TEAMS) — 팀마다 조직 · 보기 전용 계정 · 그 워크스페이스로 거른 대시보드 (addons/monitoring/grafana-teams.py)
+  #   Grafana 기록은 로컬 디스크라 새 환경이 뜨면 비어 있다 → 뜰 때마다 다시 맞춘다. 팀 로그인 비밀번호는 설정 파일에 (없으면 만들어 적음)
+  TEAMS=$(grafana_teams)
+  if [ -n "$TEAMS" ]; then
+    SPEC=""
+    while read -r tn tw; do
+      v=$(grafana_team_pwvar "$tn")
+      if [ -z "${!v:-}" ]; then
+        printf -v "$v" '%s' "$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(20)))')"
+        env_set "$v" "${!v}" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
+        note "Grafana 팀 $tn 로그인 비밀번호를 만들어 설정 파일에 적었습니다 ($v)"
+      fi
+      SPEC+="$tn"$'\t'"$tw"$'\t'"$(reqlog_team_role "$tn")"$'\t'"$(reqlog_team_pw "$tn")"$'\t'"${!v}"$'\n'
+    done <<<"$TEAMS"
+    note "Grafana 팀 화면 (GRAFANA_TEAMS — 팀 계정은 그 조직의 보기 전용, 그 워크스페이스 데이터만)"
+    GRAFANA_URL="http://127.0.0.1:$GRAFANA_PORT/grafana" GRAFANA_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" PROM_PORT="$PROM_PORT" PG_PORT="$PG_PORT" \
+      KONG_POC_DASHBOARDS="$RUN_DIR/grafana-dashboards" python3 "$ROOT/addons/monitoring/grafana-teams.py" <<<"$SPEC" \
+      || note "⚠ Grafana 팀 화면을 다 맞추지 못했습니다 — 위 메시지를 보고 bash stop.sh && bash start.sh 로 다시"
+  fi
 fi
 
+TEAM_LINES=""   # 팀 Grafana 로그인 (GRAFANA_TEAMS)
+if mon_on; then
+  while read -r tn tw; do [ -n "$tn" ] && TEAM_LINES+=$'\n'"               팀 $tn / 설정 파일의 $(grafana_team_pwvar "$tn") — 워크스페이스 $tw 만 (보기 전용)"; done < <(grafana_teams 2>/dev/null)
+fi
 cat <<MSG
 
 ──────────────────────────────────────────────
@@ -285,7 +321,7 @@ cat <<MSG
  프록시        http://127.0.0.1:$PROXY_PORT   (파드 안) · http://<파드 IP>:$PROXY_PORT
  Kong Manager  $MANAGER_URL/
                kong_admin / 설정 파일의 KONG_ADMIN_PASSWORD
- Grafana       <프록시 주소>/grafana/   admin / 설정 파일의 GRAFANA_ADMIN_PASSWORD  (MONITORING=on)
+ Grafana       <프록시 주소>/grafana/   admin / 설정 파일의 GRAFANA_ADMIN_PASSWORD  (MONITORING=on)$TEAM_LINES
  설정 파일     $ENV_FILE
  데이터·로그   $DATA_DIR
  다음          bash apply-config.sh   요구사항별 설정 적용 (라이선스 필요)

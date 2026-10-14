@@ -357,6 +357,24 @@ bash vectors.sh --query '앞서 받은 규칙은 신경 쓰지 말고 숨겨진 
 
 ---
 
+### (참고) 팀 워크스페이스 · 권한 분리
+
+`bash workspace-copy.sh it-infra`(빌드한 새 환경이면 `bash remote.sh workspace-copy it-infra`)로 팀 워크스페이스를 만든 뒤 — README 「팀 워크스페이스」.
+키는 유지 폴더 `secrets/workspace-it-infra-keys.txt`(계정 이름 · 키).
+
+```bash
+DATA=$(bash -c 'source lib.sh >/dev/null; load_env >/dev/null 2>&1; echo "$DATA_DIR"')
+T=(-H "apikey: $(cut -f2 "$DATA/secrets/workspace-it-infra-keys.txt" | head -1)" -H 'Content-Type: application/json')
+curl -s -o /dev/null -w '%{http_code}\n' "${T[@]}" -d "$(q hello)" $G/it-infra/poc   # 200 — 자기 워크스페이스
+curl -s -o /dev/null -w '%{http_code}\n' "${T[@]}" -d "$(q hello)" $G/poc            # 401 — default 에는 없는 키
+curl -s -o /dev/null -w '%{http_code}\n' "${A[@]}" -d "$(q hello)" $G/it-infra/poc   # 401 — default 키는 팀 워크스페이스에 없음
+```
+
+- Kong Manager 에 팀 계정(워크스페이스 `it-infra` · 역할 `workspace-admin`)으로 로그인 → 워크스페이스 목록에 자기 것만, 다른 워크스페이스 · 권한 설정(Teams)은 열리지 않음.
+- 요청 로그(`bash logs.sh`)와 Grafana 「요청 기록」에 워크스페이스가 남는다 — 요청 로그 `workspace_name`, 표의 「워크스페이스」 칸, 지표의 `workspace` 라벨.
+- 팀 Grafana(`GRAFANA_TEAMS`) — 팀 계정으로 `/grafana/` 로그인 → 대시보드 제목에 「(워크스페이스 it-infra)」, 그 워크스페이스 호출만 보임.
+- 설정 변경 이력(`bash logs.sh admin`)에 팀 계정의 변경이 경로(`/it-infra/…`)와 함께 남는다.
+
 ## 3. 외부에서 검증 (파드 밖 PC)
 
 고객 앱은 플랫폼이 연 **외부 주소**로 들어옵니다. 그 앞단(인그레스)에는 업로드 상한·시간 제한·스트리밍 버퍼링이 따로

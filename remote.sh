@@ -9,6 +9,7 @@
 #   bash remote.sh vectors ['문장']   벡터 DB 에 들어 있는 것 (문장을 주면 가까운 것과 거리) — vectors.sh
 #   bash remote.sh guard-test    가드레일 문장 묶음 시험 — 유지 폴더의 guard-set.tsv (guard-test.sh)
 #   bash remote.sh logs-admin    관리 작업 감사로그 — DB 가 새 환경에 있어 그쪽에서 읽음 (logs.sh admin 이 알아서 부름)
+#   bash remote.sh workspace-copy [--dry-run | --reset | --roles] <워크스페이스> …   팀 워크스페이스 — default 설정을 새 워크스페이스에 (workspace-copy.sh)
 #   bash remote.sh update        빌드 없이 코드 갱신 — 이 저장소(git pull 한 것)를 유지 폴더의 code/ 에 넣고 새 환경이 그 코드로 다시 뜬다
 #   bash remote.sh rollback      바로 전 코드로 되돌림 (처음 update 전이면 빌드 스냅샷으로)
 #   결과는 화면에 보여 주고 <유지 폴더>/requests/done/ 에도 남는다.
@@ -22,12 +23,16 @@ case "$cmd" in
     [ $# -eq 1 ] || { [ $# -eq 3 ] && [[ "$2" =~ ^[A-Za-z0-9_-]+$ ]] && [[ "$3" =~ ^(on|off)$ ]]; } \
       || die "사용법: bash remote.sh switch <이름> on|off   (목록: bash remote.sh switch)"
     if [ $# -eq 3 ]; then cmd="switch $2 $3"; fi ;;
+  workspace-copy)   # 옵션과 워크스페이스 이름만 (영문 소문자 · 숫자 · -) — 새 환경의 workspace-copy.sh 가 다시 확인한다
+    [ $# -ge 2 ] || die "사용법: bash remote.sh workspace-copy [--dry-run | --reset | --roles] <워크스페이스> …"
+    for a in "${@:2}"; do [[ "$a" =~ ^(--dry-run|--reset|--roles|[a-z0-9][a-z0-9-]{1,38}[a-z0-9])$ ]] || die "알 수 없는 값: $a"; done
+    cmd="workspace-copy ${*:2}" ;;
   vectors)  # 문장은 한 줄 · 300자까지 (요청 파일 한 줄로 전달)
     if [ $# -ge 2 ]; then
       q="${*:2}"; [ "${#q}" -le 300 ] && [[ "$q" != *$'\n'* ]] || die "문장은 한 줄 · 300자까지입니다"
       cmd="vectors $q"
     fi ;;
-  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full | switch [<이름> on|off] | vectors ['문장'] | guard-test | logs-admin | update | rollback" ;;
+  *) die "사용법: bash remote.sh status | apply | apply-dry | restart | verify | verify-full | switch [<이름> on|off] | vectors ['문장'] | guard-test | logs-admin | workspace-copy [--dry-run | --reset | --roles] <워크스페이스> … | update | rollback" ;;
 esac
 lock_read
 [ "$LOCK_HOST" != "$HOST_ID" ] || die "이 환경에서 직접 돌고 있습니다 — remote.sh 대신 스크립트를 바로 실행하세요 (status.sh · apply-config.sh · verify.sh …)"

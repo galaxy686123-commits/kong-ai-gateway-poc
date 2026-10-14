@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts DESC);
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS cost double precision;   -- 예상 비용 (대상에 넣은 토큰 단가로 Kong 이 계산, 단가가 없으면 0)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS workspace text;         -- Kong 워크스페이스 (요청 로그의 workspace_name) — 예전 행은 비어 있음 = default
+CREATE INDEX IF NOT EXISTS requests_ws_ts ON requests (workspace, ts DESC);
+
+-- 행 단위 제한 — 팀 Grafana(GRAFANA_TEAMS)는 그 워크스페이스 행만 읽히는 계정(reqlog_t_<팀>)으로 연결한다 (start.sh 가 계정 · 정책을 만든다).
+--   기존 화면(reqlog_reader)은 전부 읽는다. 쓰기 · 보관 기간 정리(postgres)는 제한을 받지 않는다
+ALTER TABLE requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS reader_all ON requests;
+CREATE POLICY reader_all ON requests FOR SELECT TO reqlog_reader USING (true);
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE reqlog TO reqlog_reader;

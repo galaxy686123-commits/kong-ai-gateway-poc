@@ -380,6 +380,22 @@ reqlog_stop() {
   if reqlog_running; then kill "$(cat "$RUN_DIR/reqlog.pid")" 2>/dev/null || true; fi
   rm -f "$RUN_DIR/reqlog.pid"
 }
+# 팀 Grafana — GRAFANA_TEAMS 의 팀마다 Grafana 조직 · 보기 전용 계정 · 그 워크스페이스로 거른 대시보드 (addons/monitoring/grafana-teams.py)
+#   GRAFANA_TEAMS="it-infra agentic-ai:default" — 「이름[:워크스페이스]」, 워크스페이스를 안 적으면 이름과 같다. 이름 = Grafana 조직 · 로그인
+#   로그인 비밀번호 = 설정 파일의 GRAFANA_TEAM_<이름>_PASSWORD (없으면 start.sh 가 만들어 적는다 — 이름의 - 는 _, 대문자)
+#   요청 기록은 그 워크스페이스 행만 읽히는 DB 계정 reqlog_t_<이름> 으로 읽는다 — 비밀번호는 세션 비밀값에서 만든다 (설정 파일에 안 적음)
+grafana_teams() {  # 「이름 워크스페이스」 줄 — 틀린 항목은 알리고 뺀다
+  local e n w
+  for e in ${GRAFANA_TEAMS//,/ }; do
+    n=${e%%:*}; w=${e#*:}; [ "$w" = "$e" ] && w=$n
+    if [[ "$n" =~ ^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$ ]] && [ "$n" != admin ] && [[ "$w" =~ ^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$ ]]; then echo "$n $w"
+    else echo "⚠ GRAFANA_TEAMS 의 「$e」 를 뺐습니다 — 이름[:워크스페이스], 영문 소문자 · 숫자 · - 3~40자 (admin 은 안 됨)" >&2; fi
+  done
+  return 0
+}
+grafana_team_pwvar() { local n=${1//-/_}; echo "GRAFANA_TEAM_${n^^}_PASSWORD"; }
+reqlog_team_role()   { echo "reqlog_t_${1//-/_}"; }
+reqlog_team_pw()     { printf '%s' "$KONG_SESSION_SECRET:reqlog-team:$1" | sha256sum | cut -c1-32; }
 prom_copy_stop() {  # 사본을 만들던 중이면 복사(cp)까지 함께 내린다 — 남은 조각은 다음 prom_copy 가 치운다
   local p; p=$(cat "$RUN_DIR/prom-copy.pid" 2>/dev/null) || p=""
   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; fi

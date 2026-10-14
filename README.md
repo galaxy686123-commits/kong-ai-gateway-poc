@@ -225,6 +225,32 @@ bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경�
 
 ---
 
+## 팀 워크스페이스 — 팀마다 Kong Manager 권한 나누기
+
+팀마다 Kong 설정을 따로 관리하게 하려면 워크스페이스를 나눕니다. `workspace-copy.sh` 가 **default 의 지금 PoC 설정을 새 워크스페이스에
+같게 만들고, default 설정은 읽기만 합니다**(끝에 default 를 전후로 비교해 보여 줌 · 번들의 적용(`apply-config.sh`)은 default 만 다룸).
+
+```bash
+bash workspace-copy.sh --dry-run it-infra     # 무엇이 만들어지는지
+bash workspace-copy.sh it-infra               # 만들기 — 이미 만든 워크스페이스는 건너뜀 (--reset 이면 default 기준으로 다시 맞춤, 키는 그대로)
+bash workspace-copy.sh --roles default        # default 를 한 팀이 쓸 때 — default 에 팀 역할만
+# 빌드한 새 환경: bash remote.sh update (새 코드) → bash remote.sh workspace-copy [--dry-run | --reset | --roles] <워크스페이스> …
+```
+
+- **옮기는 것**: default 에서 `kong-poc` 태그가 붙은 지금 설정 — Kong Manager 에서 바꾼 LLM 대상 · 스위치, 지운 경로까지 그대로 따라간다.
+  경로와 플러그인 · 전역 플러그인(요청 로그 · 지표 · 추적 ID · 전처리) · 계정과 그룹 · 긴급 차단. **빼는 것**: `/grafana` · `/ai/embed` · 경로 없는 서비스.
+- **경로는 앞에 워크스페이스 이름**: `/poc` → `/it-infra/poc` (경로는 워크스페이스끼리 같을 수 없어 409). 경로 이름은 그대로 `poc` 라 전처리가 똑같이 돈다.
+- **계정 키는 새로** 만들어 유지 폴더 `secrets/workspace-<이름>-keys.txt`(600)에 둔다 — 키는 그 워크스페이스에서만 통한다(다른 팀 · default 는 401).
+- **역할**: 워크스페이스를 만들 때 Kong Manager 의 「New Workspace」와 같은 역할 4개(`workspace-admin` · `workspace-super-admin` ·
+  `workspace-read-only` · `workspace-portal-admin`)를 만든다 — Admin API 로만 만들면 역할이 없다. `--roles default` 는 default 에 같은 역할을 만들되
+  워크스페이스 · 라이선스 관리는 뺀다(default 범위 역할은 워크스페이스 만들기까지 허용되기 때문 — 3.16 실측).
+- **Manager 계정**: Teams → Invite Admin → 워크스페이스 · 역할(`workspace-admin`) → 메일 서버가 없으니 그 계정의 **Generate Registration Link** 를 전달(3일 유효).
+  계정 이름 · 이메일은 워크스페이스가 달라도 겹치면 안 된다. 팀 계정에는 default 의 `admin` · `read-only` · `super-admin` 을 주지 않는다(모든 워크스페이스에 걸림).
+- **겹치면 안 되는 것**: 경로 — 다른 워크스페이스 경로와 같거나 그 아래면 409, 앞부분만 겹치는 짧은 경로는 만들어지니 팀마다 접두어를 정한다.
+  번들 경로(`/poc` `/ocr` `/agents/a` `/agents/b` `/ai/embed` `/grafana`)는 팀이 쓰지 않는다 — 먼저 쓰면 적용이 409 로 멈춘다.
+- **Manager 에서 경로를 새로 만들 때** 화면의 Basic 은 프로토콜이 https 로 고정 — 이 번들은 Kong 을 http 로 받으므로 426 이 난다. Advanced 에서 `http,https`.
+- 팀 Grafana(그 워크스페이스 데이터만) 는 「모니터링」의 `GRAFANA_TEAMS`.
+
 ## 시험해 보기
 
 ```bash
@@ -311,7 +337,8 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 |---|---|
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
 | `run.sh` | **빌드한 새 환경의 시작 명령** — 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
-| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` · `vectors` · `guard-test` · `logs-admin` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
+| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` · `vectors` · `guard-test` · `logs-admin` · `workspace-copy` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
+| `workspace-copy.sh` | **팀 워크스페이스** — default 의 지금 PoC 설정을 새 워크스페이스에 같게(경로 `/<워크스페이스>/…` · 새 키 · Manager 와 같은 역할 4개), default 는 읽기만. `--dry-run` · `--reset` · `--roles default`. 빌드한 새 환경이면 `bash remote.sh workspace-copy …` (위 「팀 워크스페이스」) |
 | `switch.sh` | `/poc` 플러그인·긴급 차단 바로 켜고 끄기 — `bash switch.sh <이름> on|off` (Kong Manager 스위치와 같음) · 이름 없이 = 지금 상태 |
 | `vectors.sh` | 벡터 DB(`kong-pgvector`)에 Kong 이 넣은 것 보기 — 시맨틱 캐시의 저장된 답 · 의미 기반 가드의 예문. `--query '문장'` 이면 가까운 것과 거리(막히는지·캐시가 맞는지) · 빌드한 새 환경이면 `bash remote.sh vectors` |
 | `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
@@ -496,6 +523,12 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   DB 에는 `REQLOG_KEEP_DAYS`(30)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
   Grafana 는 읽기 전용 계정 `reqlog_reader`(비밀번호 `REQLOG_DB_PASSWORD`, 처음 기동할 때 만듦)로 읽습니다.
   질문 · 답변 원문이 그대로 쌓이므로, 볼 사람(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
+- **팀 Grafana** — `GRAFANA_TEAMS="it-infra agentic-ai:default"`(「이름[:워크스페이스]」) 를 넣고 다시 띄우면(`bash remote.sh restart`) 팀마다
+  Grafana 조직과 보기 전용 계정(로그인 = 이름, 비밀번호 = 설정 파일의 `GRAFANA_TEAM_<이름>_PASSWORD` — 없으면 만들어 적음)이 생기고,
+  대시보드 3개가 그 워크스페이스 데이터만 보여 준다. 지표는 쿼리마다 `workspace="<워크스페이스>"` 를 붙이고(요청 · 지연 · 대역폭 · AI 지표 —
+  연결 수 · 메모리 같은 노드 전체 지표는 그대로), 요청 기록은 그 워크스페이스 행만 읽히는 DB 계정(`reqlog_t_<이름>`, 행 단위 제한)으로 읽는다.
+  admin 은 기존 조직에서 전부 본다. 지표 저장소(Prometheus)는 사용자별로 막지 못해 팀 계정은 화면에서 쿼리를 쓰지 못하는 보기 전용으로만 둔다.
+  Grafana 기록은 로컬 디스크라 새 환경이 뜰 때마다 `start.sh` 가 다시 맞춘다(`addons/monitoring/grafana-teams.py`).
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).
 
 ## 로그
