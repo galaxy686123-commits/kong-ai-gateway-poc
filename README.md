@@ -119,7 +119,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID |
 | 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
 | 3-4 | Kill-Switch (MN-01-73) | 경로·계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단, 적용해도 그대로 | 00 · 10 · 40 | `kill-switch--poc` 를 켜서 503 · 끄면 200 |
-| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking`) | 10 · `addons/kong-plugins` | 모의 LLM 이 받은 질문 확인 |
+| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking` — 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 받은 질문 확인 |
 | 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 400 (`ai-prompt-guard`) — 켜면 어느 모델로 가든 막음 | 10 | 400 · 일반 질문 200 |
 | 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 70 | 400 — 의미 기반은 임베딩이 있을 때 |
 | 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 키워드(PII 가드 `ai-custom-guardrail`) + 의미 기반(`ai-semantic-response-guard`) | 10 · 70 | 표준 문구 — 의미 기반은 임베딩이 있을 때 |
@@ -163,6 +163,13 @@ bash set-env.sh KONG_MANAGER_PASSWORD
   `bash switch.sh` 만 치면 지금 상태, 빌드한 새 환경이면 `bash remote.sh switch …`) · 또는 **설정 파일**
   `bash set-env.sh FEATURE_MASKING on` 뒤 `bash apply-config.sh`. 섞어 써도 됩니다(아래 「Kong Manager 와 설정 파일 같이 쓰기」).
 - 로그·추적 ID·지표(3-1~3-3)는 전역 플러그인이라 늘 켜져 있습니다.
+- **개인정보 마스킹 규칙**: Kong Manager 의 Routes → `poc` → Plugins → `pii-masking` → **Rules** 에서 규칙마다 이름(name) ·
+  바꿀 글자(label) · 찾을 형식(pattern)을 보고 고치거나 **Add rules** 로 더합니다. 위에서부터 차례로 적용하므로 긴 형식을 먼저 둡니다.
+  pattern 은 Lua 패턴입니다 — `%d` 숫자 · `%s` 공백 · `%-` 는 `-` 글자 · `[..]` 그 가운데 하나 · `?` 있어도 없어도 됨
+  (예: 여권번호 `%u%d%d%d%d%d%d%d%d`). 틀린 패턴이나 빈 글자에도 맞는 패턴(`%d*`)은 저장할 때 거절됩니다.
+  기본 6종(`rrn` 주민·외국인등록번호 · `card` · `mobile` · `landline` · `account` · `email`)은 **Types** 로 켜고 끄고,
+  직접 더한 규칙은 늘 적용됩니다(빼려면 Rules 에서 지움). Rules 를 비우면 기본 6종으로 돕니다.
+  설정 파일에는 규칙이 없어서, 번들을 적용(`apply-config.sh`)하면 기본 6종으로 돌아갑니다 — 적용 전 「Kong Manager 에서 바꾼 값」 목록에 나옵니다.
 - **답변 검사와 스트리밍**: `FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK` 를 켜고 적용하면 `/poc` 는 `"stream": true` 요청을
   400(`response streaming is not enabled`)으로 거절합니다 — 조각으로 나뉜 답은 검사할 수 없어서입니다. 의미 기반 답변 가드는
   거절 대신 스트리밍 요청에도 한 번에 답합니다(Kong 이 답을 다 받아 검사 — 3.16 실측).

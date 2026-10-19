@@ -2,33 +2,30 @@
 --   예) "주민번호 900101-1234567" → "주민번호 [주민등록번호]". 무엇을 가렸는지는 X-PII-Masked 헤더 · 요청 로그의 pii_masked.
 --   다른 플러그인처럼 Kong Manager 에서 켜고 끈다. 순서: 키 인증(1250)·허용 그룹(950)·호출 수(910)·토큰(905) 뒤 —
 --   막힐 요청은 손대지 않는다 — 질문 가드(775·771)·AI 프록시(770)·시맨틱 캐시(765) 앞이라 가드·캐시·LLM 은 가린 질문을 본다.
-local PiiMasking = { PRIORITY = 800, VERSION = "1.0.0" }
+local PiiMasking = { PRIORITY = 800, VERSION = "1.1.0" }
 
--- 순서가 중요하다: 긴 형식(주민번호·카드)을 먼저 가려야 짧은 형식(계좌)에 잘못 걸리지 않는다
-local RULES = {
-  { "rrn",      "[주민등록번호]", "%d%d%d%d%d%d%s*%-%s*[1-8]%d%d%d%d%d%d" },
-  { "card",     "[카드번호]",     "%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d[%- ]%d%d%d%d" },
-  { "mobile",   "[휴대전화]",     "01[016789][%-%. ]?%d%d%d%d?[%-%. ]?%d%d%d%d" },
-  { "landline", "[전화번호]",     "0[2-6]%d?[%-%. ]%d%d%d%d?[%-%. ]%d%d%d%d" },
-  -- 계좌: 숫자 묶음 3개(2~6 · 2~6 · 4~7자리). 날짜(2026-10-01)는 마지막 묶음이 짧아 걸리지 않는다
-  { "account",  "[계좌번호]",     "%d%d%d?%d?%d?%d?%-%d%d%d?%d?%d?%d?%-%d%d%d%d%d?%d?%d?" },
-  { "email",    "[이메일]",       "[%w%.%+%-_]+@[%w%-]+%.[%w%.%-]+" },
-}
+-- 규칙은 설정(config.rules)에서 읽는다 — Kong Manager 에서 보고 고친다. 비어 있으면 기본 6종(defaults.lua)
+--   기본 규칙(rrn·card·mobile·landline·account·email)은 config.types 로 켜고 끄고, 직접 더한 규칙은 늘 적용한다
+local defaults = require "kong.plugins.pii-masking.defaults"
 
 function PiiMasking:access(conf)
   local body = kong.request.get_body("application/json")
   if type(body) ~= "table" or type(body.messages) ~= "table" then return end
   local on = {}
   for _, t in ipairs(conf.types or {}) do on[t] = true end
+  local rules = (type(conf.rules) == "table" and #conf.rules > 0) and conf.rules or defaults.RULES
   local total, seen, kinds = 0, {}, {}
   local function mask(s)
-    for _, r in ipairs(RULES) do
-      if on[r[1]] then
-        local n
-        s, n = s:gsub(r[3], r[2])
-        if n > 0 then
+    for _, r in ipairs(rules) do
+      if on[r.name] or not defaults.BUILTIN[r.name] then
+        -- 라벨의 % 는 글자 그대로 (gsub 의 %1 같은 치환으로 읽히지 않게)
+        local ok, out, n = pcall(string.gsub, s, r.pattern, (tostring(r.label):gsub("%%", "%%%%")))
+        if not ok then
+          kong.log.err("pii-masking: 규칙 ", r.name, " 의 패턴을 쓸 수 없습니다 — ", out)
+        elseif n > 0 then
+          s = out
           total = total + n
-          if not seen[r[1]] then seen[r[1]] = true; kinds[#kinds + 1] = r[1] end
+          if not seen[r.name] then seen[r.name] = true; kinds[#kinds + 1] = r.name end
         end
       end
     end

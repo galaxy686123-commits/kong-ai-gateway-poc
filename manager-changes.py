@@ -92,6 +92,8 @@ def show(path, v):
 def diffs(a, b, path):
     if isinstance(a, dict) and isinstance(b, dict):
         for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:    # 한쪽에만 있는 칸 = 플러그인·Kong 새 판이 더하거나 뺀 칸 (덤프는 빈 값도 null 로 적는다)
+                continue
             yield from diffs(a.get(k), b.get(k), path + (k,))
     elif a != b:
         yield path, a, b
@@ -180,7 +182,7 @@ def main():
     for key in sorted(set(B) & set(N), key=str):
         b, n = B[key], N[key]
         for f in sorted(set(b) | set(n)):
-            if f in SKIP or f in CHILD or (f == "enabled" and key in done):
+            if f in SKIP or f in CHILD or (f == "enabled" and key in done) or f not in b or f not in n:
                 continue
             bv, nv = b.get(f), n.get(f)
             if (key[0], f) in UNORDERED:

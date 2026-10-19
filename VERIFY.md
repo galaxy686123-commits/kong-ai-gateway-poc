@@ -247,6 +247,7 @@ bash switch.sh pii-masking off
 → LLM 이 받은 질문이 `주민번호 [주민등록번호] 연락처 [휴대전화] 계좌 [계좌번호] 메일 [이메일]` 로 돌아옵니다
 (모의 LLM 이 받은 그대로 답하므로). 무엇을 가렸는지는 응답 헤더 `X-PII-Masked: rrn,mobile,account,email` 과 요청 로그에 남습니다.
 끈 상태로 같은 요청을 보내면 숫자가 그대로 돌아옵니다.
+가리는 규칙(형식)은 Kong Manager 의 Routes → `poc` → Plugins → `pii-masking` → Rules 에서 보고 고칩니다 — README 「개인정보 마스킹 규칙」.
 
 ### 4-2 기밀 키워드 외부 전송 차단
 
