@@ -28,7 +28,7 @@ MAX_FIELD = 2 * 1024 * 1024        # 본문 한 칸 상한 — 넘으면 잘라 
 SKIP_ROUTES = {"ai-embed"}         # 게이트웨이 안에서만 쓰는 임베딩 호출 — 사람이 볼 기록이 아니다
 COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "model", "provider",
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
-        "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace")
+        "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for")
 
 
 def log(*a):
@@ -166,7 +166,16 @@ def row_of(line):
         "response_body": rs,
         "cost": usage.get("cost") if isinstance(usage.get("cost"), (int, float)) and not isinstance(usage.get("cost"), bool) else None,
         "workspace": d.get("workspace_name") or None,   # 팀 워크스페이스(workspace-copy.sh)의 호출도 같은 요청 로그에 쌓인다
+        "forwarded_for": forwarded_for(req.get("headers")),
     }
+
+
+def forwarded_for(headers):
+    """앞단 프록시가 붙인 X-Forwarded-For — 헤더가 여러 번 오면 목록이라 이어 붙인다. Kong 이 받은 접속 주소는 client_ip"""
+    v = (headers or {}).get("x-forwarded-for") if isinstance(headers, dict) else None
+    if isinstance(v, list):
+        v = ", ".join(str(x) for x in v if x)
+    return (str(v).strip()[:200] or None) if v else None
 
 
 def lit(v):
