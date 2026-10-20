@@ -69,7 +69,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -122,8 +122,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 1
       },
       "fieldConfig": {
@@ -176,7 +176,7 @@
       "gridPos": {
         "h": 5,
         "w": 4,
-        "x": 8,
+        "x": 6,
         "y": 1
       },
       "fieldConfig": {
@@ -220,8 +220,8 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "오버헤드 p95",
-      "description": "게이트웨이 오버헤드 — Kong 이 요청을 처리하느라 더한 시간(LLM 응답 시간은 뺌), 고른 기간의 95%",
+      "title": "오버헤드 p95 (전체)",
+      "description": "게이트웨이 오버헤드 — Kong 이 요청을 처리하느라 더한 시간(LLM 응답 시간은 뺌), 고른 기간의 95%. 막힌 요청도 들어간다(의미 기반 가드가 막은 요청은 임베딩 시간까지) — 정상 요청만은 옆 칸",
       "datasource": {
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
@@ -229,7 +229,7 @@
       "gridPos": {
         "h": 5,
         "w": 4,
-        "x": 12,
+        "x": 10,
         "y": 1
       },
       "fieldConfig": {
@@ -286,6 +286,75 @@
       ]
     },
     {
+      "id": 25,
+      "type": "stat",
+      "title": "정상 요청 오버헤드 p95",
+      "description": "성공한(4xx·5xx 아닌) /poc 요청만 — Kong 이 쓴 시간(LLM 응답 시간은 뺌)의 95%. 요청 기록 기준이라 이 칸을 더한 뒤 들어온 요청부터 셈",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 14,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 200
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY kong_latency_ms) AS v\nFROM requests\nWHERE $__timeFilter(ts) AND route = 'poc' AND status < 400 AND kong_latency_ms IS NOT NULL"
+        }
+      ]
+    },
+    {
       "id": 6,
       "type": "stat",
       "title": "차단 비율 (4xx)",
@@ -296,8 +365,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 18,
         "y": 1
       },
       "fieldConfig": {
@@ -365,8 +434,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 21,
         "y": 1
       },
       "fieldConfig": {
@@ -694,6 +763,104 @@
       ]
     },
     {
+      "id": 26,
+      "type": "table",
+      "title": "사용자별 토큰 한도 — 남은 양 (2-4 토큰 한도를 켰을 때만 채워짐)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "description": "토큰 한도(ai-rate-limiting-advanced)가 켜져 있을 때 Kong 이 응답마다 알려 준 한도 · 남은 양. 남은 토큰은 그 사용자의 마지막 호출 때 값이고, 한도 기간(예: 1분)이 지나면 다시 처음 한도로 돌아간다. 꺼져 있으면 비어 있다.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "남은 비율 %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 20
+                    },
+                    {
+                      "color": "green",
+                      "value": 50
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "마지막 호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "WITH last AS (\n  SELECT DISTINCT ON (consumer) consumer, ts, ai_window, ai_limit, ai_remaining\n  FROM requests\n  WHERE $__timeFilter(ts) AND ai_limit IS NOT NULL AND consumer IS NOT NULL\n  ORDER BY consumer, ts DESC),\ntoday AS (\n  SELECT consumer, sum(total_tokens) AS t FROM requests\n  WHERE ts >= (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul') AND consumer IS NOT NULL\n  GROUP BY consumer)\nSELECT l.consumer AS \"사용자\",\n  CASE WHEN l.ai_window LIKE 'second%' THEN '1초' WHEN l.ai_window LIKE 'minute%' THEN '1분' WHEN l.ai_window LIKE 'hour%' THEN '1시간'\n       WHEN l.ai_window LIKE 'day%' THEN '하루' WHEN l.ai_window LIKE 'month%' THEN '한 달' ELSE l.ai_window END AS \"한도 기간\",\n  l.ai_limit AS \"한도(토큰)\", l.ai_remaining AS \"남은 토큰\",\n  round(100.0 * l.ai_remaining / nullif(l.ai_limit, 0)) AS \"남은 비율 %\",\n  l.ts AS \"마지막 호출\", coalesce(t.t, 0) AS \"오늘 쓴 토큰\"\nFROM last l LEFT JOIN today t USING (consumer)\nORDER BY 5, 1"
+        }
+      ]
+    },
+    {
       "id": 13,
       "type": "row",
       "title": "정책 · 결과",
@@ -702,7 +869,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 30
       },
       "panels": []
     },
@@ -720,7 +887,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -931,7 +1098,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 24
+        "y": 31
       },
       "description": "대상(Target)에 넣은 토큰 단가로 Kong 이 계산한 값 — 단가를 비워 두면 0",
       "fieldConfig": {
@@ -1009,7 +1176,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 24
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -1064,7 +1231,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 39
       },
       "panels": []
     },
@@ -1082,7 +1249,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 33
+        "y": 40
       },
       "fieldConfig": {
         "defaults": {
@@ -1155,7 +1322,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 33
+        "y": 40
       },
       "fieldConfig": {
         "defaults": {
@@ -1219,7 +1386,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 33
+        "y": 40
       },
       "fieldConfig": {
         "defaults": {
@@ -1274,7 +1441,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 33
+        "y": 40
       },
       "fieldConfig": {
         "defaults": {
@@ -1324,7 +1491,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 48
       },
       "panels": []
     },
@@ -1342,7 +1509,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -1460,7 +1627,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {

@@ -99,6 +99,9 @@ plugins:
 
   # /poc 에서 의미 기반 답변 가드(70-semantic.yaml)가 막은 답변을 표준 문구로 바꾼다 (항상 켬)
   #   Kong 3.16.0.0 실측: 막으면 400 {"error":{"message":"bad response"}} (공식 문서에는 403 — ACL 403 과 섞이지 않게 400 만 본다)
+  #   요청 기록(「요청 기록」 대시보드)에 남길 값도 여기서 만든다 — 파일 로그는 응답 헤더 · 본문을 남기지 않으므로
+  #     error_body   4xx · 5xx 응답 본문 앞 300바이트 (차단 · 오류 사유 — 정상 응답은 건드리지 않음)
+  #     ai_ratelimit 2-4 토큰 한도를 켰을 때 응답 헤더의 한도 · 남은 양 (여러 한도 중 남은 비율이 가장 작은 것 하나)
   - name: post-function
     instance_name: block-message
     config:
@@ -106,7 +109,30 @@ plugins:
         - |
           local r = kong.router.get_route()
           if r ~= nil and r.name == "poc" and kong.response.get_status() == 400 then kong.response.clear_header("Content-Length") end
+        - |
+          local lim, rem = {}, {}
+          for k, v in pairs(kong.response.get_headers()) do
+            if type(v) == "table" then v = v[1] end
+            local key = k:lower()
+            local w = key:match("^x%-ai%-ratelimit%-limit%-(.+)$")
+            if w then lim[w] = tonumber(v) end
+            w = key:match("^x%-ai%-ratelimit%-remaining%-(.+)$")
+            if w then rem[w] = tonumber(v) end
+          end
+          local best
+          for w, l in pairs(lim) do
+            local r = rem[w]
+            if r and l > 0 and (best == nil or r / l < best.remaining / best.limit) then best = { window = w, limit = l, remaining = r } end
+          end
+          if best then kong.log.set_serialize_value("ai_ratelimit", best) end
       body_filter:
+        - |
+          if kong.response.get_status() < 400 then return end
+          local body = kong.response.get_raw_body()
+          if body and body ~= "" then
+            if #body > 300 then body = body:sub(1, 300):gsub("[\192-\255][\128-\191]*$", "") end
+            kong.log.set_serialize_value("error_body", body)
+          end
         - |
           local r = kong.router.get_route()
           if r == nil or r.name ~= "poc" or kong.response.get_status() ~= 400 then return end

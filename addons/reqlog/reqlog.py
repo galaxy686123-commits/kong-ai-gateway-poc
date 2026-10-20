@@ -28,7 +28,8 @@ MAX_FIELD = 2 * 1024 * 1024        # 본문 한 칸 상한 — 넘으면 잘라 
 SKIP_ROUTES = {"ai-embed"}         # 게이트웨이 안에서만 쓰는 임베딩 호출 — 사람이 볼 기록이 아니다
 COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "model", "provider",
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
-        "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for")
+        "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for",
+        "error_message", "kong_latency_ms", "ai_window", "ai_limit", "ai_remaining")
 
 
 def log(*a):
@@ -143,6 +144,7 @@ def row_of(line):
     rs = rs if isinstance(rs, str) else (json.dumps(rs, ensure_ascii=False) if rs else None)
     rid = req.get("id") or d.get("correlation_id") or hashlib.sha1(line.encode("utf-8", "replace")).hexdigest()
     lat = d.get("latencies") or {}
+    rl = d.get("ai_ratelimit") if isinstance(d.get("ai_ratelimit"), dict) else {}   # 2-4 토큰 한도를 켰을 때만 (post-function block-message)
     return {
         "request_id": rid,
         "ts": d["started_at"] / 1000.0,
@@ -167,7 +169,27 @@ def row_of(line):
         "cost": usage.get("cost") if isinstance(usage.get("cost"), (int, float)) and not isinstance(usage.get("cost"), bool) else None,
         "workspace": d.get("workspace_name") or None,   # 팀 워크스페이스(workspace-copy.sh)의 호출도 같은 요청 로그에 쌓인다
         "forwarded_for": forwarded_for(req.get("headers")),
+        "error_message": error_message(d.get("error_body")) if as_int(resp.get("status")) and as_int(resp.get("status")) >= 400 else None,
+        "kong_latency_ms": as_int(lat.get("kong")),
+        "ai_window": rl.get("window"),
+        "ai_limit": as_int(rl.get("limit")),
+        "ai_remaining": as_int(rl.get("remaining")),
     }
+
+
+def error_message(body):
+    """막힌 · 실패한 요청의 사유 — 응답 본문(JSON 이면 message)을 한 줄로. Kong 은 {"message": …}, AI 플러그인 · LLM 은 {"error": {"message": …}}"""
+    if not isinstance(body, str) or not body.strip():
+        return None
+    text = body
+    try:
+        j = json.loads(body)
+    except ValueError:
+        j = None
+    if isinstance(j, dict):
+        e = j.get("error")
+        text = j.get("message") or (e.get("message") if isinstance(e, dict) else e) or body
+    return " ".join(str(text).split())[:300] or None
 
 
 def forwarded_for(headers):

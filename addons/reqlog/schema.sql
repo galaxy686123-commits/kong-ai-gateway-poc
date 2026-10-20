@@ -27,6 +27,11 @@ ALTER TABLE requests ADD COLUMN IF NOT EXISTS cost double precision;   -- 예상
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS workspace text;         -- Kong 워크스페이스 (요청 로그의 workspace_name) — 예전 행은 비어 있음 = default
 CREATE INDEX IF NOT EXISTS requests_ws_ts ON requests (workspace, ts DESC);
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS forwarded_for text;     -- 앞단 프록시가 넘긴 원래 IP (X-Forwarded-For) — client_ip 는 Kong 이 받은 접속 주소
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS error_message text;     -- 4xx · 5xx 응답의 사유 (post-function block-message 가 남긴 error_body 에서)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS kong_latency_ms integer;  -- 그 가운데 Kong 이 쓴 시간 (latencies.kong — LLM 응답 시간은 뺌)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS ai_window text;           -- 2-4 토큰 한도 — 켰을 때만: 한도 기간 (예: minute-policy-1)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS ai_limit integer;         --   그 기간의 토큰 한도
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS ai_remaining integer;     --   이 요청 뒤 남은 토큰 (Kong 이 응답 헤더로 알려 준 값)
 
 -- 행 단위 제한 — 팀 Grafana(GRAFANA_TEAMS)는 그 워크스페이스 행만 읽히는 계정(reqlog_t_<팀>)으로 연결한다 (start.sh 가 계정 · 정책을 만든다).
 --   기존 화면(reqlog_reader)은 전부 읽는다. 쓰기 · 보관 기간 정리(postgres)는 제한을 받지 않는다
