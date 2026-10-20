@@ -45,16 +45,17 @@ bash verify.sh --full   # + 70초 장기 연결 (약 3분)
 
 ```bash
 cd /project/work/flow/kong-ai-gateway-poc
-for k in DECK_CLIENT_KEY DECK_CLIENT_KEY_B KONG_ADMIN_PASSWORD DECK_EXT_MODEL; do export "$k=$(bash set-env.sh --get $k)"; done
+for k in DECK_CLIENT_KEY DECK_CLIENT_KEY_B DECK_AGENT_A_KEY DECK_AGENT_B_KEY DECK_AGENT_C_KEY KONG_ADMIN_PASSWORD DECK_EXT_MODEL; do export "$k=$(bash set-env.sh --get $k)"; done
 LOGS=$(bash -c 'source lib.sh >/dev/null; load_env >/dev/null 2>&1; native_env >/dev/null 2>&1; echo "$LOGS"')
 G=http://127.0.0.1:8000
 A=(-H "apikey: $DECK_CLIENT_KEY" -H 'Content-Type: application/json')
 B=(-H "apikey: $DECK_CLIENT_KEY_B" -H 'Content-Type: application/json')
+AGA=(-H "apikey: $DECK_AGENT_A_KEY" -H 'Content-Type: application/json')
 q() { printf '{"model":"%s","messages":[{"role":"user","content":"%s"}]}' "${2:-mock-llm}" "$1"; }
 ans() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["choices"][0]["message"]["content"] if "choices" in d else d)'; }
 ```
 
-`A` 는 team-a 부서 키, `B` 는 team-b 부서 키입니다. `q '질문' [모델]` 은 요청 본문을 만들고(모델을 안 주면 `mock-llm`,
+`A` 는 team-a 부서 키, `B` 는 team-b 부서 키, `AGA` 는 에이전트 A 의 호출 키입니다. `q '질문' [모델]` 은 요청 본문을 만들고(모델을 안 주면 `mock-llm`,
 질문에 큰따옴표는 쓰지 마세요), `ans` 는 답변 글자만 꺼냅니다.
 
 플러그인은 `bash switch.sh <이름> on|off` 로 켜고 끕니다 — Kong Manager 의 Routes → `poc` → Plugins 스위치와 같고, 반영(6초)을
@@ -71,6 +72,28 @@ curl -s -D - -o /dev/null $G/poc "${A[@]}" -d "$(q '안녕')" | grep -iE '^HTTP|
 → 같은 주소인데 요청의 `model` 에 따라 `X-Kong-LLM-Model` 이 바뀝니다 — 목록 밖 이름(`gpt-4o`)은 기본 대상(사내 LLM),
 두 번째 LLM 의 모델 이름이면 그 LLM, `mock-llm` 이면 모의 LLM. 3번부터의 LLM·Azure·GCP·AWS 도 그 모델 이름으로 고릅니다.
 `verify.sh` 의 「1-1 모델 선택」 줄이 넣은 이름을 모두 불러 확인합니다.
+
+### 1-1 AI 에이전트 등록 — 일반 HTTP · A2A
+
+에이전트 하나 = Service + Route 입니다. `agent-a` · `agent-b` 는 일반 HTTP 에이전트, `agent-c` 는 A2A 에이전트라 경로에
+**AI A2A Proxy** 를 더했습니다 (Kong Manager → Routes → `agent-c` → Plugins). 주소(`DECK_AGENT_*_URL`)를 비워 두면 모의 에이전트가 답합니다.
+
+```bash
+curl -s "$G/agents/c/.well-known/agent-card.json" "${AGA[@]}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])'
+curl -s "$G/agents/c" "${AGA[@]}" -H 'X-Correlation-ID: a2a-demo-1' \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m1","parts":[{"kind":"text","text":"보고서 요약 부탁"}]}}}'; echo
+sleep 1; grep a2a-demo-1 "$LOGS/audit.log" | python3 -c 'import json,sys; print(json.loads(sys.stdin.readline())["ai"]["a2a"]["rpc"])'
+```
+→ 첫 번째: 카드 속 주소가 에이전트 주소(`http://127.0.0.1:18090/agents/c`)가 아니라 **Kong 주소**(`http://127.0.0.1:8000/agents/c`)입니다 —
+A2A 클라이언트는 카드를 보고 다음 호출도 Kong 으로 보냅니다. 두 번째: 작업(`"kind": "task"`)이 `completed` 로 돌아옵니다.
+세 번째: 요청 로그의 A2A 기록 — `method` `message/send` · `task_id` · `task_state` `completed` · `latency`.
+지표에도 `kong_ai_a2a_requests_total`(메서드별) · `kong_ai_a2a_task_states_total`(작업 상태별)이 나옵니다.
+메시지 본문까지 남기려면 설정 파일 `DECK_A2A_LOG_PAYLOADS=true` 후 적용합니다 (기본은 남기지 않음).
+
+플랫폼 외부 주소로 카드를 받으면 주소가 `http://<외부 호스트>:8000/…` 로 나옵니다 — Kong 이 앞단(인그레스)의 `X-Forwarded-*` 를
+믿지 않아서입니다. 설정 파일 `TRUSTED_IPS` 에 앞단 주소 대역을 넣고 다시 시작하면(`bash stop.sh && bash start.sh`, 빌드한 새 환경이면
+`bash remote.sh restart`) `https://<외부 주소>/agents/c` 가 됩니다. 대역은 플랫폼 담당자에게 확인합니다 — 모든 주소를 믿게 하면 파드에
+바로 들어온 요청도 주소를 꾸며 보낼 수 있습니다.
 
 ### 1-2 스트리밍 · 첫 토큰 지연
 
@@ -110,6 +133,18 @@ time curl -s "$G/agents/a/run?delay=70" -H "apikey: $DECK_CLIENT_KEY"; echo
 ```
 → 70초 뒤 200 으로 응답합니다 (일반적인 기본 제한 60초를 넘어도 끊기지 않음 — OCR·Agent 는 600초까지 기다림).
 
+오래 걸리는 작업을 **접수만 하고 결과는 나중에** 받는 방식(비동기)은 에이전트가 접수 · 조회 API 를 제공할 때 Kong 이 그대로 중계합니다.
+A2A 에이전트(`agent-c`)로 보면:
+
+```bash
+tid=$(curl -s "$G/agents/c?delay=5" "${AGA[@]}" -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"configuration":{"blocking":false},"message":{"kind":"message","role":"user","messageId":"m2","parts":[{"kind":"text","text":"긴 작업"}]}}}' \
+  | python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]; print(r["id"]); print("접수:", r["status"]["state"], file=sys.stderr)')
+get() { curl -s "$G/agents/c" "${AGA[@]}" -d "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"method\":\"tasks/get\",\"params\":{\"id\":\"$tid\"}}" | python3 -c 'import json,sys; print("조회:", json.load(sys.stdin)["result"]["status"]["state"])'; }
+get; sleep 5; get
+```
+→ `접수: working` (응답이 바로 옴 — 연결을 붙잡지 않음) → `조회: working` → 5초 뒤 `조회: completed`. Kong 은 작업을 맡아 두지 않고
+중계 · 기록만 합니다 — 요청 로그와 Grafana 「A2A 작업」 표에 같은 작업 ID 로 접수(`message/send` · `working`)와 조회(`tasks/get` · `completed`)가 이어집니다.
+
 ### 1-4 장애 시 대체 모델
 
 ```bash
@@ -140,6 +175,21 @@ for k in "$DECK_CLIENT_KEY" "$DECK_CLIENT_KEY_B"; do for a in a b; do curl -s -o
 curl -s "$G/agents/b" -H "apikey: $DECK_CLIENT_KEY"; echo
 ```
 → team-a 키: `agent-a 200  agent-b 403` / team-b 키: `agent-a 403  agent-b 200`. 403 메시지 `You cannot consume this service`.
+
+**에이전트끼리** — 에이전트마다 호출 키가 따로 있습니다(계정 `agent-a` · `agent-b` · `agent-c`, Kong Manager → Consumers).
+
+```bash
+for n in A B C; do v=DECK_AGENT_${n}_KEY; printf 'agent-%s 키: ' "${n,,}"; for t in a b c; do curl -s -o /dev/null -w "agent-$t %{http_code}  " "$G/agents/$t" -H "apikey: ${!v}"; done; echo; done
+```
+```
+agent-a 키: agent-a 403  agent-b 403  agent-c 200
+agent-b 키: agent-a 403  agent-b 403  agent-c 200
+agent-c 키: agent-a 403  agent-b 200  agent-c 403
+```
+에이전트 A 의 키로 B 는 403 이지만 C 는 200, B 는 C 가 부르면 200 — **A → B 한 조합만** 막힙니다. 막는 곳은 대상 에이전트 경로의
+허용 목록(`acl`)입니다: `agent-b` = team-b · agent-c, `agent-c` = agent-a · agent-b (`conf/40-ocr-agents.yaml`).
+전제: 에이전트끼리도 **Kong 주소로** 부를 것 — 에이전트 주소로 바로 가면 Kong 이 보지 못해 통제되지 않습니다
+(A2A 에이전트는 Kong 이 카드 속 주소를 Kong 주소로 바꿔 주므로 카드를 따라가면 Kong 을 거칩니다 — 1-1).
 
 `/poc` 에도 허용 그룹(`acl` — team-a·team-b)이 붙어 있습니다(처음엔 꺼짐). 켜면 두 그룹 밖의 키는 403 입니다.
 `verify.sh` 는 허용을 team-a 로 좁혀 잠깐 켜고 team-b 키가 403 인지 봅니다.
@@ -209,6 +259,17 @@ curl -s -D /tmp/h -o /dev/null "$G/agents/a" -H "apikey: $DECK_CLIENT_KEY"; grep
 끝까지 이어 씁니다. 두 번째: ID 를 안 보내면 게이트웨이가 새로 만들어 붙입니다.
 설정 파일의 `DECK_OTEL_ENDPOINT` 에 추적 수집기를 넣으면 OpenTelemetry 스팬과 `traceparent` 헤더도 함께 전달됩니다.
 
+**여러 에이전트를 거치는 호출** — 사용자가 에이전트 A 를 부르고, A 가 자기 키로 Kong 을 거쳐 B · C 에 작업을 맡기는 경우
+(모의 에이전트는 주소 뒤 `?call=b,c` 면 그렇게 함):
+
+```bash
+curl -s "$G/agents/a?call=b,c" -H "apikey: $DECK_CLIENT_KEY" -H 'X-Correlation-ID: chain-1'; echo
+sleep 1; grep chain-1 "$LOGS/audit.log" | python3 -c 'import json,sys
+for l in sys.stdin: d=json.loads(l); print((d.get("consumer") or {}).get("username"), "→", d["route"]["name"], d["response"]["status"])'
+```
+→ 응답의 `calls` 에 `agent-b 403`(허용 목록 밖) · `agent-c 200 completed`. 요청 로그에는 세 호출이 같은 추적 ID `chain-1` 로 남습니다 —
+`agent-a → agent-b 403` · `agent-a → agent-c 200` · `team-a-app → agent-a 200`. Grafana 「요청 기록」에서 **추적 ID** 칸을 누르면 이 세 줄만 봅니다.
+
 ### 3-3 이상 징후 경보
 
 ```bash
@@ -218,6 +279,9 @@ curl -s 127.0.0.1:8100/metrics | grep -E '^kong_ai_llm_tokens_total' | head -3
 → 사용자(부서 키)·경로·상태 코드별 호출 수와 모델별 토큰 수가 Prometheus 형식으로 나옵니다.
 고객 Prometheus 가 `http://<파드>:8100/metrics` 를 수집하고, 경보 규칙은 `alerts/kong-alerts.yml`(반복 호출·토큰 급증·
 한도 초과 지속·가드레일 차단 급증·LLM 오류율)을 넣어 씁니다.
+
+에이전트 호출은 Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄에서 봅니다 — 호출 계정 × 대상 에이전트(허용 · 막힘 · 오류 수,
+마지막 호출)와 최근 A2A 작업(메서드 · 작업 상태 · 작업 ID). 「요청 기록」에는 경로 · A2A · 추적 ID 칸과 경로 고르기가 있습니다.
 
 ### 3-4 Kill-Switch (긴급 차단)
 
@@ -385,6 +449,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "${A[@]}" -d "$(q hello)" $G/it-infra/p
 |---|---|
 | 게이트웨이(8000) 외부 주소 | 플랫폼이 연 주소 (Manager 8002 가 `manager-…` 주소면 8000 도 같은 방식의 이름) |
 | team-a · team-b 키 | 파드에서 `bash set-env.sh --get DECK_CLIENT_KEY` · `bash set-env.sh --get DECK_CLIENT_KEY_B` |
+| (선택) 에이전트 A 키 | `bash set-env.sh --get DECK_AGENT_A_KEY` — 에이전트 간 호출 통제 · A2A 카드 주소까지 볼 때 |
 | (선택) Admin API(8001) 외부 주소 · 관리자 비밀번호 | 3-3 지표·3-4 긴급 차단까지 볼 때 — 비밀번호는 관리자만 |
 
 ### 방법 1 — 외부 점검 스크립트 `verify-remote.py` (권장)
@@ -393,7 +458,7 @@ Python 3.8 이상만 있으면 됩니다 (Windows·macOS·Linux, 추가 설치 �
 주피터 탐색기에서 `verify-remote.py` 를 오른쪽 클릭 → Download 로 PC 에 내려받습니다.
 
 ```
-python verify-remote.py --url https://<8000 외부 주소> --key <team-a 키> --key-b <team-b 키>
+python verify-remote.py --url https://<8000 외부 주소> --key <team-a 키> --key-b <team-b 키> --agent-key <에이전트 A 키>
 
 python verify-remote.py --url https://<8000 외부 주소> --key <team-a 키> --key-b <team-b 키> ^
        --admin-url https://<8001 외부 주소> --admin-token <관리자 비밀번호> --full
@@ -410,6 +475,7 @@ Kong 이 아니라 앞단 문제입니다.
 | 1-2 — 조각이 한꺼번에 도착 | 인그레스가 응답을 모아서 보냄 → 플랫폼에 스트리밍(버퍼링 끄기) 요청 |
 | 1-3 — 12 MB 업로드가 413 (Kong 아님) | 인그레스 업로드 상한 → 상향 요청 |
 | 1-3 — 장기 연결이 15·30·60초 등에서 504 | 인그레스 응답 시간 제한 → 상향 요청 (`--full` 에서 확인) |
+| 1-1 — A2A 카드 주소가 `http://…:8000/…` ([주의]) | Kong 이 앞단의 `X-Forwarded-*` 를 믿지 않음 → 설정 파일 `TRUSTED_IPS` 에 앞단 주소 대역 (2절 1-1) |
 
 스크립트가 처음에 찍는 **추적 ID**(`verify-remote-…`)로 파드에서 `grep <추적 ID> "$LOGS/audit.log"`(2절 준비의 `LOGS`) 하면
 이번 외부 요청들이 접속 IP 와 함께 요청 로그에 남은 것을 볼 수 있습니다 (3-1).
@@ -420,9 +486,10 @@ Kong 이 아니라 앞단 문제입니다.
 
 ```bash
 G=https://<8000 외부 주소>
-DECK_CLIENT_KEY=<team-a 키>; DECK_CLIENT_KEY_B=<team-b 키>
+DECK_CLIENT_KEY=<team-a 키>; DECK_CLIENT_KEY_B=<team-b 키>; DECK_AGENT_A_KEY=<에이전트 A 키>
 A=(-H "apikey: $DECK_CLIENT_KEY" -H 'Content-Type: application/json')
 B=(-H "apikey: $DECK_CLIENT_KEY_B" -H 'Content-Type: application/json')
+AGA=(-H "apikey: $DECK_AGENT_A_KEY" -H 'Content-Type: application/json')
 q() { printf '{"model":"%s","messages":[{"role":"user","content":"%s"}]}' "${2:-mock-llm}" "$1"; }
 ans() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["choices"][0]["message"]["content"] if "choices" in d else d)'; }
 ```
@@ -466,11 +533,12 @@ Routes → `poc` → Plugins 에서 플러그인(마스킹·가드·긴급 차�
 
 | 메뉴 | 보이는 것 |
 |---|---|
-| Gateway Services · Routes | `poc`(채팅) · `ocr` · `agent-a`·`agent-b` (+ 모니터링 `grafana`, 임베딩이 있으면 파드 안 전용 `ai-embed`) |
+| Gateway Services · Routes | `poc`(채팅) · `ocr` · `agent-a`·`agent-b`(일반 HTTP 에이전트) · `agent-c`(A2A 에이전트) (+ 모니터링 `grafana`, 임베딩이 있으면 파드 안 전용 `ai-embed`) |
+| Routes → `agent-c` → Plugins | AI A2A Proxy(카드 주소를 Kong 주소로 · A2A 호출 기록) · 허용 목록(`acl` — agent-a · agent-b) · 긴급 차단 |
 | Routes → `poc` → Plugins | 요구사항 플러그인 전부와 켜짐/꺼짐 — **여기서 켜고 끔**. 켜고 끈 것은 다음 설정 적용 때 설정 파일 `FEATURE_…` 에 적힘 |
 | Routes → `poc` → AI Proxy Advanced | LLM 대상 — 기본 묶음(1순위·장애 대체) · 모델 이름마다 별칭(`model_alias`) 대상 · `mock-llm` 묶음 |
 | Plugins | 전체 — 전역(로그·추적 ID·지표·채팅 전처리) · 긴급 차단(`kill-switch--…`, 켜 두면 설정을 적용해도 그대로) |
-| Consumers · Consumer Groups | 부서 계정·키·그룹 (2-1·2-2) |
+| Consumers · Consumer Groups | 부서 계정·키·그룹 (2-1·2-2) · 에이전트 계정 `agent-a`·`agent-b`·`agent-c`(에이전트마다 호출 키) |
 
 Manager 에서 숫자·패턴 같은 **값**을 바꾸면 다음 설정 적용 때 설정 파일 값으로 돌아갑니다(적용 화면이 목록을 보여 주고 바꾸기 전
 상태를 `backup/` 에 남김). 계속 쓸 값은 설정 파일에 옮기세요 — README 「Kong Manager 와 설정 파일 같이 쓰기」.

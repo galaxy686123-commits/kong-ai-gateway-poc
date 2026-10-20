@@ -109,7 +109,9 @@ start_py() {  # 이름 pid파일 포트 앱 [환경변수...]
 pii_env=(LLM_ENABLED="${PII_LLM_ENABLED:-false}" LLM_URL="${PII_LLM_URL:-}" LLM_MODEL="${PII_LLM_MODEL:-}")
 [ -n "${PII_HARMFUL_WORDS:-}" ] && pii_env+=(HARMFUL_WORDS="$PII_HARMFUL_WORDS")
 start_py "PII 가드" "$RUN_DIR/pii.pid" "$PII_PORT" "$PII_APP" "${pii_env[@]}"
-start_py "모의 서버" "$RUN_DIR/mock.pid" "$MOCK_PORT" "$MOCK_APP"
+# 모의 에이전트가 다른 에이전트를 부를 때 — Kong 주소와 에이전트마다의 호출 키 (lib.sh 의 agent_keys · 없으면 만들어 설정 파일에 적음)
+agent_keys
+start_py "모의 서버" "$RUN_DIR/mock.pid" "$MOCK_PORT" "$MOCK_APP" MOCK_KONG_URL="http://127.0.0.1:$PROXY_PORT" MOCK_AGENT_KEYS="$(mock_agent_keys)"
 
 say "5/6 Kong Gateway"
 if kong_up; then note "이미 실행 중"

@@ -501,8 +501,24 @@ switch_value() {  # switch_value <이름> → on/off (설정 파일 값, 없으�
   echo off
 }
 # ── 긴급 차단 스위치(instance_name kill-switch--<이름>) — 켜고 끄기는 Kong Manager 몫. 적용해도 지금 상태 그대로 둔다
-KILL_SWITCHES="poc team-a-app team-b-app ocr agent-a agent-b"
+KILL_SWITCHES="poc team-a-app team-b-app ocr agent-a agent-b agent-c"
 kill_var() { local n; n=$(printf '%s' "$1" | tr 'a-z-' 'A-Z_'); echo "DECK_KILL_$n"; }
+
+# ── 에이전트 호출 키 — 에이전트마다 계정 하나(agent-a · agent-b · agent-c, 40-ocr-agents.yaml). 에이전트가 다른 에이전트를 Kong 으로 부를 때 쓴다
+#    없으면 만들어 설정 파일에 적는다 (start.sh · apply-config.sh). 시험용 모의 에이전트도 이 키로 다른 에이전트를 부른다 (start.sh 가 넘김)
+AGENT_NAMES="a b c"
+agent_keys() {
+  local n v k
+  for n in $AGENT_NAMES; do
+    v="DECK_AGENT_${n^^}_KEY"
+    [ -n "${!v:-}" ] && continue
+    k=$(python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(24)))')
+    env_set "$v" "$k" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
+    printf -v "$v" '%s' "$k"
+    note "에이전트 $n 의 호출 키를 만들어 설정 파일에 적었습니다 ($v · $ENV_FILE)"
+  done
+}
+mock_agent_keys() { local n v o=""; for n in $AGENT_NAMES; do v="DECK_AGENT_${n^^}_KEY"; o="$o $n=${!v:-}"; done; echo "${o# }"; }
 
 # ── 빌드 없이 코드 갱신 — 개발 파드의 bash remote.sh update 가 저장소를 유지 폴더 code/ 에 넣고, 새 환경의 run.sh 가 그 코드로 돈다
 code_info() {  # code_info <코드 폴더> — 그 코드의 출처 한 줄 (remote.sh update 가 적은 .code-info)
@@ -589,6 +605,7 @@ deck_env() {
   : "${DECK_DLP_PATTERN:=(?i)(?:대외비|기밀|사내\s*한정|confidential)}"
   : "${DECK_BLOCK_MESSAGE:=보안 정책에 따라 표시할 수 없습니다.}"
   : "${DECK_OCR_URL:=$DECK_MOCK_URL/ocr}" "${DECK_AGENT_A_URL:=$DECK_MOCK_URL/agents/a}" "${DECK_AGENT_B_URL:=$DECK_MOCK_URL/agents/b}"
+  : "${DECK_AGENT_C_URL:=$DECK_MOCK_URL/agents/c}" "${DECK_A2A_LOG_PAYLOADS:=false}"
   : "${DECK_AZURE_API_VERSION:=2024-06-01}" "${DECK_GCP_LOCATION:=asia-northeast3}" "${DECK_EMBED_DIMS:=1024}"
   : "${DECK_CHAT_MODEL:=}" "${DECK_EXT_MODEL:=}"
   # /poc 에서 요청의 model 로 고를 수 있는 이름(쉼표로) — 실제 주소를 넣은 LLM · 클라우드 · 시험용 mock-llm
@@ -664,6 +681,10 @@ kong_env() {
   export KONG_ADMIN_GUI_AUTH=basic-auth
   export KONG_ADMIN_GUI_SESSION_CONF="{\"secret\":\"$KONG_SESSION_SECRET\",\"cookie_secure\":$secure}"
   export KONG_PROXY_LISTEN="0.0.0.0:$PROXY_PORT"
+  # 앞단(인그레스 · 로드밸런서)이 붙이는 X-Forwarded-* 를 믿을 주소 대역 — 비우면 믿지 않음(기본).
+  #   A2A Agent Card 속 주소는 Kong 이 바꿔 주는데, 앞단 뒤에서 바깥 주소(https://<외부 주소>/agents/c)로 나오려면 앞단을 믿어야 한다
+  #   (믿지 않으면 요청 Host + Kong 포트: http://<외부 호스트>:8000/…). 바꾸면 다시 시작해야 반영 — kong reload 는 이전 값을 그대로 둔다
+  if [ -n "${TRUSTED_IPS:-}" ]; then export KONG_TRUSTED_IPS="$TRUSTED_IPS"; else unset KONG_TRUSTED_IPS; fi
   # 이 번들 전용 플러그인 — 4-1 개인정보 마스킹(pii-masking) · 4-5 답변 속 내부 정보 가림(response-masking)
   #   다른 플러그인처럼 Kong Manager 에서 켜고 끌 수 있게 Kong 플러그인으로 만들었다 (addons/kong-plugins)
   export KONG_PLUGINS="bundled,pii-masking,response-masking"

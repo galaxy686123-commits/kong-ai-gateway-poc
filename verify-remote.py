@@ -2,7 +2,7 @@
 """verify-remote.py — 파드 밖(내 PC 등)에서 플랫폼이 연 외부 주소로 Kong AI Gateway PoC 를 점검한다.
 
   python verify-remote.py --url https://<8000 외부 주소> --key <team-a 키>
-         [--key-b <team-b 키>] [--admin-url https://<8001 외부 주소> --admin-token <관리자 비밀번호>]
+         [--key-b <team-b 키>] [--agent-key <에이전트 A 키>] [--admin-url https://<8001 외부 주소> --admin-token <관리자 비밀번호>]
          [--full] [--insecure]
 
   --full      70초 장기 연결 · 60MB 상한 초과 · 긴급 차단 켜고 끄기까지 실제로 해 본다 (약 2분)
@@ -29,12 +29,13 @@ p = argparse.ArgumentParser(description="Kong AI Gateway PoC 외부 점검")
 p.add_argument("--url", required=True, help="게이트웨이(8000) 외부 주소, 예: https://gw-xxxx.example.com")
 p.add_argument("--key", required=True, help="team-a 사용자 키 (파드에서 bash set-env.sh --get DECK_CLIENT_KEY)")
 p.add_argument("--key-b", help="team-b 사용자 키 (bash set-env.sh --get DECK_CLIENT_KEY_B) — 2-2 를 양쪽에서 확인")
+p.add_argument("--agent-key", help="에이전트 A 키 (bash set-env.sh --get DECK_AGENT_A_KEY) — 에이전트 간 호출 통제 · A2A Agent Card 주소")
 p.add_argument("--admin-url", help="Admin API(8001) 외부 주소 — 3-3 지표·3-4 긴급 차단 확인")
 p.add_argument("--admin-token", help="Admin API 토큰 (bash set-env.sh --get KONG_ADMIN_PASSWORD)")
 p.add_argument("--full", action="store_true", help="70초 장기 연결·상한 초과·긴급 차단까지")
 p.add_argument("--insecure", action="store_true", help="TLS 인증서 검증 안 함")
 a = p.parse_args()
-for k in ("key", "key_b", "admin_token"):   # 복사하다 붙은 공백·줄바꿈 제거
+for k in ("key", "key_b", "agent_key", "admin_token"):   # 복사하다 붙은 공백·줄바꿈 제거
     if getattr(a, k):
         setattr(a, k, getattr(a, k).strip())
 
@@ -244,6 +245,21 @@ if a.key_b:
     line += " / team-b 키: agent-a %s · agent-b %s" % (ba, bb)
     good = good and (ba, bb) == (403, 200)
 (ok if good else bad)("2-2 Agent 접근 통제 — " + line)
+if a.agent_key:
+    ab, ac = call("/agents/b", key=a.agent_key).code, call("/agents/c", key=a.agent_key).code
+    (ok if (ab, ac) == (403, 200) else bad)("2-2 에이전트 간 호출 통제 — 에이전트 A 키: agent-b %s · agent-c %s (403·200 이어야 함)" % (ab, ac))
+    # A2A Agent Card — 밖에서 받은 카드의 주소가 이 외부 주소여야 A2A 클라이언트가 다음 호출도 Kong 으로 보낸다
+    r = call("/agents/c/.well-known/agent-card.json", key=a.agent_key)
+    cu = (r.json() or {}).get("url", "") if isinstance(r.json(), dict) else ""
+    if r.code == 200 and cu.startswith(URL + "/"):
+        ok("1-1 A2A Agent Card — 밖에서 받은 카드의 주소가 외부 주소로 바뀜 (%s)" % cu)
+    elif r.code == 200:
+        warn("1-1 A2A Agent Card — 카드 주소가 %s (외부 주소 %s 가 아님) — 앞단(인그레스)이 넘기는 X-Forwarded-* 를 Kong 이 믿지 않음. "
+             "파드에서 bash set-env.sh TRUSTED_IPS <앞단 주소 대역> 뒤 다시 시작 (빌드한 새 환경이면 bash remote.sh restart)" % (cu or "없음", URL))
+    else:
+        bad("1-1 A2A Agent Card — HTTP %s %s" % (r.code, front(r)))
+else:
+    note("2-2 에이전트 간 호출 통제 · A2A Agent Card 주소 — --agent-key <에이전트 A 키> 를 주면 확인")
 lim = " · ".join("%s %s" % (n, {True: "켜짐", False: "꺼짐"}.get(ON.get(p), "?"))
                  for n, p in (("허용 그룹", "acl"), ("호출 수", "rate-limiting"), ("토큰·비용", "ai-rate-limiting-advanced")))
 note("2-2·2-3·2-4 /poc 의 허용 그룹·한도 (%s) — 동작 시험은 파드의 bash verify.sh 가 잠깐 낮춰서 확인 (외부 경로와 관계없음)" % lim)

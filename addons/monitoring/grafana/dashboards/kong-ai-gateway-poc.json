@@ -1676,6 +1676,295 @@
           "legendFormat": "임베딩 생성"
         }
       ]
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "에이전트 — 누가 어느 에이전트를 불렀나 (요청 기록 기준)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "panels": []
+    },
+    {
+      "id": 28,
+      "type": "table",
+      "title": "에이전트 호출 — 호출 계정 × 대상 에이전트 (고른 기간)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
+      "description": "에이전트 경로(agent-…)마다 누가 불렀고 몇 번 허용 · 막혔는지. 에이전트끼리 부를 때는 에이전트마다 받은 키(계정 agent-a · agent-b · agent-c)로 부르므로 「에이전트 → 에이전트」 조합이 그대로 보입니다. 막힘 = 키 없음 · 허용 목록 밖(401 · 403), 오류 · 긴급 차단 = 5xx",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "막힘"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "허용"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "오류 · 긴급 차단"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "마지막 호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm:ss"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 계정"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "대상 에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT coalesce(consumer, '(키 없음)') AS \"호출 계정\", route AS \"대상 에이전트\",\n  count(*) FILTER (WHERE status < 400) AS \"허용\",\n  count(*) FILTER (WHERE status >= 400 AND status < 500) AS \"막힘\",\n  count(*) FILTER (WHERE status >= 500) AS \"오류 · 긴급 차단\",\n  coalesce(string_agg(DISTINCT a2a_method, ' · '), '') AS \"A2A 메서드\",\n  max(ts) AS \"마지막 호출\"\nFROM requests WHERE $__timeFilter(ts) AND route LIKE 'agent-%'\nGROUP BY 1, 2 ORDER BY 1, 2"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "table",
+      "title": "A2A 작업 — 최근 20건 (AI A2A Proxy 를 붙인 에이전트 경로)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      },
+      "description": "AI A2A Proxy 가 요청 로그에 남긴 A2A 호출 — 메서드 · 작업 상태 · 작업 ID(앞 8자리). 접수(message/send, working) 뒤 조회(tasks/get, completed)처럼 같은 작업 ID 로 이어집니다",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "시각"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm:ss"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "작업 상태"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "지연 ms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 계정"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "메서드"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "시각",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT ts AS \"시각\", coalesce(consumer, '-') AS \"호출 계정\", route AS \"에이전트\", a2a_method AS \"메서드\",\n  coalesce(a2a_task_state, '-') AS \"작업 상태\", coalesce(left(a2a_task_id, 8), '-') AS \"작업 ID\", latency_ms AS \"지연 ms\"\nFROM requests WHERE $__timeFilter(ts) AND a2a_method IS NOT NULL\nORDER BY ts DESC LIMIT 20"
+        }
+      ]
     }
   ]
 }

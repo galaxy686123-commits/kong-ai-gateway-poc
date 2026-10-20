@@ -107,16 +107,16 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 | ID | 요구사항 | Kong 구현 | 설정 파일 | 점검 (`verify.sh`) |
 |---|---|---|---|---|
-| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` — 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) | 00 · 10 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 |
+| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` — 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) · AI 에이전트 · OCR 도 같은 게이트웨이 뒤에(Service + Route, A2A 에이전트는 `ai-a2a-proxy`) | 00 · 10 · 40 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 · A2A 카드 주소 · 호출 기록 |
 | 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 10 | `/poc` `model=mock-llm` — LLM 직접 호출과 10회 비교 |
-| 1-3 | OCR 10MB+ · Agent 장기 연결 | 업로드 상한 50MB(`request-size-limiting`) · 응답 대기 600초 | 40 | `/ocr` 12MB · `/agents/a` 70초 |
+| 1-3 | OCR 10MB+ · Agent 장기 연결 | 업로드 상한 50MB(`request-size-limiting`) · 응답 대기 600초 · 비동기는 에이전트의 접수 · 조회 API 를 중계 | 40 | `/ocr` 12MB · `/agents/a` 70초 · A2A 접수(working) → 조회(completed) |
 | 1-4 | 장애 시 대체 모델 (SD-04-17) | 우선순위 분산 + 실패 시 다음 모델 (`ai-proxy-advanced` priority·failover) | 10 · LLM 대상 | `mock-llm` + 헤더 `X-Mock-Down` 으로 주 모델 장애 |
 | 2-1 | SSO · 부서별 API 키 (SD-01-3) | 부서별 사용자·키(`key-auth`) · 사내 IdP 토큰(`openid-connect`) | 00 · 10 · 50 | 키 없음·틀린 키 401 · 부서 키 200 (SSO 를 넣었으면 SSO 로 바꿔 토큰 없이 401) |
-| 2-2 | 키별 접근 통제 403 (PD-05-31) | 부서 그룹별 허용(`acl`) — `/poc` 와 Agent | 00 · 10 · 40 | `/poc` 를 team-a 만 허용해 team-b 403 · team-a 키로 agent-b 403 |
+| 2-2 | 키별 접근 통제 403 (PD-05-31) | 부서 그룹별 허용(`acl`) — `/poc` 와 Agent · 에이전트마다 호출 키(에이전트 간 호출) | 00 · 10 · 40 | `/poc` 를 team-a 만 허용해 team-b 403 · team-a 키로 agent-b 403 · 에이전트 A 키로 B 403 · C 200 |
 | 2-3 | 호출 수 한도 429 (RL-08-81) | 사용자별 분당·일일 호출 수(`rate-limiting`) | 10 | 분당 3회로 잠깐 낮춰 429 |
 | 2-4 | 토큰·비용 한도 429 | 사용자별 분당 토큰·예상 비용(`ai-rate-limiting-advanced` — `total_tokens`·`cost`) | 10 | 분당 40토큰 · 예상 비용 0.1 로 잠깐 낮춰 429 |
 | 3-1 | 감사 로그 (MN-02-76) | 요청마다 한 줄(`file-log`) + 중앙 저장소 전송(`http-log`) · 관리 작업 이력(DB) | 00 · 61 | 추적 ID 로 기록 찾기 |
-| 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID |
+| 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID · 사용자 → 에이전트 A → B · C 가 한 ID 로 |
 | 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
 | 3-4 | Kill-Switch (MN-01-73) | 경로·계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단, 적용해도 그대로 | 00 · 10 · 40 | `kill-switch--poc` 를 켜서 503 · 끄면 200 |
 | 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking` — 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 받은 질문 확인 |
@@ -227,10 +227,31 @@ bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경�
 
 빼려면 그 LLM 의 `DECK_LLM<n>_URL` 을 비우고(`bash set-env.sh DECK_LLM3_URL ''`) 적용합니다. 모델 이름이 비어 있으면 적용이 멈추고 알려 줍니다.
 
-**경로 수**: 기본 4개 (`/poc` · `/ocr` · Agent 2). 임베딩 모델을 넣으면 `/ai/embed`(파드 안 전용), 모니터링을 켜면 `/grafana` 가
+**경로 수**: 기본 5개 (`/poc` · `/ocr` · Agent 3). 임베딩 모델을 넣으면 `/ai/embed`(파드 안 전용), 모니터링을 켜면 `/grafana` 가
 더해집니다. `bash status.sh` 로 목록을 봅니다.
 
 ---
+
+## AI 에이전트 — 일반 HTTP · A2A · 에이전트끼리
+
+에이전트 하나 = Service + Route 입니다(`conf/40-ocr-agents.yaml`). 주소(`DECK_AGENT_A_URL` · `_B_URL` · `_C_URL`)를 비워 두면 모의 에이전트가 답합니다.
+
+| 경로 | 에이전트 | 붙은 것 | 부를 수 있는 계정 (`acl`) |
+|---|---|---|---|
+| `/agents/a` | agent-a · 일반 HTTP | 키 인증 · 허용 목록 · 긴급 차단 | team-a |
+| `/agents/b` | agent-b · 일반 HTTP | 키 인증 · 허용 목록 · 긴급 차단 | team-b · agent-c |
+| `/agents/c` | agent-c · **A2A** | 키 인증 · 허용 목록 · 긴급 차단 + **AI A2A Proxy** | agent-a · agent-b |
+
+- **에이전트마다 호출 키** — 계정 `agent-a` · `agent-b` · `agent-c`(키 `DECK_AGENT_A_KEY` · `_B_KEY` · `_C_KEY`, 비어 있으면 기동 · 적용할 때 만들어 설정 파일에 적음).
+  에이전트가 다른 에이전트를 부를 때 이 키로 Kong 을 거친다. 대상 경로의 허용 목록에 없는 조합만 403 — 지금 설정으로는 **A → B 만** 막히고 A → C · C → B 는 된다.
+  에이전트 주소로 바로 부르면 Kong 이 보지 못해 통제되지 않는다 — 에이전트끼리도 Kong 주소를 쓰는 것이 전제.
+- **AI A2A Proxy** — 요청을 바꾸지 않고 관찰만 한다. Agent Card(`/.well-known/agent-card.json`) 속 주소를 Kong 주소로 바꿔 돌려주고(클라이언트가 카드를 따라 Kong 으로 옴),
+  A2A 호출마다 메서드 · 작업 ID · 작업 상태 · 지연을 요청 로그(`ai.a2a.rpc`)와 지표(`kong_ai_a2a_requests_total` · `kong_ai_a2a_task_states_total` 등)에 남긴다.
+  메시지 본문까지는 `DECK_A2A_LOG_PAYLOADS=true`. 앞단(인그레스) 뒤에서 카드 주소가 바깥 주소로 나오려면 `TRUSTED_IPS` 에 앞단 주소 대역.
+- **추적** — 에이전트가 받은 `X-Correlation-ID` 를 다음 호출에 붙이면 사용자 → A → B · C 가 한 ID 로 이어진다. 모의 에이전트는 주소 뒤 `?call=b,c` 면 자기 키로 B · C 에 A2A 작업을 맡긴다.
+- **보는 곳** — Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄(호출 계정 × 대상 에이전트 · 최근 A2A 작업), 「요청 기록」의 경로 · A2A · 추적 ID 칸(추적 ID 를 누르면 이어진 호출만).
+
+시연 명령은 VERIFY.md — 1-1 「AI 에이전트 등록」 · 1-3 비동기 · 2-2 「에이전트끼리」 · 3-2 「여러 에이전트를 거치는 호출」.
 
 ## 팀 워크스페이스 — 팀마다 Kong Manager 권한 나누기
 
@@ -254,7 +275,7 @@ bash workspace-copy.sh --roles default        # default 를 한 팀이 쓸 때 �
 - **Manager 계정**: Teams → Invite Admin → 워크스페이스 · 역할(`workspace-admin`) → 메일 서버가 없으니 그 계정의 **Generate Registration Link** 를 전달(3일 유효).
   계정 이름 · 이메일은 워크스페이스가 달라도 겹치면 안 된다. 팀 계정에는 default 의 `admin` · `read-only` · `super-admin` 을 주지 않는다(모든 워크스페이스에 걸림).
 - **겹치면 안 되는 것**: 경로 — 다른 워크스페이스 경로와 같거나 그 아래면 409, 앞부분만 겹치는 짧은 경로는 만들어지니 팀마다 접두어를 정한다.
-  번들 경로(`/poc` `/ocr` `/agents/a` `/agents/b` `/ai/embed` `/grafana`)는 팀이 쓰지 않는다 — 먼저 쓰면 적용이 409 로 멈춘다.
+  번들 경로(`/poc` `/ocr` `/agents/a` `/agents/b` `/agents/c` `/ai/embed` `/grafana`)는 팀이 쓰지 않는다 — 먼저 쓰면 적용이 409 로 멈춘다.
 - **Manager 에서 경로를 새로 만들 때** 화면의 Basic 은 프로토콜이 https 로 고정 — 이 번들은 Kong 을 http 로 받으므로 426 이 난다. Advanced 에서 `http,https`.
 - 팀 Grafana(그 워크스페이스 데이터만) 는 「모니터링」의 `GRAFANA_TEAMS`.
 
@@ -306,7 +327,8 @@ r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "c
 | 두 번째 LLM (OpenAI 호환) — 기본 대상의 장애 대체 · 요청의 `model` 로 선택 | `DECK_EXT_URL` · `DECK_EXT_MODEL` · `EXT_AUTH_HEADER` |
 | 세 번째부터 LLM (OpenAI 호환) — 요청의 `model` 로 선택 | `DECK_LLM<n>_URL` · `DECK_LLM<n>_MODEL` · `LLM<n>_AUTH_HEADER` (n = 3, 4, …) |
 | Azure OpenAI · GCP Vertex(Gemini) · AWS Bedrock | `DECK_AZURE_*`·`AZURE_API_KEY` · `DECK_GCP_*`·`GCP_SERVICE_ACCOUNT_JSON` · `DECK_AWS_*`·`AWS_*` |
-| OCR · Agent | `DECK_OCR_URL` · `DECK_AGENT_A_URL` · `DECK_AGENT_B_URL` (비우면 모의 서버) |
+| OCR · Agent | `DECK_OCR_URL` · `DECK_AGENT_A_URL` · `DECK_AGENT_B_URL` · `DECK_AGENT_C_URL`(A2A) (비우면 모의 서버) · `DECK_A2A_LOG_PAYLOADS` |
+| 앞단(인그레스) 주소 대역 — A2A 카드 주소를 바깥 주소로 | `TRUSTED_IPS` (바꾸면 다시 시작) |
 | 사내 SSO (OIDC) | `DECK_OIDC_ISSUER` · `DECK_OIDC_CLIENT_ID` · `OIDC_CLIENT_SECRET` → `/poc` 에 SSO 플러그인 (`FEATURE_SSO` 로 켬) |
 | 중앙 로그 · 분산 추적 | `DECK_LOG_HTTP_URL` · `DECK_OTEL_ENDPOINT` |
 | 임베딩 (의미 기반 가드·시맨틱 캐시) | `DECK_EMBED_URL` · `DECK_EMBED_MODEL` · `DECK_EMBED_DIMS` · `EMBED_AUTH_HEADER` |
@@ -509,9 +531,9 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 | 대시보드 | 내용 |
 |---|---|
-| Kong AI Gateway PoC (첫 화면) | 고른 기간의 요청 · LLM 요청 · 토큰 · 차단 비율 · 게이트웨이 오버헤드(전체 · 정상 요청만) · 라이선스 남은 날, 모델 · 사용자별 요청 수와 토큰, 사용자별 토큰 한도의 남은 양(2-4 토큰 한도를 켰을 때만), 응답 결과(통과 · 정책 차단 · 오류), 사용자별 예상 비용, 경로별 요청, 지연(Kong 자체 · 답변 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시. 막대를 누르면 그 사용자 · 모델의 요청 기록 |
+| Kong AI Gateway PoC (첫 화면) | 고른 기간의 요청 · LLM 요청 · 토큰 · 차단 비율 · 게이트웨이 오버헤드(전체 · 정상 요청만) · 라이선스 남은 날, 모델 · 사용자별 요청 수와 토큰, 사용자별 토큰 한도의 남은 양(2-4 토큰 한도를 켰을 때만), 응답 결과(통과 · 정책 차단 · 오류), 사용자별 예상 비용, 경로별 요청, 지연(Kong 자체 · 답변 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 에이전트(호출 계정 × 대상 에이전트 · 최근 A2A 작업). 막대를 누르면 그 사용자 · 모델의 요청 기록 |
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
-| 요청 기록 — 질문 · 답변 | 요청 한 건이 한 줄 — 시각 · 사용자 · 모델 · 상태 · 토큰 · 지연 · 질문 · 답변. 질문이나 답변을 누르면 아래에 전문. 사용자 · 모델 · 상태 · 글자로 고름 |
+| 요청 기록 — 질문 · 답변 | 요청 한 건이 한 줄 — 시각 · 사용자 · 경로 · 모델 · 상태 · 차단 사유 · A2A(메서드 · 작업 상태) · 토큰 · 지연 · 질문 · 답변 · 추적 ID. 질문이나 답변을 누르면 아래에 전문, 추적 ID 를 누르면 같은 ID 로 이어진 호출만. 사용자 · 모델 · 경로 · 상태 · 글자(추적 ID 포함)로 고름 |
 
 - Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
 - Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`).
@@ -595,6 +617,8 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 | 의미 기반 답변 가드가 막으면 400 `bad response`(공식 문서는 403) · 켜 두면 스트리밍 요청에도 한 번에 답함 | 전역 `block-message` 가 400 `bad response` 를 표준 문구로 바꿈 |
 | decK 는 새것을 먼저 만들고 옛것을 지움 → 이름 있는 플러그인의 붙는 곳(서비스 ↔ 경로)을 바꾸면 409(이름 중복) | `apply-config.sh` 가 그런 플러그인만 먼저 지움 |
 | curl 로 큰 파일을 보내면 `Expect: 100-continue` 때문에 상한 초과가 413 이 아니라 417(화면엔 400)로 보임 | 정상 거절. 확인할 때는 `-H 'Expect:'` |
+| AI A2A Proxy 는 Agent Card 속 주소를 **요청의 Host + Kong 포트**(예: `http://<호스트>:8000/agents/c`)로 바꿈. 앞단의 `X-Forwarded-*` 는 `trusted_ips` 에 든 주소에서 온 것만 씀 | 설정 파일 `TRUSTED_IPS` → `KONG_TRUSTED_IPS` (기본 비움). 넣으면 `https://<외부 주소>/agents/c` |
+| `kong reload` 는 지금 떠 있는 설정(`.kong_env`)을 바탕으로 읽어, 환경변수를 지운 설정(예: `trusted_ips`)은 그대로 남음 | `TRUSTED_IPS` 를 바꾸면 다시 시작(`bash stop.sh && bash start.sh`) |
 
 ---
 

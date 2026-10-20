@@ -36,6 +36,7 @@ if [ -z "${DECK_CLIENT_KEY_B:-}" ]; then
   env_set DECK_CLIENT_KEY_B "$DECK_CLIENT_KEY_B" "$ENV_FILE" || die "설정 파일에 쓰지 못했습니다: $ENV_FILE"
   note "team-b 사용자 키를 만들어 설정 파일에 적었습니다 (DECK_CLIENT_KEY_B · $ENV_FILE)"
 fi
+agent_keys   # 에이전트마다 호출 키 (agent-a · agent-b · agent-c — 없으면 만들어 설정 파일에 적음)
 
 # ── Kong Manager 에서 바꾼 것 ─────────────────────────────────────────
 #  기준은 지난 적용 직후의 Kong 상태(데이터 폴더 state/applied.json, 600). 지금 상태와 비교해
@@ -164,7 +165,7 @@ PY
 files+=("$gen")
 row O "LLM 대상" "기본: $(if llm_connected DECK_CHAT_URL; then echo "사내 LLM $DECK_CHAT_MODEL$( [ "${FALLBACK:-auto}" != none ] && [ -n "${DECK_EXT_URL:-}" ] && echo " → 장애 시 $DECK_EXT_MODEL")"; else echo "모의 LLM (LLM 미연결)"; fi)"
 row O "모델 선택" "요청의 model 로 고름 — ${DECK_SELECT_MODELS//,/ · }"
-row O 40-ocr-agents "OCR·Agent (주소: ${DECK_OCR_URL%/ocr}…)"
+row O 40-ocr-agents "OCR · Agent A·B(HTTP) · Agent C(A2A) · 에이전트 계정 3개 (주소: ${DECK_OCR_URL%/ocr}…)"
 files+=(conf/40-ocr-agents.yaml)
 opt 50-sso      "${DECK_OIDC_ISSUER:-}"   "/poc 에 사내 SSO(OIDC) — 스위치 FEATURE_SSO" "DECK_OIDC_ISSUER 없음"
 opt 60-otel     "${DECK_OTEL_ENDPOINT:-}" "분산 추적 → ${DECK_OTEL_ENDPOINT:-}"   "DECK_OTEL_ENDPOINT 없음"

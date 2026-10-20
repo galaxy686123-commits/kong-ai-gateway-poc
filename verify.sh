@@ -290,6 +290,33 @@ PYT
       ok "1-3 장기 연결 — OCR·Agent 응답을 ${rt}초까지 기다림 (70초 실측은 bash verify.sh --full)"
     fi
   fi
+  # 1-1 에이전트 등록 — 에이전트 하나 = Service + Route. A2A 에이전트(agent-c)는 경로에 AI A2A Proxy 를 더한다:
+  #     Agent Card 속 주소가 Kong 주소로 바뀌어 돌아오고(다음 호출도 Kong 으로), A2A 호출(메서드 · 작업 ID · 상태)이 요청 로그에 남는다
+  if has agent-c; then
+    KAG=(-H "apikey: ${DECK_AGENT_A_KEY:-none}")
+    a2a_send() {  # a2a_send <추적 ID> <params JSON> [주소 뒤] → 응답 result 의 「작업 ID 상태」
+      curl -s -m 30 "${KAG[@]}" -H 'Content-Type: application/json' -H "X-Correlation-ID: $1" "$P/agents/c${3:-}" \
+        -d "{\"jsonrpc\":\"2.0\",\"id\":\"verify\",\"method\":\"${4:-message/send}\",\"params\":$2}" \
+        | python3 -c 'import json,sys; r = json.load(sys.stdin).get("result") or {}; print(r.get("id") or "-", (r.get("status") or {}).get("state") or "-")' 2>/dev/null
+    }
+    MSG='{"message":{"kind":"message","role":"user","messageId":"verify","parts":[{"kind":"text","text":"verify"}]}'
+    cu=$(curl -s -m 30 "${KAG[@]}" "$P/agents/c/.well-known/agent-card.json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("url",""))' 2>/dev/null)
+    va="verify-a2a-$(date +%s)"
+    read -r _ st <<<"$(a2a_send "$va" "$MSG}")"; sleep 1
+    read -r lm ls <<<"$(grep -F "$va" "$DECK_AUDIT_LOG" 2>/dev/null | tail -1 | python3 -c 'import json,sys
+r = (((json.loads(sys.stdin.read()).get("ai") or {}).get("a2a") or {}).get("rpc") or [{}])[-1]
+print(r.get("method") or "-", r.get("task_state") or "-")' 2>/dev/null)"
+    if [[ "$cu" = "$P"/* ]] && [ "$lm" = message/send ]; then
+      ok "1-1 A2A 에이전트(agent-c) — Agent Card 주소를 Kong 주소로 바꿔 줌 ($cu) · message/send $st · 요청 로그에 A2A 기록 (메서드 $lm · 작업 상태 $ls)"
+    else bad "1-1 A2A 에이전트(agent-c) — 카드 주소 '${cu}' · 호출 ${st:-?} · 요청 로그 A2A 기록 '${lm:-없음}' (Kong 주소 · message/send 여야 함)"; fi
+    # 1-3 비동기 — A2A 는 접수만 하고(blocking=false → working) 결과는 나중에 조회(tasks/get). Kong 은 중계하고 같은 작업 ID 로 기록
+    if [[ "$DECK_AGENT_C_URL" = "$DECK_MOCK_URL"* ]]; then
+      read -r tid s0 <<<"$(a2a_send "$va-async" "$MSG,\"configuration\":{\"blocking\":false}}" "?delay=2")"; sleep 2.5
+      read -r _ s1 <<<"$(a2a_send "$va-async" "{\"id\":\"$tid\"}" "" tasks/get)"
+      [ "$s0" = working ] && [ "$s1" = completed ] && ok "1-3 비동기 (A2A) — 접수 즉시 working · 2초 뒤 조회(tasks/get) completed (작업 ID ${tid:0:8} · 연결을 붙잡지 않음)" \
+        || bad "1-3 비동기 (A2A) — 접수 ${s0:-?} · 조회 ${s1:-?} (working → completed 여야 함)"
+    fi
+  fi
   if [ "$MOCK" = 1 ]; then
     # 주 모델 장애 재현: 헤더 X-Mock-Down 에 모델 이름을 넣으면 모의 LLM 이 그 모델에 503 을 낸다
     read -r c0 _ <<<"$(mreq "장애 대체 시험 — 평소" "${KA[@]}")"; m0=$(hdr X-Kong-LLM-Model)
@@ -312,6 +339,13 @@ PYT
     [ "$a" = 200 ] && [ "$b" = 403 ] && [ "$bb" = 200 ] && ok "2-2 Agent 접근 통제 — team-a 키: agent-a 200 · agent-b 403 / team-b 키: agent-b 200" \
       || bad "2-2 Agent 접근 통제 — team-a→a $a · team-a→b $b · team-b→b $bb (200·403·200 이어야 함)"
   fi
+  if has agent-c; then   # 에이전트끼리 — 에이전트마다 받은 키로 부른다. 대상 경로의 허용 목록에 없는 조합만 403
+    ab=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -H "apikey: ${DECK_AGENT_A_KEY:-none}" "$P/agents/b")
+    ac=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -H "apikey: ${DECK_AGENT_A_KEY:-none}" "$P/agents/c")
+    cb=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -H "apikey: ${DECK_AGENT_C_KEY:-none}" "$P/agents/b")
+    [ "$ab" = 403 ] && [ "$ac" = 200 ] && [ "$cb" = 200 ] && ok "2-2 에이전트 간 호출 통제 — 에이전트 A 키: B 403 · C 200 / 에이전트 C 키: B 200 (A → B 한 조합만 막힘)" \
+      || bad "2-2 에이전트 간 호출 통제 — A→B $ab · A→C $ac · C→B $cb (403·200·200 이어야 함)"
+  fi
 
   # ── ③ 이력·감사 (로그·추적·지표는 전역 플러그인이라 모든 경로에 남는다) ──────
   vid="verify-$(date +%s)"
@@ -322,7 +356,9 @@ PYT
 d = json.loads(sys.stdin.read()); ai = (d.get("ai") or {}).get("proxy") or {}
 print("사용자=%s 모델=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consumer") or {}).get("username"), (ai.get("meta") or {}).get("response_model") or d.get("client_model"),
       d["response"]["status"], d["latencies"]["request"], (ai.get("usage") or {}).get("total_tokens")))' 2>/dev/null)
-    if [ -n "$info" ] && ! grep -qF "$DECK_CLIENT_KEY" "$DECK_AUDIT_LOG"; then ok "3-1 요청 로그 — 추적 ID로 찾음: $info · 사용자 키 원문 없음 ($(wc -l < "$DECK_AUDIT_LOG")건)"
+    nk=$(grep -cF "$DECK_CLIENT_KEY" "$DECK_AUDIT_LOG" 2>/dev/null); nk=${nk:-0}
+    if [ -n "$info" ] && [ "$nk" = 0 ]; then ok "3-1 요청 로그 — 추적 ID로 찾음: $info · 사용자 키 원문 없음 ($(wc -l < "$DECK_AUDIT_LOG")건)"
+    elif [ -n "$info" ]; then bad "3-1 요청 로그 — 추적 ID로 찾음: $info · 그러나 team-a 키 원문이 ${nk}줄에 남아 있음 (주소 뒤 ?apikey= 로 보낸 요청 · 없는 경로로 보낸 요청은 키가 지워지지 않음 — bash logs.sh 로 확인)"
     else bad "3-1 요청 로그 — 추적 ID $vid 로 기록을 찾지 못함 ($DECK_AUDIT_LOG)"; fi
     if has_plugin=$(admin /plugins?size=1000 | grep -c '"name":"http-log"'); [ "$has_plugin" -gt 0 ]; then
       if [[ "$DECK_LOG_HTTP_URL" = "$DECK_MOCK_URL"* ]]; then
@@ -340,6 +376,20 @@ print("사용자=%s 모델=%s 상태=%s 지연=%sms 토큰=%s" % ((d.get("consum
         [ "${tr:-0}" -gt 0 ] && ok "3-2 분산 추적 — 스팬 ${tr}묶음이 추적 수집기(모의)에 도착" || bad "3-2 분산 추적 — 수집기에 도착한 스팬 없음"
       else ok "3-2 분산 추적 — $DECK_OTEL_ENDPOINT 로 전송 중 (시각화는 추적 백엔드에서)"; fi
     else warn "3-2 분산 추적 — 추적 백엔드 미지정 (설정 파일의 DECK_OTEL_ENDPOINT) · 추적 ID 전달만 동작"; fi
+  fi
+  # 3-2 연쇄 추적 — 사용자가 에이전트 A 를 부르고, A 가 자기 키로 Kong 을 거쳐 B · C 에게 맡긴다 (모의 에이전트 ?call=b,c).
+  #     세 호출이 같은 X-Correlation-ID 로 요청 로그에 남고, A → B 는 허용 목록에 없어 403
+  if has agent-c && [[ "$DECK_AGENT_A_URL" = "$DECK_MOCK_URL"* ]]; then
+    curl -s -m 60 -o /dev/null "${KA[@]}" -H "X-Correlation-ID: $vid-chain" "$P/agents/a?call=b,c"; sleep 1
+    read -r chk chs <<<"$(grep -F "$vid-chain" "$DECK_AUDIT_LOG" 2>/dev/null | python3 -c 'import json,sys
+rows = []
+for l in sys.stdin:
+    d = json.loads(l)
+    rows.append("%s→%s %s" % ((d.get("consumer") or {}).get("username"), (d.get("route") or {}).get("name"), d["response"]["status"]))
+rows.sort(key=lambda r: (not r.startswith("team-"), r))
+print("OK" if rows == ["team-a-app→agent-a 200", "agent-a→agent-b 403", "agent-a→agent-c 200"] else "NO", " · ".join(rows) or "-")' 2>/dev/null)"
+    [ "$chk" = OK ] && ok "3-2 연쇄 추적 — 사용자 → 에이전트 A → B · C 가 같은 추적 ID 로 요청 로그에: $chs" \
+      || bad "3-2 연쇄 추적 — '${chs:-기록 없음}' (team-a-app→agent-a 200 · agent-a→agent-b 403 · agent-a→agent-c 200 이어야 함)"
   fi
   mt=$(curl -s -m 10 "http://127.0.0.1:$STATUS_PORT/metrics")
   if grep -q 'consumer="team-a-app"' <<<"$mt" && grep -q '^kong_ai_llm' <<<"$mt"; then

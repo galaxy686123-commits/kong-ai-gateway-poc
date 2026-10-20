@@ -3,6 +3,7 @@
 
 질문 · 답변은 Kong Manager 에서 대상(Target)의 Log payloads 를 켰을 때만 로그에 있다(ai.proxy.payload.request · response).
 스트리밍 답변도 Kong 이 하나로 이어 붙여 남긴다(choices[0].message.content).
+A2A 에이전트 경로(AI A2A Proxy)는 메서드 · 작업 ID · 작업 상태를 남기고(ai.a2a.rpc), log_payloads 를 켰으면 메시지 · 결과물도 질문 · 답변 칸에 넣는다.
 
   python3 reqlog.py          지금까지 쌓인 것을 옮기고 끝
   python3 reqlog.py --loop   10초마다 옮김 · 1시간마다 보관 기간이 지난 행을 지움 (start.sh 가 띄운다)
@@ -29,7 +30,8 @@ SKIP_ROUTES = {"ai-embed"}         # 게이트웨이 안에서만 쓰는 임베�
 COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "model", "provider",
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
         "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for",
-        "error_message", "kong_latency_ms", "ai_window", "ai_limit", "ai_remaining")
+        "error_message", "kong_latency_ms", "ai_window", "ai_limit", "ai_remaining",
+        "correlation_id", "a2a_method", "a2a_task_id", "a2a_task_state")
 
 
 def log(*a):
@@ -110,6 +112,52 @@ def answer_of(body):
     return ""
 
 
+def a2a_parts(parts):
+    return "\n".join(p.get("text", "") for p in parts or [] if isinstance(p, dict) and isinstance(p.get("text"), str))
+
+
+def a2a_question(body):
+    """A2A 요청 본문 → 보낸 메시지 글 (JSON-RPC params.message · REST message)"""
+    try:
+        d = json.loads(body)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(d, dict):
+        return ""
+    m = (d.get("params") or {}).get("message") if isinstance(d.get("params"), dict) else d.get("message")
+    return a2a_parts(m.get("parts")) if isinstance(m, dict) else ""
+
+
+def a2a_answer(body):
+    """A2A 응답 본문 → 결과 글 (작업의 결과물 · 상태 메시지 · 메시지, 스트리밍이면 data: 줄마다). 오류면 [오류]"""
+    if not isinstance(body, str):
+        return ""
+    docs = []
+    for line in body.splitlines() if body.lstrip().startswith("data:") else [body]:
+        line = line[5:] if line.startswith("data:") else line
+        try:
+            docs.append(json.loads(line))
+        except ValueError:
+            continue
+    out = []
+    for d in docs:
+        if not isinstance(d, dict):
+            continue
+        if isinstance(d.get("error"), dict):
+            out.append("[오류] " + str(d["error"].get("message") or d["error"]))
+            continue
+        r = d.get("result") if isinstance(d.get("result"), dict) else d
+        for a in ([r.get("artifact")] if isinstance(r.get("artifact"), dict) else r.get("artifacts") or []):
+            if isinstance(a, dict):
+                out.append(a2a_parts(a.get("parts")))
+        if r.get("kind") == "message":
+            out.append(a2a_parts(r.get("parts")))
+        st = (r.get("status") or {}).get("message") if isinstance(r.get("status"), dict) else None
+        if isinstance(st, dict):
+            out.append(a2a_parts(st.get("parts")))
+    return "\n".join(x for x in out if x)
+
+
 def as_int(v):
     """숫자 칸 — 정수로 (소수는 반올림, 숫자가 아니면 비움)"""
     if isinstance(v, bool) or v is None:
@@ -142,6 +190,14 @@ def row_of(line):
     rq, rs = payload.get("request"), payload.get("response")
     rq = rq if isinstance(rq, str) else (json.dumps(rq, ensure_ascii=False) if rq else None)
     rs = rs if isinstance(rs, str) else (json.dumps(rs, ensure_ascii=False) if rs else None)
+    # A2A 에이전트 경로(AI A2A Proxy) — 호출 한 건에 rpc 한 줄 (메서드 · 작업 ID · 상태, log_payloads 면 본문)
+    a2a = (d.get("ai") or {}).get("a2a") if isinstance(d.get("ai"), dict) else None
+    rpc = a2a.get("rpc") if isinstance(a2a, dict) else None
+    rpc = rpc[-1] if isinstance(rpc, list) and rpc and isinstance(rpc[-1], dict) else {}
+    apl = rpc.get("payload") if isinstance(rpc.get("payload"), dict) else {}
+    aq, aa = apl.get("request"), apl.get("response")
+    aq = aq if isinstance(aq, str) else (json.dumps(aq, ensure_ascii=False) if aq else None)
+    aa = aa if isinstance(aa, str) else (json.dumps(aa, ensure_ascii=False) if aa else None)
     rid = req.get("id") or d.get("correlation_id") or hashlib.sha1(line.encode("utf-8", "replace")).hexdigest()
     lat = d.get("latencies") or {}
     rl = d.get("ai_ratelimit") if isinstance(d.get("ai_ratelimit"), dict) else {}   # 2-4 토큰 한도를 켰을 때만 (post-function block-message)
@@ -162,10 +218,10 @@ def row_of(line):
         "llm_latency_ms": as_int(meta.get("llm_latency")),
         "cache_status": cache.get("cache_status"),
         "client_ip": d.get("client_ip"),
-        "question": keep_indent(question_of(rq)) if rq else None,
-        "answer": keep_indent(answer_of(rs)) if rs else None,
-        "request_body": rq,
-        "response_body": rs,
+        "question": keep_indent(question_of(rq)) if rq else (keep_indent(a2a_question(aq)) or None if aq else None),
+        "answer": keep_indent(answer_of(rs)) if rs else (keep_indent(a2a_answer(aa)) or None if aa else None),
+        "request_body": rq or aq,
+        "response_body": rs or aa,
         "cost": usage.get("cost") if isinstance(usage.get("cost"), (int, float)) and not isinstance(usage.get("cost"), bool) else None,
         "workspace": d.get("workspace_name") or None,   # 팀 워크스페이스(workspace-copy.sh)의 호출도 같은 요청 로그에 쌓인다
         "forwarded_for": forwarded_for(req.get("headers")),
@@ -174,6 +230,10 @@ def row_of(line):
         "ai_window": rl.get("window"),
         "ai_limit": as_int(rl.get("limit")),
         "ai_remaining": as_int(rl.get("remaining")),
+        "correlation_id": d.get("correlation_id") if isinstance(d.get("correlation_id"), str) else None,
+        "a2a_method": rpc.get("method") if isinstance(rpc.get("method"), str) else None,
+        "a2a_task_id": rpc.get("task_id") if isinstance(rpc.get("task_id"), str) else None,
+        "a2a_task_state": rpc.get("task_state") if isinstance(rpc.get("task_state"), str) else None,
     }
 
 
