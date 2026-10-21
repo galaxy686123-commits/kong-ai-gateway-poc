@@ -165,7 +165,8 @@ PY
 files+=("$gen")
 row O "LLM 대상" "기본: $(if llm_connected DECK_CHAT_URL; then echo "사내 LLM $DECK_CHAT_MODEL$( [ "${FALLBACK:-auto}" != none ] && [ -n "${DECK_EXT_URL:-}" ] && echo " → 장애 시 $DECK_EXT_MODEL")"; else echo "모의 LLM (LLM 미연결)"; fi)"
 row O "모델 선택" "요청의 model 로 고름 — ${DECK_SELECT_MODELS//,/ · }"
-row O 40-ocr-agents "OCR · Agent A·B(HTTP) · Agent C(A2A) · 에이전트 계정 3개 (주소: ${DECK_OCR_URL%/ocr}…)"
+hc_desc() { local v="DECK_AGENT_${1^^}_HC_TYPE" w="DECK_AGENT_${1^^}_HC_PATH"; if [ "${!v}" = tcp ]; then echo "$1 TCP"; else echo "$1 ${!w}"; fi; }
+row O 40-ocr-agents "OCR · Agent A·B(HTTP) · Agent C(A2A) · 에이전트 계정 3개 · 에이전트 상태 점검($(hc_desc a) · $(hc_desc b) · $(hc_desc c)) (주소: ${DECK_OCR_URL%/ocr}…)"
 files+=(conf/40-ocr-agents.yaml)
 opt 50-sso      "${DECK_OIDC_ISSUER:-}"   "/poc 에 사내 SSO(OIDC) — 스위치 FEATURE_SSO" "DECK_OIDC_ISSUER 없음"
 opt 60-otel     "${DECK_OTEL_ENDPOINT:-}" "분산 추적 → ${DECK_OTEL_ENDPOINT:-}"   "DECK_OTEL_ENDPOINT 없음"

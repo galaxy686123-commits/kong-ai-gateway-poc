@@ -46,3 +46,12 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "{{ $labels.service }} 오류율 {{ $value | humanizePercentage }}"
+
+      # 에이전트 · 백엔드 장애 — Kong 상태 점검(Upstream)에서 정상인 Target 이 하나도 없다 (그동안 그 Upstream 으로 가는 호출은 Kong 이 바로 503)
+      #   지표 kong_upstream_target_health 는 prometheus 플러그인의 upstream_health_metrics 를 켜야 나온다 (00-base.yaml)
+      - alert: KongUpstreamDown
+        expr: sum by (upstream) (kong_upstream_target_health{state=~"healthy|healthchecks_off"}) == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.upstream }} — 정상인 대상이 없음 (Kong 상태 점검)"

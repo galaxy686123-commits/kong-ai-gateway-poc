@@ -107,7 +107,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 | ID | 요구사항 | Kong 구현 | 설정 파일 | 점검 (`verify.sh`) |
 |---|---|---|---|---|
-| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` — 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) · AI 에이전트 · OCR 도 같은 게이트웨이 뒤에(Service + Route, A2A 에이전트는 `ai-a2a-proxy`) | 00 · 10 · 40 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 · A2A 카드 주소 · 호출 기록 |
+| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` — 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) · AI 에이전트 · OCR 도 같은 게이트웨이 뒤에(Service + Route, A2A 에이전트는 `ai-a2a-proxy`, 에이전트는 Upstream 상태 점검) | 00 · 10 · 40 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 · A2A 카드 주소 · 호출 기록 · 에이전트 상태 점검(모의 장애 → 503 → 복구) |
 | 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 10 | `/poc` `model=mock-llm` — LLM 직접 호출과 10회 비교 |
 | 1-3 | OCR 10MB+ · Agent 장기 연결 | 업로드 상한 50MB(`request-size-limiting`) · 응답 대기 600초 · 비동기는 에이전트의 접수 · 조회 API 를 중계 | 40 | `/ocr` 12MB · `/agents/a` 70초 · A2A 접수(working) → 조회(completed) |
 | 1-4 | 장애 시 대체 모델 (SD-04-17) | 우선순위 분산 + 실패 시 다음 모델 (`ai-proxy-advanced` priority·failover) | 10 · LLM 대상 | `mock-llm` + 헤더 `X-Mock-Down` 으로 주 모델 장애 |
@@ -234,7 +234,7 @@ bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경�
 
 ## AI 에이전트 — 일반 HTTP · A2A · 에이전트끼리
 
-에이전트 하나 = Service + Route 입니다(`conf/40-ocr-agents.yaml`). 주소(`DECK_AGENT_A_URL` · `_B_URL` · `_C_URL`)를 비워 두면 모의 에이전트가 답합니다.
+에이전트 하나 = Upstream(실제 주소 · 상태 점검) + Service + Route 입니다(`conf/40-ocr-agents.yaml`). 주소(`DECK_AGENT_A_URL` · `_B_URL` · `_C_URL`)를 비워 두면 모의 에이전트가 답합니다.
 
 | 경로 | 에이전트 | 붙은 것 | 부를 수 있는 계정 (`acl`) |
 |---|---|---|---|
@@ -248,10 +248,14 @@ bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경�
 - **AI A2A Proxy** — 요청을 바꾸지 않고 관찰만 한다. Agent Card(`/.well-known/agent-card.json`) 속 주소를 Kong 주소로 바꿔 돌려주고(클라이언트가 카드를 따라 Kong 으로 옴),
   A2A 호출마다 메서드 · 작업 ID · 작업 상태 · 지연을 요청 로그(`ai.a2a.rpc`)와 지표(`kong_ai_a2a_requests_total` · `kong_ai_a2a_task_states_total` 등)에 남긴다.
   메시지 본문까지는 `DECK_A2A_LOG_PAYLOADS=true`. 앞단(인그레스) 뒤에서 카드 주소가 바깥 주소로 나오려면 `TRUSTED_IPS` 에 앞단 주소 대역.
+- **상태 점검** — 에이전트마다 Upstream(`agent-a.kong-poc` …)에 실제 주소를 Target 으로 두고, Kong 이 직접 주기적으로 점검한다(능동 점검 — Gateway Service 에는 이 설정이 없고 Upstream 에만 있다).
+  연달아 2번 실패하면 장애로 보고 그 에이전트로 보내지 않는다 — Target 이 하나뿐이면 Kong 이 바로 503. 다시 2번 성공하면 정상. 간격은 `DECK_AGENT_HEALTH_INTERVAL`(기본 5초).
+  점검 방식은 `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_` — 에이전트 서버의 경로(예: `/health`)를 넣으면 그 경로를 GET(200 · 302 정상 · 404 · 429 · 5xx 장애), 비우면 TCP 연결만 본다(모의 에이전트는 `/agents/<x>/health`).
+  없는 경로를 넣으면 멀쩡한 에이전트가 장애로 막히므로 그 경로가 200 을 주는지 먼저 확인한다. 에이전트 서버가 여럿이면 Target 을 늘려 정상인 서버에만 나눠 보낸다.
 - **추적** — 에이전트가 받은 `X-Correlation-ID` 를 다음 호출에 붙이면 사용자 → A → B · C 가 한 ID 로 이어진다. 모의 에이전트는 주소 뒤 `?call=b,c` 면 자기 키로 B · C 에 A2A 작업을 맡긴다.
-- **보는 곳** — Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄(호출 계정 × 대상 에이전트 · 최근 A2A 작업), 「요청 기록」의 경로 · A2A · 추적 ID 칸(추적 ID 를 누르면 이어진 호출만).
+- **보는 곳** — Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄(상태 — 지금 · 시간대별, 호출 계정 × 대상 에이전트 · 최근 A2A 작업), 「요청 기록」의 경로 · A2A · 추적 ID 칸(추적 ID 를 누르면 이어진 호출만).
 
-시연 명령은 VERIFY.md — 1-1 「AI 에이전트 등록」 · 1-3 비동기 · 2-2 「에이전트끼리」 · 3-2 「여러 에이전트를 거치는 호출」.
+시연 명령은 VERIFY.md — 1-1 「AI 에이전트 등록」 · 1-1 「에이전트 상태 점검」 · 1-3 비동기 · 2-2 「에이전트끼리」 · 3-2 「여러 에이전트를 거치는 호출」.
 
 ## 팀 워크스페이스 — 팀마다 Kong Manager 권한 나누기
 
@@ -328,7 +332,9 @@ r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "c
 | 세 번째부터 LLM (OpenAI 호환) — 요청의 `model` 로 선택 | `DECK_LLM<n>_URL` · `DECK_LLM<n>_MODEL` · `LLM<n>_AUTH_HEADER` (n = 3, 4, …) |
 | Azure OpenAI · GCP Vertex(Gemini) · AWS Bedrock | `DECK_AZURE_*`·`AZURE_API_KEY` · `DECK_GCP_*`·`GCP_SERVICE_ACCOUNT_JSON` · `DECK_AWS_*`·`AWS_*` |
 | OCR · Agent | `DECK_OCR_URL` · `DECK_AGENT_A_URL` · `DECK_AGENT_B_URL` · `DECK_AGENT_C_URL`(A2A) (비우면 모의 서버) · `DECK_A2A_LOG_PAYLOADS` |
+| 에이전트 상태 점검 | `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_`(에이전트 서버의 점검 경로 — 비우면 TCP 연결만) · `DECK_AGENT_HEALTH_INTERVAL`(초, 기본 5) |
 | 앞단(인그레스) 주소 대역 — A2A 카드 주소를 바깥 주소로 | `TRUSTED_IPS` (바꾸면 다시 시작) |
+| Kong Manager 로그인 유지 | `MANAGER_IDLE_MINUTES`(아무것도 안 하면 로그아웃까지 분, 기본 15) · `MANAGER_LOGIN_HOURS`(계속 써도 다시 로그인까지 시간, 기본 24) — 바꾸면 다시 시작 |
 | 사내 SSO (OIDC) | `DECK_OIDC_ISSUER` · `DECK_OIDC_CLIENT_ID` · `OIDC_CLIENT_SECRET` → `/poc` 에 SSO 플러그인 (`FEATURE_SSO` 로 켬) |
 | 중앙 로그 · 분산 추적 | `DECK_LOG_HTTP_URL` · `DECK_OTEL_ENDPOINT` |
 | 임베딩 (의미 기반 가드·시맨틱 캐시) | `DECK_EMBED_URL` · `DECK_EMBED_MODEL` · `DECK_EMBED_DIMS` · `EMBED_AUTH_HEADER` |
@@ -619,6 +625,8 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 | curl 로 큰 파일을 보내면 `Expect: 100-continue` 때문에 상한 초과가 413 이 아니라 417(화면엔 400)로 보임 | 정상 거절. 확인할 때는 `-H 'Expect:'` |
 | AI A2A Proxy 는 Agent Card 속 주소를 **요청의 Host + Kong 포트**(예: `http://<호스트>:8000/agents/c`)로 바꿈. 앞단의 `X-Forwarded-*` 는 `trusted_ips` 에 든 주소에서 온 것만 씀 | 설정 파일 `TRUSTED_IPS` → `KONG_TRUSTED_IPS` (기본 비움). 넣으면 `https://<외부 주소>/agents/c` |
 | `kong reload` 는 지금 떠 있는 설정(`.kong_env`)을 바탕으로 읽어, 환경변수를 지운 설정(예: `trusted_ips`)은 그대로 남음 | `TRUSTED_IPS` 를 바꾸면 다시 시작(`bash stop.sh && bash start.sh`) |
+| 능동 상태 점검(주기적으로 대상을 찔러 봄)은 **Upstream 에만** 있고 Gateway Service 에는 점검 설정이 없음. Upstream 기본값은 점검 간격 0(점검 안 함) · `https_verify_certificate: true` · 404 를 장애로 봄 | 에이전트를 Upstream + Target 으로 바꾸고 간격 · 실패 횟수를 넣음. 인증서 검사는 서비스와 같게 끔, 점검 경로는 넣을 때만 HTTP(없으면 TCP) |
+| AI Proxy Advanced 의 대상(LLM)에는 능동 점검 설정이 없음 — 실패한 요청 수로 대상을 잠시 빼는 서킷 브레이커(`balancer.max_fails` · `fail_timeout`, `max_fails` 기본 0)만 | LLM 은 재시도 · 다음 대상으로 넘김(1-4)으로 장애를 넘김. 상태 점검 화면은 에이전트에만 |
 
 ---
 

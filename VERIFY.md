@@ -75,7 +75,7 @@ curl -s -D - -o /dev/null $G/poc "${A[@]}" -d "$(q '안녕')" | grep -iE '^HTTP|
 
 ### 1-1 AI 에이전트 등록 — 일반 HTTP · A2A
 
-에이전트 하나 = Service + Route 입니다. `agent-a` · `agent-b` 는 일반 HTTP 에이전트, `agent-c` 는 A2A 에이전트라 경로에
+에이전트 하나 = Upstream(실제 주소 · 상태 점검) + Service + Route 입니다. `agent-a` · `agent-b` 는 일반 HTTP 에이전트, `agent-c` 는 A2A 에이전트라 경로에
 **AI A2A Proxy** 를 더했습니다 (Kong Manager → Routes → `agent-c` → Plugins). 주소(`DECK_AGENT_*_URL`)를 비워 두면 모의 에이전트가 답합니다.
 
 ```bash
@@ -94,6 +94,34 @@ A2A 클라이언트는 카드를 보고 다음 호출도 Kong 으로 보냅니�
 믿지 않아서입니다. 설정 파일 `TRUSTED_IPS` 에 앞단 주소 대역을 넣고 다시 시작하면(`bash stop.sh && bash start.sh`, 빌드한 새 환경이면
 `bash remote.sh restart`) `https://<외부 주소>/agents/c` 가 됩니다. 대역은 플랫폼 담당자에게 확인합니다 — 모든 주소를 믿게 하면 파드에
 바로 들어온 요청도 주소를 꾸며 보낼 수 있습니다.
+
+### 1-1 에이전트 상태 점검 — Kong 이 에이전트를 직접 점검
+
+에이전트마다 **Upstream**(`agent-a.kong-poc` · `agent-b.kong-poc` · `agent-c.kong-poc`)에 실제 주소를 Target 으로 두고, 서비스는 그 Upstream 을
+가리킵니다. 대상을 주기적으로 점검하는 기능(능동 점검)은 Upstream 에만 있고 Gateway Service 에는 없습니다. Kong 이 5초마다 점검해 연달아
+2번 실패하면 장애로 보고 그 에이전트로 보내지 않습니다(서버가 하나뿐이면 기다리지 않고 바로 503). 다시 2번 성공하면 정상입니다.
+
+```bash
+H=(-H "Kong-Admin-Token: $KONG_ADMIN_PASSWORD")
+for x in a b c; do printf 'agent-%s ' $x; curl -s "${H[@]}" 127.0.0.1:8001/upstreams/agent-$x.kong-poc/health | python3 -c 'import json,sys; print([t["health"] for t in json.load(sys.stdin)["data"]])'; done
+st() { curl -s -m 5 -w '\n%{http_code}' $G/agents/b -H "apikey: $DECK_AGENT_C_KEY" | python3 -c 'import json,sys; *b,c=sys.stdin.read().split("\n"); d=json.loads("\n".join(b) or "{}"); print(c, d.get("message") or d.get("error") or "정상 응답")'; }
+curl -s -X POST '127.0.0.1:18090/mock/agent-down?name=b'; echo      # 모의 에이전트 B 를 장애로
+for i in $(seq 1 12); do printf '%2d초 ' $i; st; sleep 1; done
+curl -s -X POST '127.0.0.1:18090/mock/agent-up?name=b'; echo        # 되살림
+for i in $(seq 1 12); do printf '%2d초 ' $i; st; sleep 1; done
+```
+→ 첫 줄: 셋 다 `['HEALTHY']`. 장애로 만들면 처음 몇 초는 에이전트가 직접 503(「모의 장애 …」)을 내다가, Kong 이 장애로 본 뒤(10초 안팎)부터는
+에이전트에 보내지 않고 **Kong 이 바로 503** `failure to get a peer from the ring-balancer` 를 돌려줍니다. 되살리면 10초 안팎 뒤 다시 정상 응답입니다.
+
+- Grafana 「Kong AI Gateway PoC」 맨 아래 에이전트 줄 — **에이전트 상태 — 지금**(정상 · 장애) · **시간대별**. 지표를 15초마다 모으므로 화면은 조금 늦게 바뀝니다.
+- 「요청 기록」 경로 `agent-b` — 차단·오류 사유 칸에서 에이전트가 낸 503(「모의 장애 …」)과 Kong 이 낸 503(「failure to get a peer …」)이 구분됩니다.
+- Kong Manager → Upstreams → `agent-b.kong-poc` — 점검 설정과 Target(실제 주소). Target 마다 Mark healthy · Mark unhealthy(손으로 상태를 정함)가 있고,
+  지금 상태는 위 Admin API 와 Grafana 에서 봅니다.
+- 지표 `kong_upstream_target_health`(`:8100/metrics`) · 경보 규칙 예시 `KongUpstreamDown`(정상인 대상이 1분 넘게 없음).
+
+실제 에이전트는 설정 파일 `DECK_AGENT_A_HEALTH_PATH` 등에 에이전트 서버의 점검 경로(예: `/health`)를 넣으면 그 경로로, 비우면 TCP 연결만
+점검합니다. 404 · 429 · 5xx 는 장애로 보므로 넣기 전에 그 경로가 200 을 주는지 확인합니다. 점검 요청은 Kong 이 에이전트로 바로 보내므로
+요청 로그 · 「요청 기록」에는 남지 않습니다.
 
 ### 1-2 스트리밍 · 첫 토큰 지연
 
@@ -535,6 +563,7 @@ Routes → `poc` → Plugins 에서 플러그인(마스킹·가드·긴급 차�
 |---|---|
 | Gateway Services · Routes | `poc`(채팅) · `ocr` · `agent-a`·`agent-b`(일반 HTTP 에이전트) · `agent-c`(A2A 에이전트) (+ 모니터링 `grafana`, 임베딩이 있으면 파드 안 전용 `ai-embed`) |
 | Routes → `agent-c` → Plugins | AI A2A Proxy(카드 주소를 Kong 주소로 · A2A 호출 기록) · 허용 목록(`acl` — agent-a · agent-b) · 긴급 차단 |
+| Upstreams | `agent-a.kong-poc` · `agent-b.kong-poc` · `agent-c.kong-poc` — 에이전트의 실제 주소(Target)와 상태 점검 설정. 지금 상태는 Grafana 에이전트 줄 · Admin API `/upstreams/<이름>/health` |
 | Routes → `poc` → Plugins | 요구사항 플러그인 전부와 켜짐/꺼짐 — **여기서 켜고 끔**. 켜고 끈 것은 다음 설정 적용 때 설정 파일 `FEATURE_…` 에 적힘 |
 | Routes → `poc` → AI Proxy Advanced | LLM 대상 — 기본 묶음(1순위·장애 대체) · 모델 이름마다 별칭(`model_alias`) 대상 · `mock-llm` 묶음 |
 | Plugins | 전체 — 전역(로그·추적 ID·지표·채팅 전처리) · 긴급 차단(`kill-switch--…`, 켜 두면 설정을 적용해도 그대로) |
@@ -544,3 +573,5 @@ Manager 에서 숫자·패턴 같은 **값**을 바꾸면 다음 설정 적용 �
 상태를 `backup/` 에 남김). 계속 쓸 값은 설정 파일에 옮기세요 — README 「Kong Manager 와 설정 파일 같이 쓰기」.
 
 로그인: `kong_admin` / 설정 파일의 `KONG_ADMIN_PASSWORD` (Manager 에서 바꿨다면 새 비밀번호 — 설정 파일의 `KONG_MANAGER_PASSWORD` 에 적어 두면 `verify.sh` 도 그 값으로 로그인을 점검).
+아무것도 하지 않으면 15분 뒤 로그아웃됩니다(만료 전에 「Your session is going to expire」 창 — Keep Me Logged In). 늘리려면 설정 파일 `MANAGER_IDLE_MINUTES`(분)를
+넣고 다시 시작합니다 — `bash stop.sh && bash start.sh`, 빌드한 새 환경이면 `bash remote.sh restart`. 계속 써도 로그인한 지 `MANAGER_LOGIN_HOURS`(기본 24)시간이 지나면 다시 로그인합니다.

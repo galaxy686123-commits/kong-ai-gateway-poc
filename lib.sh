@@ -519,6 +519,32 @@ agent_keys() {
   done
 }
 mock_agent_keys() { local n v o=""; for n in $AGENT_NAMES; do v="DECK_AGENT_${n^^}_KEY"; o="$o $n=${!v:-}"; done; echo "${o# }"; }
+# ── 에이전트 상태 점검 — 에이전트마다 Upstream(이름 agent-<x>.kong-poc) + Target(주소의 호스트:포트)으로 두고 Kong 이 직접 점검한다
+#    서비스는 그 Upstream 을 가리킨다 (40-ocr-agents.yaml). Gateway Service 에는 점검 설정이 없고 Upstream 에만 있다
+#    DECK_AGENT_<X>_HEALTH_PATH 를 주면 에이전트 서버의 그 경로를 GET (200 · 302 = 정상), 비우면 TCP 연결만 본다.
+#      실제 에이전트는 점검 경로가 200 을 주는지 먼저 확인하고 넣는다 — 404 · 429 · 5xx 는 장애로 봐서, 없는 경로를 넣으면 멀쩡한 에이전트가 막힌다
+#    모의 에이전트(주소를 비운 기본)는 /agents/<x>/health
+agent_upstream_env() {  # agent_upstream_env <a|b|c> — DECK_AGENT_<X>_URL 을 나눠 DECK_AGENT_<X>_{PROTOCOL,PORT,PATH,TARGET,HC_TYPE,HC_PATH}
+  local x=$1 X=${1^^} u v hc proto host port path
+  local re='^(https?)://(\[[^]/]+\]|[^]/:?#[]+)(:([0-9]+))?(/[^?#]*)?$'
+  u="DECK_AGENT_${X}_URL"; u=${!u:-}
+  [[ "$u" =~ $re ]] || die "DECK_AGENT_${X}_URL 은 http(s)://호스트[:포트][/경로] 여야 합니다: ${u:-(비어 있음)}"
+  proto=${BASH_REMATCH[1]} host=${BASH_REMATCH[2]} port=${BASH_REMATCH[4]} path=${BASH_REMATCH[5]}
+  if [ -z "$port" ]; then if [ "$proto" = https ]; then port=443; else port=80; fi; fi
+  v="DECK_AGENT_${X}_HEALTH_PATH"; hc=${!v:-}
+  if [ -z "$hc" ] && [ "$u" = "$DECK_MOCK_URL/agents/$x" ]; then hc="/agents/$x/health"; fi
+  if [ -n "$hc" ] && [ "${hc:0:1}" != / ]; then hc="/$hc"; fi
+  printf -v "DECK_AGENT_${X}_PROTOCOL" '%s' "$proto"
+  printf -v "DECK_AGENT_${X}_PORT" '%s' "$port"
+  printf -v "DECK_AGENT_${X}_PATH" '%s' "${path:-/}"
+  printf -v "DECK_AGENT_${X}_TARGET" '%s' "$host:$port"
+  if [ -n "$hc" ]; then printf -v "DECK_AGENT_${X}_HC_TYPE" '%s' "$proto"; printf -v "DECK_AGENT_${X}_HC_PATH" '%s' "$hc"
+  else printf -v "DECK_AGENT_${X}_HC_TYPE" tcp; printf -v "DECK_AGENT_${X}_HC_PATH" /; fi
+}
+agent_health() {  # agent_health <a|b|c> — Kong 이 본 그 에이전트 Target 들의 상태 (HEALTHY · UNHEALTHY · HEALTHCHECKS_OFF · DNS_ERROR, 없으면 없음)
+  admin "/upstreams/agent-$1.kong-poc/health" 2>/dev/null | python3 -c 'import json,sys
+print(",".join(t.get("health") or "?" for t in json.load(sys.stdin).get("data") or []) or "없음")' 2>/dev/null || echo 없음
+}
 
 # ── 빌드 없이 코드 갱신 — 개발 파드의 bash remote.sh update 가 저장소를 유지 폴더 code/ 에 넣고, 새 환경의 run.sh 가 그 코드로 돈다
 code_info() {  # code_info <코드 폴더> — 그 코드의 출처 한 줄 (remote.sh update 가 적은 .code-info)
@@ -605,7 +631,8 @@ deck_env() {
   : "${DECK_DLP_PATTERN:=(?i)(?:대외비|기밀|사내\s*한정|confidential)}"
   : "${DECK_BLOCK_MESSAGE:=보안 정책에 따라 표시할 수 없습니다.}"
   : "${DECK_OCR_URL:=$DECK_MOCK_URL/ocr}" "${DECK_AGENT_A_URL:=$DECK_MOCK_URL/agents/a}" "${DECK_AGENT_B_URL:=$DECK_MOCK_URL/agents/b}"
-  : "${DECK_AGENT_C_URL:=$DECK_MOCK_URL/agents/c}" "${DECK_A2A_LOG_PAYLOADS:=false}"
+  : "${DECK_AGENT_C_URL:=$DECK_MOCK_URL/agents/c}" "${DECK_A2A_LOG_PAYLOADS:=false}" "${DECK_AGENT_HEALTH_INTERVAL:=5}"
+  local ag; for ag in $AGENT_NAMES; do agent_upstream_env "$ag"; done   # 에이전트 주소 → Upstream · Target · 상태 점검 (위 agent_upstream_env)
   : "${DECK_AZURE_API_VERSION:=2024-06-01}" "${DECK_GCP_LOCATION:=asia-northeast3}" "${DECK_EMBED_DIMS:=1024}"
   : "${DECK_CHAT_MODEL:=}" "${DECK_EXT_MODEL:=}"
   # /poc 에서 요청의 model 로 고를 수 있는 이름(쉼표로) — 실제 주소를 넣은 LLM · 클라우드 · 시험용 mock-llm
@@ -679,7 +706,15 @@ kong_env() {
   export KONG_ENFORCE_RBAC=on
   export KONG_AUDIT_LOG=on                           # 관리 작업(설정 변경) 감사로그 → DB, 30일 보관
   export KONG_ADMIN_GUI_AUTH=basic-auth
-  export KONG_ADMIN_GUI_SESSION_CONF="{\"secret\":\"$KONG_SESSION_SECRET\",\"cookie_secure\":$secure}"
+  # Kong Manager 로그인 유지 — 아무것도 하지 않으면 MANAGER_IDLE_MINUTES 분(기본 15) 뒤 로그아웃, 계속 써도 로그인한 지
+  #   MANAGER_LOGIN_HOURS 시간(기본 24)이 지나면 다시 로그인. Kong 세션 설정(세션 플러그인과 같은 이름)으로 넘긴다 —
+  #   idling_timeout(자리 비움) · rolling_timeout(이 안에 쓰면 세션을 새로 이어 줌 — 자리 비움보다 짧으면 먼저 끊기므로 같게) · absolute_timeout(최대)
+  #   만료가 다가오면 Manager 가 「Your session is going to expire」 창(Keep Me Logged In)을 띄운다. 바꾸면 Kong 을 다시 시작해야 반영
+  local idle_m=${MANAGER_IDLE_MINUTES:-15} life_h=${MANAGER_LOGIN_HOURS:-24} idle life
+  [[ "$idle_m" =~ ^[1-9][0-9]*$ ]] || die "MANAGER_IDLE_MINUTES 는 분 단위 숫자(1 이상)여야 합니다: $idle_m"
+  [[ "$life_h" =~ ^[1-9][0-9]*$ ]] || die "MANAGER_LOGIN_HOURS 는 시간 단위 숫자(1 이상)여야 합니다: $life_h"
+  idle=$((idle_m * 60)); life=$((life_h * 3600)); [ "$life" -ge "$idle" ] || life=$idle
+  export KONG_ADMIN_GUI_SESSION_CONF="{\"secret\":\"$KONG_SESSION_SECRET\",\"cookie_secure\":$secure,\"idling_timeout\":$idle,\"rolling_timeout\":$(( idle > 3600 ? idle : 3600 )),\"absolute_timeout\":$life}"
   export KONG_PROXY_LISTEN="0.0.0.0:$PROXY_PORT"
   # 앞단(인그레스 · 로드밸런서)이 붙이는 X-Forwarded-* 를 믿을 주소 대역 — 비우면 믿지 않음(기본).
   #   A2A Agent Card 속 주소는 Kong 이 바꿔 주는데, 앞단 뒤에서 바깥 주소(https://<외부 주소>/agents/c)로 나오려면 앞단을 믿어야 한다

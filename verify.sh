@@ -317,6 +317,28 @@ print(r.get("method") or "-", r.get("task_state") or "-")' 2>/dev/null)"
         || bad "1-3 비동기 (A2A) — 접수 ${s0:-?} · 조회 ${s1:-?} (working → completed 여야 함)"
     fi
   fi
+  # 1-1 에이전트 상태 점검 — 에이전트마다 Upstream(agent-<x>.kong-poc)으로 두고 Kong 이 직접 점검한다 (40-ocr-agents.yaml)
+  #     모의 에이전트면 agent-b 를 잠깐 장애로 만들어 — Kong 이 장애로 보고 바로 503 을 돌려주는지 · 되살리면 정상으로 돌아오는지 본다
+  if has agent-a; then
+    hs=""; hbad=""
+    for n in $AGENT_NAMES; do h=$(agent_health "$n"); hs="$hs · agent-$n $h"; [ "$h" = HEALTHY ] || hbad=1; done
+    hm=$(curl -s -m 10 "http://127.0.0.1:$STATUS_PORT/metrics" | grep -c '^kong_upstream_target_health{.*upstream="agent-.\.kong-poc".*state="healthy".*} 1')
+    if [ -n "$hbad" ]; then
+      bad "1-1 에이전트 상태 점검 —${hs#' ·'} (모두 HEALTHY 여야 함 — 에이전트 주소 · 점검 경로 DECK_AGENT_*_HEALTH_PATH · Kong Manager → Upstreams)"
+    elif [[ "$DECK_AGENT_B_URL" = "$DECK_MOCK_URL"* ]]; then
+      wait_health() { local i h=""; for i in $(seq 1 40); do h=$(agent_health b); [ "$h" = "$1" ] && break; sleep 0.5; done; echo "$h"; }
+      t0=$(date +%s.%N); curl -s -m 5 -o /dev/null -X POST "$DECK_MOCK_URL/mock/agent-down?name=b"
+      hd=$(wait_health UNHEALTHY); td=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.0f", b-a}')
+      r=$(curl -s -m 10 -w '\n%{http_code} %{time_total}' -H "apikey: ${DECK_AGENT_C_KEY:-none}" "$P/agents/b")
+      read -r cd tt <<<"$(tail -1 <<<"$r")"; md=$(sed '$d' <<<"$r" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("message",""))' 2>/dev/null)
+      t0=$(date +%s.%N); curl -s -m 5 -o /dev/null -X POST "$DECK_MOCK_URL/mock/agent-up?name=b"
+      hu=$(wait_health HEALTHY); tu=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.0f", b-a}')
+      cu=$(curl -s -m 10 -o /dev/null -w '%{http_code}' -H "apikey: ${DECK_AGENT_C_KEY:-none}" "$P/agents/b")
+      if [ "$hd" = UNHEALTHY ] && [ "$cd" = 503 ] && [ -n "$md" ] && [ "$hu" = HEALTHY ] && [ "$cu" = 200 ]; then
+        ok "1-1 에이전트 상태 점검 — Kong 이 직접 점검:${hs#' ·'} (지표 ${hm}개) · agent-b 모의 장애: ${td}초 만에 장애로 보고 Kong 이 바로 503 (${tt}초, 「$md」) · 되살리자 ${tu}초 만에 정상 · 200"
+      else bad "1-1 에이전트 상태 점검 — agent-b 모의 장애: 상태 ${hd:-?} · 호출 ${cd:-?} ${md:+「$md」} / 되살린 뒤: 상태 ${hu:-?} · 호출 ${cu:-?} (UNHEALTHY · Kong 의 503 → HEALTHY · 200 이어야 함)"; fi
+    else ok "1-1 에이전트 상태 점검 — Kong 이 직접 점검:${hs#' ·'} (지표 ${hm}개)"; fi
+  fi
   if [ "$MOCK" = 1 ]; then
     # 주 모델 장애 재현: 헤더 X-Mock-Down 에 모델 이름을 넣으면 모의 LLM 이 그 모델에 503 을 낸다
     read -r c0 _ <<<"$(mreq "장애 대체 시험 — 평소" "${KA[@]}")"; m0=$(hdr X-Kong-LLM-Model)

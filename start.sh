@@ -165,9 +165,7 @@ else
     done
     return 2
   }
-  if prom_running; then note "Prometheus: 이미 실행 중 (127.0.0.1:$PROM_PORT · 기록 $PROM_DATA)"
-  else
-    cat > "$RUN_DIR/prometheus.yml" <<YML
+  cat > "$RUN_DIR/prometheus.yml" <<YML
 global:
   scrape_interval: 15s
   evaluation_interval: 30s
@@ -178,6 +176,11 @@ scrape_configs:
     static_configs:
       - targets: ["127.0.0.1:$STATUS_PORT"]
 YML
+  if prom_running; then
+    # 떠 있으면 설정 · 경보 규칙(alerts/)만 다시 읽게 한다 — 코드를 갱신한 뒤(remote.sh update)에도 새 규칙이 반영되게 (기록은 그대로)
+    kill -HUP "$(cat "$RUN_DIR/prometheus.pid")" 2>/dev/null || true
+    note "Prometheus: 이미 실행 중 — 설정 · 경보 규칙을 다시 읽음 (127.0.0.1:$PROM_PORT · 기록 $PROM_DATA)"
+  else
     log_at=$(stat -c %s "$LOGS/prometheus.log" 2>/dev/null || echo 0)
     rc=0; prom_launch || rc=$?
     if [ "$rc" = 2 ]; then note "Prometheus: 아직 기록을 읽는 중 — 곧 준비됩니다 ($LOGS/prometheus.log)"

@@ -1680,7 +1680,7 @@
     {
       "id": 27,
       "type": "row",
-      "title": "에이전트 — 누가 어느 에이전트를 불렀나 (요청 기록 기준)",
+      "title": "에이전트 — 상태 (Kong 상태 점검) · 누가 어느 에이전트를 불렀나 (요청 기록)",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1689,6 +1689,230 @@
         "y": 56
       },
       "panels": []
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "에이전트 상태 — 지금 (Kong 상태 점검)",
+      "description": "Kong 이 에이전트마다 직접 주기적으로 점검한 결과 (Kong Manager → Upstreams → agent-… 의 Target). 연달아 2번 실패하면 장애 — 그동안 Kong 은 그 에이전트로 보내지 않고 바로 503 을 돌려줍니다. 다시 2번 성공하면 정상. 주소 오류 = Target 이름을 찾지 못함, 점검 꺼짐 = Upstream 의 점검 간격이 0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 57
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "label_replace(kong_upstream_target_health{upstream=~\"agent-.*\"} == 1, \"upstream\", \"$1\", \"upstream\", \"(.+)\\\\.kong-poc\")"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "subsystem": true,
+              "address": true
+            },
+            "indexByName": {
+              "upstream": 0,
+              "state": 1,
+              "target": 2
+            },
+            "renameByName": {
+              "upstream": "에이전트",
+              "state": "상태",
+              "target": "대상 (주소)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "healthy": {
+                        "text": "정상",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "unhealthy": {
+                        "text": "장애",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "dns_error": {
+                        "text": "주소 오류",
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "healthchecks_off": {
+                        "text": "점검 꺼짐",
+                        "color": "text",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "에이전트",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": "state-timeline",
+      "title": "에이전트 상태 — 시간대별",
+      "description": "에이전트마다 정상(초록) · 장애(빨강)였던 때. 지표는 15초마다 모으므로 그보다 짧게 끝난 장애는 보이지 않을 수 있습니다. 점검이 꺼져 있거나 주소를 찾지 못해도 빨강 — 이유는 왼쪽 표에서 봅니다",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 57
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{upstream}}",
+          "expr": "max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(.+)\\\\.kong-poc\"))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "장애",
+                  "color": "red",
+                  "index": 1
+                },
+                "1": {
+                  "text": "정상",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
     },
     {
       "id": 28,
@@ -1702,7 +1926,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 63
       },
       "description": "에이전트 경로(agent-…)마다 누가 불렀고 몇 번 허용 · 막혔는지. 에이전트끼리 부를 때는 에이전트마다 받은 키(계정 agent-a · agent-b · agent-c)로 부르므로 「에이전트 → 에이전트」 조합이 그대로 보입니다. 막힘 = 키 없음 · 허용 목록 밖(401 · 403), 오류 · 긴급 차단 = 5xx",
       "fieldConfig": {
@@ -1848,7 +2072,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 65
+        "y": 71
       },
       "description": "AI A2A Proxy 가 요청 로그에 남긴 A2A 호출 — 메서드 · 작업 상태 · 작업 ID(앞 8자리). 접수(message/send, working) 뒤 조회(tasks/get, completed)처럼 같은 작업 ID 로 이어집니다",
       "fieldConfig": {

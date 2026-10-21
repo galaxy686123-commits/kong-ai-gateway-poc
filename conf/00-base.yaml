@@ -65,7 +65,7 @@ plugins:
         # LLM 응답 헤더에는 업스트림 내부 정보(조직·프로젝트 ID·비용)가 담긴다 → 남기지 않는다
         response.headers: "return nil"
 
-  # 3-3 지표 — 사용자·라우트별 호출 수·상태·지연·대역폭과 AI 토큰을 Prometheus 형식으로 낸다.
+  # 3-3 지표 — 사용자·라우트별 호출 수·상태·지연·대역폭과 AI 토큰 · 에이전트 상태 점검 결과를 Prometheus 형식으로 낸다.
   #     수집 주소: http://<파드>:8100/metrics  (경보 규칙 예시는 alerts/kong-alerts.yml)
   - name: prometheus
     config:
@@ -74,6 +74,7 @@ plugins:
       latency_metrics: true
       bandwidth_metrics: true
       ai_metrics: true
+      upstream_health_metrics: true   # 에이전트 상태 점검 결과 — kong_upstream_target_health (Upstream · Target 마다 healthy · unhealthy …)
 
   # /poc 요청 공통 전처리 (항상 켬 — 끄지 마세요) — 요청 본문의 model
   #   등록된 모델 이름(DECK_SELECT_MODELS — 실제 LLM 들 + 시험용 mock-llm)이면 그대로 둬 AI Proxy Advanced 가 그 대상을 고르게 하고

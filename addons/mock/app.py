@@ -13,6 +13,9 @@
   ANY  /agents/<이름>[/...]         받은 추적 헤더(X-Correlation-ID·traceparent)와 지연을 돌려줌 (?delay=초)
                                    ?call=b,c 면 이 에이전트의 키로 Kong 을 거쳐 그 에이전트들에게 A2A 작업을 맡기고
                                    (같은 X-Correlation-ID) 결과를 함께 돌려줌 — 에이전트 간 호출 통제 · 연쇄 추적 시험
+  GET  /agents/<이름>/health        상태 점검용 — 200 {"status":"ok"} (Kong 이 에이전트 Upstream 을 점검하는 주소)
+  POST /mock/agent-down?name=<이름> 그 에이전트를 장애로 — 그 에이전트 주소가 모두 503 (상태 점검 · 실제 호출 모두)
+  POST /mock/agent-up?name=<이름>   장애 해제 (이 둘은 파드 안에서 모의 서버로 바로 — Kong 경로로는 닿지 않음)
        같은 주소로 A2A 에이전트도 흉내 낸다 (A2A 0.3 — Kong AI A2A Proxy 가 알아보는 형식):
          GET  …/.well-known/agent-card.json   Agent Card (url 은 이 서버 주소 — Kong 을 거치면 Kong 주소로 바뀌어야 함)
          POST …  JSON-RPC  message/send · message/stream · tasks/get · tasks/cancel
@@ -49,6 +52,7 @@ KONG_URL = os.getenv("MOCK_KONG_URL", "").rstrip("/")
 AGENT_KEYS = dict(x.split("=", 1) for x in os.getenv("MOCK_AGENT_KEYS", "").split() if "=" in x and x.split("=", 1)[1])
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 파드의 HTTP 프록시 설정을 타지 않게 (Kong 은 파드 안)
 TASKS = {}   # A2A 작업 — 작업 ID → {task, answer, done_at} (최근 200개)
+DOWN = set()  # 장애로 만든 에이전트 이름 (POST /mock/agent-down · agent-up)
 
 
 def bump(key, n=1):
@@ -275,6 +279,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "delay": d})
         if u.path.startswith("/agents/"):
             return self._agent(u, qs, raw, "POST")
+        if u.path in ("/mock/agent-down", "/mock/agent-up"):
+            name = (qs.get("name") or [""])[0]
+            if not re.fullmatch(r"[a-z0-9-]{1,40}", name):
+                return self._json(400, {"error": "name=<에이전트 이름> (예: b)"})
+            with _lock:
+                (DOWN.add if u.path.endswith("down") else DOWN.discard)(name)
+                down = sorted(DOWN)
+            return self._json(200, {"down": down})
         if u.path == "/v1/traces":
             bump("traces")
             bump("trace_bytes", len(raw))
@@ -390,6 +402,10 @@ class Handler(BaseHTTPRequestHandler):
         sub = "/" + "/".join(parts[3:]) if len(parts) > 3 else ""
         if not re.fullmatch(r"[a-z0-9-]{1,40}", name):
             return self._json(404, {"error": "not found"})
+        if name in DOWN:   # 모의 장애 — 상태 점검도 실제 호출도 503
+            return self._json(503, {"error": "모의 장애 — 에이전트 %s 가 응답하지 못합니다" % name})
+        if sub == "/health":
+            return self._json(200, {"status": "ok", "agent": name})
         # A2A — Agent Card · JSON-RPC · REST
         if method == "GET" and sub in ("/.well-known/agent-card.json", "/.well-known/agent.json"):
             bump("a2a")
@@ -422,7 +438,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"status": "ok"})
         if u.path == "/stats":
             with _lock:
-                return self._json(200, dict(STATS))
+                return self._json(200, dict(STATS, down=sorted(DOWN)))
         if u.path == "/logs":
             with _lock:
                 return self._json(200, LOGS[-int((qs.get("n") or ["20"])[0]):])
