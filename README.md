@@ -193,6 +193,10 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 - `bash apply-config.sh --dry-run` 으로 무엇이 설정 파일에 적히고 무엇이 되돌아가는지 먼저 봅니다.
 - Manager 에서 시험해 본 값을 계속 쓰려면 그 값을 설정 파일(`DECK_RPM` 등)이나 `conf/*.yaml` 로 옮깁니다. 적용 화면이 설정 키가 있는
   값은 넣을 명령(`bash set-env.sh DECK_RPM 100` 등)까지 보여 주고, 설정 파일에 옮긴 값은 목록에서 빠집니다(적용해도 유지).
+- **적용으로 되돌아간 Manager 값을 되살리려면** `bash restore-config.sh`(백업 목록) → `bash restore-config.sh kong-before-apply-<시각>.json --dry-run`(바뀔 것) →
+  `bash restore-config.sh kong-before-apply-<시각>.json`. 빌드한 새 환경이면 `bash remote.sh restore …`(새 코드는 먼저 `bash remote.sh update`).
+  `kong-poc` 태그가 붙은 설정 전부를 적용 직전으로 되돌리고(Manager 에서 직접 만든 것은 그대로), 되돌리기 직전 상태를 `backup/kong-before-restore-<시각>.json` 에 남깁니다.
+  되살린 값은 설정 파일과 다르므로 다음 적용 때 다시 목록에 나와 되돌아갑니다 — Manager 로 관리하는 값이 많으면 적용 전에 꼭 `--dry-run`.
 - 지금 상태 전체를 파일로 남기려면 `bash dump-config.sh`(→ `backup/`). 그 파일을 `deck gateway sync` 하면 그 시점으로 돌아갑니다.
 - `verify.sh` 가 잠깐 켠 플러그인은 점검이 끝나면(끊겨도 다음 점검·적용 때) 처음 상태로 돌아가므로 Manager 에서 바꾼 것으로 잡히지 않습니다.
 
@@ -386,6 +390,7 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 | `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력 — DB 가 빌드한 새 환경에 있으면 그쪽에 맡겨 보여 줌) |
 | `set-data-dir.sh` | **유지 폴더(PV) 지정** — 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
 | `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
+| `restore-config.sh` | 설정을 백업 시점으로 되돌림 — 적용이 되돌린 Manager 값을 되살릴 때(`kong-before-apply-<시각>.json`). 이름 없이 = 백업 목록 · `--dry-run`. 빌드한 새 환경이면 `bash remote.sh restore …` |
 | `stop.sh` | 정지 (데이터는 남김) — Kong·PostgreSQL·PII 가드·모의 서버·Prometheus·Grafana |
 | `install.sh` | 프로그램만 설치 (`start.sh` 가 필요할 때 부름) |
 | `kong-check.sh` | 설치 전 환경 점검 |
@@ -661,7 +666,7 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 | `start.sh` 가 「다른 환경이 이 유지 폴더로 실행 중」 | 빌드한 새 환경 등이 같은 DB 를 쓰는 중 — 그쪽을 먼저 내리거나 `bash remote.sh …` 로 그쪽에 맡김. 그 환경이 없어졌으면 90초 뒤 이어받음 |
 | `start.sh` 가 「실행 표시(postmaster.pid)가 남아 있는데 실행 기록이 없습니다」 | 예전 스크립트로 띄운 개발 파드가 아직 돌 수 있음 — 그 파드에서 `bash stop.sh`. 아무 데서도 안 도는 게 확실하면 `FORCE_UNLOCK=1 bash start.sh` |
 | `/poc` 에 `"stream": true` 요청이 400 `response streaming is not enabled` | 답변 검사(`FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK`)가 켜져 있음 — 정상 동작 (의미 기반 답변 가드는 400 대신 한 번에 답함) |
-| 적용했더니 Manager 에서 바꾼 값이 돌아감 | 설정 파일이 기준인 값 — 적용 화면의 목록이나 `backup/kong-before-apply-<시각>.json` 에서 값을 찾아 설정 파일로 옮김 (`/poc` 스위치·긴급 차단은 유지됨) |
+| 적용했더니 Manager 에서 바꾼 값이 돌아감 | 설정 파일이 기준인 값 — 적용 직전으로 되살리기: `bash restore-config.sh kong-before-apply-<시각>.json`(새 환경은 `bash remote.sh restore …`). 계속 쓸 값은 설정 파일로 옮김 (`/poc` 스위치·긴급 차단은 유지됨) |
 | LLM 호출이 503 `name resolution failed` | LLM 주소의 호스트 이름을 파드에서 찾을 수 없음 — 주소 확인. IP 를 바꿨다면 `bash apply-config.sh` 가 Kong 에 새 이름을 반영 |
 | `start.sh` 가 설치 중 멈춤 | `data/logs/install.log` 끝부분 확인 (apt 저장소 접속·디스크) |
 | 임베딩 호출이 400 | 임베딩 서버가 `dimensions` 파라미터를 거부 — 게이트웨이의 `/ai/embed` 가 제거하므로 그 경로를 쓰는지 확인 |

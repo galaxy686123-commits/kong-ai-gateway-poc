@@ -125,6 +125,7 @@ handle() {  # 개발 파드가 remote.sh 로 맡긴 일 — 정해진 것만 한
       guard-test)  bash "$ROOT/guard-test.sh" ;;
       logs-admin)  bash "$ROOT/logs.sh" admin ;;
       workspace-copy\ *) set -f; set -- $cmd; set +f; shift; bash "$ROOT/workspace-copy.sh" "$@" ;;   # 옵션 · 이름은 workspace-copy.sh 가 확인
+      restore|restore\ *) set -f; set -- $cmd; set +f; shift; bash "$ROOT/restore-config.sh" "$@" ;;   # 백업 파일 이름은 restore-config.sh 가 확인
       reload)      echo "코드를 다시 읽어 새로 띄웁니다 — 지금 $(code_where) → 유지 폴더 $(code_info "$CODE_DIR")"; RELOAD=1 ;;
       *)           echo "모르는 요청: $cmd"; false ;;
     esac

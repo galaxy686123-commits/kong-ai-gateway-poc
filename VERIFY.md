@@ -571,6 +571,7 @@ Routes → `poc` → Plugins 에서 플러그인(마스킹·가드·긴급 차�
 
 Manager 에서 숫자·패턴 같은 **값**을 바꾸면 다음 설정 적용 때 설정 파일 값으로 돌아갑니다(적용 화면이 목록을 보여 주고 바꾸기 전
 상태를 `backup/` 에 남김). 계속 쓸 값은 설정 파일에 옮기세요 — README 「Kong Manager 와 설정 파일 같이 쓰기」.
+적용으로 되돌아간 Manager 값은 `bash restore-config.sh kong-before-apply-<시각>.json`(빌드한 새 환경이면 `bash remote.sh restore …`)으로 적용 직전 상태로 되살립니다.
 
 로그인: `kong_admin` / 설정 파일의 `KONG_ADMIN_PASSWORD` (Manager 에서 바꿨다면 새 비밀번호 — 설정 파일의 `KONG_MANAGER_PASSWORD` 에 적어 두면 `verify.sh` 도 그 값으로 로그인을 점검).
 아무것도 하지 않으면 15분 뒤 로그아웃됩니다(만료 전에 「Your session is going to expire」 창 — Keep Me Logged In). 늘리려면 설정 파일 `MANAGER_IDLE_MINUTES`(분)를
