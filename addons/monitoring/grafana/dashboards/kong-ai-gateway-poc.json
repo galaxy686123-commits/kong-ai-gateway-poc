@@ -2416,7 +2416,7 @@
                         "color": "red",
                         "index": 3
                       },
-                      "헬스 체크 꺼짐": {
+                      "헬스 체크 비활성": {
                         "color": "gray",
                         "index": 2
                       }
@@ -2747,7 +2747,7 @@
       "id": 30,
       "type": "table",
       "title": "에이전트 상태(현재)",
-      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). 연속 2회 실패 시 장애로 판정하고 해당 Target 으로 전달하지 않음(즉시 503), 연속 2회 성공 시 정상 복귀. DNS 오류 = Target 이름 해석 실패, 헬스 체크 꺼짐 = 점검 주기 0",
+      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). 연속 2회 실패 시 장애로 판정하고 해당 Target 으로 전달하지 않음(즉시 503), 연속 2회 성공 시 정상 복귀. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = 점검 주기 0",
       "datasource": {
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
@@ -2835,7 +2835,7 @@
                         "index": 2
                       },
                       "healthchecks_off": {
-                        "text": "헬스 체크 꺼짐",
+                        "text": "헬스 체크 비활성",
                         "color": "text",
                         "index": 3
                       }

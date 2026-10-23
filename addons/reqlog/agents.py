@@ -165,7 +165,7 @@ def collect_ws(ws):
             elif all(s == "HEALTHY" for s in states):
                 health = "정상"
             elif all(s == "HEALTHCHECKS_OFF" for s in states):
-                health = "헬스 체크 꺼짐"
+                health = "헬스 체크 비활성"
             elif any(s == "HEALTHY" for s in states):
                 health = "일부 장애(%d/%d 정상)" % (states.count("HEALTHY"), len(states))
             else:
