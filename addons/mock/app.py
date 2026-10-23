@@ -91,7 +91,7 @@ def a2a_new(agent, message, done_in):
     task = {"kind": "task", "id": tid, "contextId": message.get("contextId") or str(uuid.uuid4()),
             "status": {"state": "working", "timestamp": now_iso()}, "history": [message] if message else [],
             "artifacts": [], "metadata": {"agent": "agent-" + agent}}
-    answer = "agent-%s(모의 A2A 에이전트)가 받은 메시지: %s" % (agent, parts_text(message.get("parts")) or "(빈 메시지)")
+    answer = "agent-%s(모의 A2A 에이전트) 수신 메시지: %s" % (agent, parts_text(message.get("parts")) or "(빈 메시지)")
     with _lock:
         TASKS[tid] = {"task": task, "answer": answer, "done_at": time.time() + done_in}
         while len(TASKS) > 200:
@@ -128,11 +128,11 @@ def agent_card(agent, host):
     base = "http://%s/agents/%s" % (host or "127.0.0.1:%d" % PORT, agent)
     return {
         "protocolVersion": "0.3.0", "name": "agent-%s (모의 A2A 에이전트)" % agent, "version": "1.0.0",
-        "description": "PoC 시험용 — 받은 메시지를 그대로 돌려준다", "url": base, "preferredTransport": "JSONRPC",
+        "description": "PoC 검증용 - 수신 메시지를 그대로 반환", "url": base, "preferredTransport": "JSONRPC",
         "additionalInterfaces": [{"url": base, "transport": "JSONRPC"}, {"url": base, "transport": "HTTP+JSON"}],
         "capabilities": {"streaming": True, "pushNotifications": False},
         "defaultInputModes": ["text/plain"], "defaultOutputModes": ["text/plain"],
-        "skills": [{"id": "echo", "name": "받은 메시지 돌려주기", "description": "시험용 — 받은 글을 그대로 답한다", "tags": ["poc"]}],
+        "skills": [{"id": "echo", "name": "수신 메시지 반환", "description": "검증용 - 수신 텍스트를 그대로 응답", "tags": ["poc"]}],
         "securitySchemes": {"apikey": {"type": "apiKey", "in": "header", "name": "apikey"}}, "security": [{"apikey": []}],
     }
 
@@ -403,7 +403,7 @@ class Handler(BaseHTTPRequestHandler):
         if not re.fullmatch(r"[a-z0-9-]{1,40}", name):
             return self._json(404, {"error": "not found"})
         if name in DOWN:   # 모의 장애 — 상태 점검도 실제 호출도 503
-            return self._json(503, {"error": "모의 장애 — 에이전트 %s 가 응답하지 못합니다" % name})
+            return self._json(503, {"error": "모의 장애 - 에이전트 %s 응답 불가" % name})
         if sub == "/health":
             return self._json(200, {"status": "ok", "agent": name})
         # A2A — Agent Card · JSON-RPC · REST

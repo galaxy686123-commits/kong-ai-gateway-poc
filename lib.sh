@@ -372,7 +372,9 @@ reqlog_on()      { mon_on && case "${REQLOG:-on}" in on|true|yes|1) true ;; *) f
 reqlog_running() { [ -f "$RUN_DIR/reqlog.pid" ] && kill -0 "$(cat "$RUN_DIR/reqlog.pid")" 2>/dev/null; }
 reqlog_start() {
   if ! reqlog_on || reqlog_running; then return 0; fi
+  # ADMIN_PORT · KONG_ADMIN_PASSWORD — 에이전트 목록(agents.py)이 Admin API 를 읽는다 (읽기만)
   LOGS=$LOGS DATA_DIR=$DATA_DIR RUN_DIR=$RUN_DIR PG_BIN=$PG_BIN PG_PORT=$PG_PORT REQLOG_KEEP_DAYS=${REQLOG_KEEP_DAYS:-30} \
+    ADMIN_PORT=$ADMIN_PORT KONG_ADMIN_PASSWORD=$KONG_ADMIN_PASSWORD \
     setsid nohup python3 "$ROOT/addons/reqlog/reqlog.py" --loop >> "$LOGS/reqlog.log" 2>&1 < /dev/null &
   echo $! > "$RUN_DIR/reqlog.pid"
 }

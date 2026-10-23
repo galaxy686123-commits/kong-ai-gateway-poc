@@ -34,17 +34,45 @@ ALTER TABLE requests ADD COLUMN IF NOT EXISTS ai_limit integer;         --   그
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS ai_remaining integer;     --   이 요청 뒤 남은 토큰 (Kong 이 응답 헤더로 알려 준 값)
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS correlation_id text;      -- 추적 ID (X-Correlation-ID) — 에이전트가 이어 붙이면 연쇄 호출이 같은 값
 CREATE INDEX IF NOT EXISTS requests_corr ON requests (correlation_id);
+CREATE INDEX IF NOT EXISTS requests_route_ts ON requests (route, ts DESC);   -- 에이전트 목록의 경로별 호출 수 · 마지막 호출
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_method text;          -- A2A 에이전트 경로(AI A2A Proxy)만: 메서드 (message/send · tasks/get …)
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_task_id text;         --   작업 ID
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_task_state text;      --   작업 상태 (working · completed …)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS end_user text;            -- SSO 사용자 — openid-connect 가 토큰의 사용자 이름으로 채운 X-User 헤더 (에이전트 키 + 사용자 토큰을 함께 쓰면 consumer = 에이전트, 이 칸 = 사람)
+
+-- 에이전트 목록 — agents.py 가 1분마다 Kong 설정(이름이 agent- 로 시작하는 경로)과 Agent Card 를 읽어 통째로 바꿔 넣는다
+CREATE TABLE IF NOT EXISTS agents (
+  workspace        text NOT NULL,
+  name             text NOT NULL,             -- 경로(Route) 이름
+  paths            text,                      -- 부르는 주소
+  kind             text,                      -- A2A (AI A2A Proxy 를 붙임) · HTTP
+  registered_by    text,                      -- 설정 파일(kong-poc 태그) · Kong Manager
+  auth             text,                      -- 붙은 인증 (키 · SSO 토큰 …)
+  access_rule      text,                      -- ACL 규칙 (허용 그룹 · 차단 그룹 · 허용 식 · 차단 식)
+  callers          text,                      -- 부를 수 있는 계정 (허용 그룹이면 그 계정들)
+  kill_switch      boolean,                   -- 긴급 차단 켜짐
+  a2a_logging      text,                      -- AI A2A Proxy 기록 (통계 · 본문)
+  health           text,                      -- Upstream 상태 점검 결과
+  targets          text,                      -- 에이전트 서버 (Target)
+  card_name        text,                      -- Agent Card 의 name · description · version · skills
+  card_description text,
+  card_version     text,
+  card_skills      text,
+  card_error       text,                      -- 카드를 읽지 못한 이유
+  updated_at       timestamptz,
+  PRIMARY KEY (workspace, name)
+);
 
 -- 행 단위 제한 — 팀 Grafana(GRAFANA_TEAMS)는 그 워크스페이스 행만 읽히는 계정(reqlog_t_<팀>)으로 연결한다 (start.sh 가 계정 · 정책을 만든다).
 --   기존 화면(reqlog_reader)은 전부 읽는다. 쓰기 · 보관 기간 정리(postgres)는 제한을 받지 않는다
 ALTER TABLE requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS reader_all ON requests;
 CREATE POLICY reader_all ON requests FOR SELECT TO reqlog_reader USING (true);
+ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS reader_all ON agents;
+CREATE POLICY reader_all ON agents FOR SELECT TO reqlog_reader USING (true);
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE reqlog TO reqlog_reader;
 GRANT USAGE ON SCHEMA public TO reqlog_reader;
-GRANT SELECT ON requests TO reqlog_reader;
+GRANT SELECT ON requests, agents TO reqlog_reader;

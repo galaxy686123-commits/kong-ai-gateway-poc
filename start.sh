@@ -128,7 +128,7 @@ fix_log_path      # 유지 폴더가 다른 경로로 붙은 환경이면 요청
 say "6/6 모니터링 — Prometheus · Grafana (3-3)"
 if ! mon_on; then note "건너뜀 (MONITORING=off)"
 else
-  # Prometheus — Kong 지표(:$STATUS_PORT)를 15초마다 모으고 경보 규칙(alerts/)을 계산한다.
+  # Prometheus — Kong 지표(:$STATUS_PORT)를 15초마다 모으고 알림 규칙(alerts/)을 계산한다.
   #   기록은 로컬 디스크(~/.kong-poc/prometheus) — Prometheus 저장소는 NFS 를 지원하지 않는다.
   #   다시 빌드해 새 환경이 떠도 그래프가 이어지게 유지 폴더에 사본을 두고(5분마다 · 종료할 때 — lib.sh prom_copy), 뜰 때 되살린다.
   #   보관은 PROM_RETENTION(기본 15d) · PROM_RETENTION_SIZE(기본 2GB) 가운데 먼저 닿는 쪽.
@@ -177,9 +177,9 @@ scrape_configs:
       - targets: ["127.0.0.1:$STATUS_PORT"]
 YML
   if prom_running; then
-    # 떠 있으면 설정 · 경보 규칙(alerts/)만 다시 읽게 한다 — 코드를 갱신한 뒤(remote.sh update)에도 새 규칙이 반영되게 (기록은 그대로)
+    # 떠 있으면 설정 · 알림 규칙(alerts/)만 다시 읽게 한다 — 코드를 갱신한 뒤(remote.sh update)에도 새 규칙이 반영되게 (기록은 그대로)
     kill -HUP "$(cat "$RUN_DIR/prometheus.pid")" 2>/dev/null || true
-    note "Prometheus: 이미 실행 중 — 설정 · 경보 규칙을 다시 읽음 (127.0.0.1:$PROM_PORT · 기록 $PROM_DATA)"
+    note "Prometheus: 이미 실행 중 — 설정 · 알림 규칙을 다시 읽음 (127.0.0.1:$PROM_PORT · 기록 $PROM_DATA)"
   else
     log_at=$(stat -c %s "$LOGS/prometheus.log" 2>/dev/null || echo 0)
     rc=0; prom_launch || rc=$?
@@ -228,6 +228,9 @@ SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'r') \gexec
 SELECT format('GRANT SELECT ON requests TO %I', :'r') \gexec
 SELECT format('DROP POLICY IF EXISTS %I ON requests', 'team_' || :'r') \gexec
 SELECT format('CREATE POLICY %I ON requests FOR SELECT TO %I USING (coalesce(workspace, %L) = %L)', 'team_' || :'r', :'r', 'default', :'ws') \gexec
+SELECT format('GRANT SELECT ON agents TO %I', :'r') \gexec
+SELECT format('DROP POLICY IF EXISTS %I ON agents', 'team_' || :'r') \gexec
+SELECT format('CREATE POLICY %I ON agents FOR SELECT TO %I USING (workspace = %L)', 'team_' || :'r', :'r', :'ws') \gexec
 SQL
   done < <(grafana_teams)
   if reqlog_on; then reqlog_start; note "요청 기록: 요청 로그 → DB reqlog (10초마다 · ${REQLOG_KEEP_DAYS:-30}일 보관) — Grafana 「요청 기록」"

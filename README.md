@@ -22,12 +22,12 @@ Kubernetes 권한이나 컨테이너 없이 **sudo · apt(Ubuntu 22.04) · GitHu
 | Kong | Kong Gateway **Enterprise 3.16.0.0** · traditional 모드 · 워커 2개 |
 | 데이터베이스 | PostgreSQL 14 (Ubuntu 저장소) + pgvector 0.8.6 (GitHub 소스 빌드) |
 | 설정 관리 | [decK](https://developer.konghq.com/deck/) 선언형 파일 `conf/*.yaml` → `apply-config.sh` |
-| 설치 파일 | `pkgs/` — Kong `.deb`(Ubuntu 22.04용) · decK 1.65.1 · `SHA256SUMS` |
+| 설치 파일 | `pkgs/` - Kong `.deb`(Ubuntu 22.04용) · decK 1.65.1 · `SHA256SUMS` |
 | 실행 | 컨테이너 없이 파드 안의 프로세스 4개 (PostgreSQL · Kong · PII 가드 · 모의 서버) + 모니터링(Prometheus · Grafana) |
 
-Kong 패키지 저장소·GitHub Release 가 막힌 파드를 위해 설치 파일을 저장소에 넣었습니다. `git clone` 하나로 받습니다.
+Kong 패키지 저장소·GitHub Release 접근이 차단된 파드를 위해 설치 파일을 저장소에 넣었습니다. `git clone` 하나로 받습니다.
 
-> **설정 파일** — 처음 설치할 때는 저장소의 `.env` 입니다. 유지 폴더를 정하면(`bash set-data-dir.sh`, 아래 「유지 폴더」)
+> **설정 파일** - 처음 설치할 때는 저장소의 `.env` 입니다. 유지 폴더를 정하면(`bash set-data-dir.sh`, 아래 「유지 폴더」)
 > 설정 전체가 `<유지 폴더>/kong-poc/settings.env` 로 옮겨지고 저장소 `.env` 에는 그 위치 한 줄만 남습니다.
 > 그 뒤로는 어디 있든 `bash set-env.sh <키> <값>` 으로 고칩니다. 이 문서의 「`.env` 의 …」는 그 설정 파일을 말합니다.
 
@@ -43,7 +43,7 @@ bash kong-check.sh                        # (선택) 설치 전 환경 점검
 cp .env.example .env
 ```
 
-**`.env`** — 비밀번호·키 4개를 임의값으로 만들고, 브라우저 접속 주소를 넣습니다.
+**`.env`** - 비밀번호·키 4개를 임의값으로 만들고, 브라우저 접속 주소를 넣습니다.
 
 ```bash
 for k in KONG_PG_PASSWORD KONG_ADMIN_PASSWORD KONG_SESSION_SECRET DECK_CLIENT_KEY; do
@@ -55,13 +55,13 @@ grep -E '^(KONG_ADMIN_PASSWORD|DECK_CLIENT_KEY|MANAGER_URL|ADMIN_API_URL)=' .env
 ```
 
 - `.env` 는 숨김 파일이라 주피터 탐색기에서 바로 안 열립니다. 값 하나는 `bash set-env.sh <키> <값>` 으로 바꿉니다
-  (비밀번호처럼 화면에 남기기 싫은 값은 `bash set-env.sh <키>` — 입력을 묻고 화면에 안 보임).
-- **라이선스**: 주피터 탐색기로 아무 폴더에나 올린 뒤 `bash set-license.sh <올린 파일>` — 제자리에 넣어 줍니다.
+  (비밀번호처럼 화면에 남기기 싫은 값은 `bash set-env.sh <키>` - 입력을 묻고 화면에 안 보임).
+- **라이선스**: 주피터 탐색기로 아무 폴더에나 올린 뒤 `bash set-license.sh <올린 파일>` - 제자리에 넣어 줍니다.
 
 ```bash
 bash start.sh          # 설치 → DB → 마이그레이션 → PII 가드·모의 서버 → Kong (처음 약 2분)
 bash apply-config.sh   # 요구사항별 설정 적용 (라이선스 필요)
-bash verify.sh         # 요구사항별 점검 — 요약이 「불가 0」이면 됩니다
+bash verify.sh         # 요구사항별 점검 - 요약이 「불가 0」이면 됩니다
 ```
 
 파드를 다시 만들어도 남는 **유지 폴더(PV)**가 따로 있으면 `start.sh`·`apply-config.sh` 대신
@@ -89,14 +89,14 @@ Manager 화면에서 비밀번호를 바꾸면 **로그인 비밀번호만** 바
 bash set-env.sh KONG_MANAGER_PASSWORD
 ```
 
-**관리자 추가** — Kong Manager 왼쪽 **Teams** → **Admins** → **+ Invite Admin** 에서 이메일·사용자 이름을 넣고 **Add/Edit Roles** 로
+**관리자 추가** - Kong Manager 왼쪽 **Teams** → **Admins** → **+ Invite Admin** 에서 이메일·사용자 이름을 넣고 **Add/Edit Roles** 로
 워크스페이스(`default`)와 역할을 고른 뒤 **Invite Admin**. 메일 발송은 꺼져 있으므로(`smtp_mock`) 초대 목록(Invited)에서 그 관리자를 열고
 **Generate registration link** 로 만든 가입 링크(72시간 유효)를 본인에게 전합니다. 본인이 링크에서 비밀번호를 정하면 바로 로그인됩니다.
 
 | 역할 | 할 수 있는 것 |
 |---|---|
-| `super-admin` | 전부 — 관리자 초대·역할 관리 포함 |
-| `admin` | 관리자·역할 관리(RBAC)를 뺀 전부 — 경로·플러그인·사용자 편집 |
+| `super-admin` | 전부 - 관리자 초대·역할 관리 포함 |
+| `admin` | 관리자·역할 관리(RBAC)를 뺀 전부 - 경로·플러그인·사용자 편집 |
 | `read-only` | 보기만 |
 
 관리자는 DB 에 저장되므로 다시 빌드해도 남고, 번들 설정 적용(`apply-config.sh`)도 건드리지 않습니다.
@@ -107,27 +107,27 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 | ID | 요구사항 | Kong 구현 | 설정 파일 | 점검 (`verify.sh`) |
 |---|---|---|---|---|
-| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` — 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) · AI 에이전트 · OCR 도 같은 게이트웨이 뒤에(Service + Route, A2A 에이전트는 `ai-a2a-proxy`, 에이전트는 Upstream 상태 점검) | 00 · 10 · 40 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 · A2A 카드 주소 · 호출 기록 · 에이전트 상태 점검(모의 장애 → 503 → 복구) |
-| 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 10 | `/poc` `model=mock-llm` — LLM 직접 호출과 10회 비교 |
+| 1-1 | 멀티 모델 단일 엔드포인트 | 주소 하나 `/poc` - 요청의 `model` 로 LLM 선택(`ai-proxy-advanced` `model_alias`) · AI 에이전트 · OCR 도 같은 게이트웨이 뒤에(Service + Route, A2A 에이전트는 `ai-a2a-proxy`, 에이전트는 Upstream 상태 점검) | 00 · 10 · 40 · LLM 대상(`apply-config.sh` 가 만듦) | 넣은 LLM 이름마다 · `mock-llm` · 목록 밖 이름으로 실제 호출 · A2A 카드 주소 · 호출 기록 · 에이전트 상태 점검(모의 장애 → 503 → 복구) |
+| 1-2 | 스트리밍 · 첫 토큰 지연 10ms 이내 | SSE 를 조각마다 바로 전달 (`response_buffering: false`) | 10 | `/poc` `model=mock-llm` - LLM 직접 호출과 10회 비교 |
 | 1-3 | OCR 10MB+ · Agent 장기 연결 | 업로드 상한 50MB(`request-size-limiting`) · 응답 대기 600초 · 비동기는 에이전트의 접수 · 조회 API 를 중계 | 40 | `/ocr` 12MB · `/agents/a` 70초 · A2A 접수(working) → 조회(completed) |
 | 1-4 | 장애 시 대체 모델 (SD-04-17) | 우선순위 분산 + 실패 시 다음 모델 (`ai-proxy-advanced` priority·failover) | 10 · LLM 대상 | `mock-llm` + 헤더 `X-Mock-Down` 으로 주 모델 장애 |
 | 2-1 | SSO · 부서별 API 키 (SD-01-3) | 부서별 사용자·키(`key-auth`) · 사내 IdP 토큰(`openid-connect`) | 00 · 10 · 50 | 키 없음·틀린 키 401 · 부서 키 200 (SSO 를 넣었으면 SSO 로 바꿔 토큰 없이 401) |
-| 2-2 | 키별 접근 통제 403 (PD-05-31) | 부서 그룹별 허용(`acl`) — `/poc` 와 Agent · 에이전트마다 호출 키(에이전트 간 호출) | 00 · 10 · 40 | `/poc` 를 team-a 만 허용해 team-b 403 · team-a 키로 agent-b 403 · 에이전트 A 키로 B 403 · C 200 |
+| 2-2 | 키별 접근 통제 403 (PD-05-31) | 부서 그룹별 허용(`acl`) - `/poc` 와 Agent · 에이전트마다 호출 키(에이전트 간 호출) | 00 · 10 · 40 | `/poc` 를 team-a 만 허용해 team-b 403 · team-a 키로 agent-b 403 · 에이전트 A 키로 B 403 · C 200 |
 | 2-3 | 호출 수 한도 429 (RL-08-81) | 사용자별 분당·일일 호출 수(`rate-limiting`) | 10 | 분당 3회로 잠깐 낮춰 429 |
-| 2-4 | 토큰·비용 한도 429 | 사용자별 분당 토큰·예상 비용(`ai-rate-limiting-advanced` — `total_tokens`·`cost`) | 10 | 분당 40토큰 · 예상 비용 0.1 로 잠깐 낮춰 429 |
+| 2-4 | 토큰·비용 한도 429 | 사용자별 분당 토큰·예상 비용(`ai-rate-limiting-advanced` - `total_tokens`·`cost`) | 10 | 분당 40토큰 · 예상 비용 0.1 로 잠깐 낮춰 429 |
 | 3-1 | 감사 로그 (MN-02-76) | 요청마다 한 줄(`file-log`) + 중앙 저장소 전송(`http-log`) · 관리 작업 이력(DB) | 00 · 61 | 추적 ID 로 기록 찾기 |
 | 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID · 사용자 → 에이전트 A → B · C 가 한 ID 로 |
-| 3-3 | 이상 징후 경보 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 경보 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
-| 3-4 | Kill-Switch (MN-01-73) | 경로·계정·서비스마다 꺼 둔 `request-termination` — Manager 에서 켜면 즉시 차단, 적용해도 그대로 | 00 · 10 · 40 | `kill-switch--poc` 를 켜서 503 · 끄면 200 |
-| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking` — 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 받은 질문 확인 |
-| 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 400 (`ai-prompt-guard`) — 켜면 어느 모델로 가든 막음 | 10 | 400 · 일반 질문 200 |
-| 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 70 | 400 — 의미 기반은 임베딩이 있을 때 |
-| 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 키워드(PII 가드 `ai-custom-guardrail`) + 의미 기반(`ai-semantic-response-guard`) | 10 · 70 | 표준 문구 — 의미 기반은 임베딩이 있을 때 |
+| 3-3 | 이상 징후 알림 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 알림 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
+| 3-4 | Kill-Switch (MN-01-73) | 경로·계정·서비스마다 꺼 둔 `request-termination` - Manager 에서 켜면 즉시 차단, 적용해도 그대로 | 00 · 10 · 40 | `kill-switch--poc` 를 켜서 503 · 끄면 200 |
+| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking` - 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 수신한 질문 확인 |
+| 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 400 (`ai-prompt-guard`) - 켜면 어느 모델로 가든 막음 | 10 | 400 · 일반 질문 200 |
+| 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 70 | 400 - 의미 기반은 임베딩이 있을 때 |
+| 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 키워드(PII 가드 `ai-custom-guardrail`) + 의미 기반(`ai-semantic-response-guard`) | 10 · 70 | 표준 문구 - 의미 기반은 임베딩이 있을 때 |
 | 4-5 | 답변 속 내부 IP·키·DB 정보 마스킹 (PO-06-67) | 답변의 사설 IP·API 키·DB 접속 정보 → `[내부IP]`·`***` (이 번들 전용 플러그인 `response-masking`) | 10 · `addons/kong-plugins` | 모의 LLM 이 「점검 결과」 질문에 내부 정보를 섞어 답함 |
 
 2-1(SSO)·2-2~2-4·3-4·4-1~4-5 는 `verify.sh` 가 그 플러그인을 잠깐 켜서 확인하고 처음 상태로 돌립니다.
 
-킥오프 자료 기준 네 영역 17개입니다 — ① 서비스 등록·연동(1-1~1-4) · ② 접근·사용량 제어(2-1~2-4) · ③ 이력·감사(3-1~3-4) ·
+킥오프 자료 기준 네 영역 17개입니다 - ① 서비스 등록·연동(1-1~1-4) · ② 접근·사용량 제어(2-1~2-4) · ③ 이력·감사(3-1~3-4) ·
 ④ 가드레일(4-1~4-5). 예전 2-3 의 토큰 한도는 2-4(토큰·비용)로 나눴습니다.
 
 설정 파일 번호: `00-base` 공통(사용자·키·로그·추적 ID·지표·채팅 전처리) · `10-poc` 채팅 경로와 플러그인 · LLM 대상(넣은 LLM 에 맞춰
@@ -138,7 +138,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 ---
 
-## 채팅 경로 `/poc` — 플러그인을 다 붙여 두고 필요한 것만 켠다
+## 채팅 경로 `/poc` - 플러그인을 다 붙여 두고 필요한 것만 켠다
 
 채팅은 **경로 하나 `/poc`** 입니다. 요구사항 플러그인을 모두 이 경로에 붙여 두고, 시연·검증할 것만 켭니다.
 처음에는 **키 인증만 켜져 있습니다.** Kong Manager 의 Routes → `poc` → Plugins 한 화면에서 전부 보고 켜고 끌 수 있습니다.
@@ -146,7 +146,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | 스위치 (설정 파일) | 처음 | 플러그인 | 요구사항 |
 |---|---|---|---|
 | `FEATURE_KEY_AUTH` | on | `key-auth` | 2-1 부서 키 |
-| `FEATURE_SSO` | off | `openid-connect` | 2-1 사내 SSO — `DECK_OIDC_…` 를 넣었을 때만 붙음. 키 대신 SSO 로 시험할 때는 `KEY_AUTH` 를 끔 |
+| `FEATURE_SSO` | off | `openid-connect` | 2-1 사내 SSO - `DECK_OIDC_…` 를 넣었을 때만 붙음. 키 대신 SSO 로 시험할 때는 `KEY_AUTH` 를 끔 |
 | `FEATURE_ACL` | off | `acl` | 2-2 허용 그룹만 (team-a · team-b) |
 | `FEATURE_RATE_LIMIT` | off | `rate-limiting` | 2-3 호출 수 (`DECK_RPM`·`DECK_RPD`) |
 | `FEATURE_TOKEN_LIMIT` | off | `ai-rate-limiting-advanced` | 2-4 토큰 (`DECK_TPM`) |
@@ -159,34 +159,34 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | `FEATURE_SEMANTIC_CACHE` | off | `ai-semantic-cache` | 시맨틱 캐시 (임베딩 모델 필요) |
 | (Kong Manager 에서만) | off | `request-termination` `kill-switch--poc` | 3-4 긴급 차단 |
 
-- 켜고 끄기: **Kong Manager** 의 Routes → `poc` → Plugins 스위치(몇 초 안에 반영) · 명령 `bash switch.sh pii-masking on`(같은 일 —
+- 켜고 끄기: **Kong Manager** 의 Routes → `poc` → Plugins 스위치(몇 초 안에 반영) · 명령 `bash switch.sh pii-masking on`(같은 일 - 
   `bash switch.sh` 만 치면 지금 상태, 빌드한 새 환경이면 `bash remote.sh switch …`) · 또는 **설정 파일**
   `bash set-env.sh FEATURE_MASKING on` 뒤 `bash apply-config.sh`. 섞어 써도 됩니다(아래 「Kong Manager 와 설정 파일 같이 쓰기」).
 - 로그·추적 ID·지표(3-1~3-3)는 전역 플러그인이라 늘 켜져 있습니다.
 - **개인정보 마스킹 규칙**: Kong Manager 의 Routes → `poc` → Plugins → `pii-masking` → **Rules** 에서 규칙마다 이름(name) ·
   바꿀 글자(label) · 찾을 형식(pattern)을 보고 고치거나 **Add rules** 로 더합니다. 위에서부터 차례로 적용하므로 긴 형식을 먼저 둡니다.
-  pattern 은 Lua 패턴입니다 — `%d` 숫자 · `%s` 공백 · `%-` 는 `-` 글자 · `[..]` 그 가운데 하나 · `?` 있어도 없어도 됨
+  pattern 은 Lua 패턴입니다 - `%d` 숫자 · `%s` 공백 · `%-` 는 `-` 글자 · `[..]` 그 가운데 하나 · `?` 있어도 없어도 됨
   (예: 여권번호 `%u%d%d%d%d%d%d%d%d`). 틀린 패턴이나 빈 글자에도 맞는 패턴(`%d*`)은 저장할 때 거절됩니다.
   기본 6종(`rrn` 주민·외국인등록번호 · `card` · `mobile` · `landline` · `account` · `email`)은 **Types** 로 켜고 끄고,
   직접 더한 규칙은 늘 적용됩니다(빼려면 Rules 에서 지움). Rules 를 비우면 기본 6종으로 돕니다.
-  설정 파일에는 규칙이 없어서, 번들을 적용(`apply-config.sh`)하면 기본 6종으로 돌아갑니다 — 적용 전 「Kong Manager 에서 바꾼 값」 목록에 나옵니다.
+  설정 파일에는 규칙이 없어서, 번들을 적용(`apply-config.sh`)하면 기본 6종으로 돌아갑니다 - 적용 전 「Kong Manager 에서 바꾼 값」 목록에 나옵니다.
 - **답변 검사와 스트리밍**: `FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK` 를 켜고 적용하면 `/poc` 는 `"stream": true` 요청을
-  400(`response streaming is not enabled`)으로 거절합니다 — 조각으로 나뉜 답은 검사할 수 없어서입니다. 의미 기반 답변 가드는
-  거절 대신 스트리밍 요청에도 한 번에 답합니다(Kong 이 답을 다 받아 검사 — 3.16 실측).
+  400(`response streaming is not enabled`)으로 거절합니다 - 조각으로 나뉜 답은 검사할 수 없어서입니다. 의미 기반 답변 가드는
+  거절 대신 스트리밍 요청에도 한 번에 답합니다(Kong 이 답을 다 받아 검사 - 3.16 실측).
 - 플러그인 순서는 Kong 이 정합니다(우선순위): 키·SSO → 허용 그룹 → 호출 수 → 토큰 → 마스킹 → 질문 가드(의미 기반 → 정규식) →
   긴급 차단 → LLM → 답변 검사·가림. 막힐 요청은 마스킹·가드를 거치지 않고, 가드·캐시·LLM 은 가린 질문을 봅니다.
 
 ### Kong Manager 와 설정 파일 같이 쓰기
 
 `apply-config.sh` 는 decK 로 Kong 을 `conf/*.yaml` + 설정 파일과 **똑같이 맞춥니다**(`deck gateway sync`). decK 에는 Manager 에서
-바꾼 것을 설정 파일로 되가져오는 기능이 없습니다 — `deck gateway dump` 는 지금 상태를 파일로 내보낼 뿐이고, 그 파일은 키·주소가
+바꾼 것을 설정 파일로 되가져오는 기능이 없습니다 - `deck gateway dump` 는 지금 상태를 파일로 내보낼 뿐이고, 그 파일은 키·주소가
 값으로 박혀 있어 이 저장소의 틀(설정 파일 변수)을 대신할 수 없습니다. 그래서 항목마다 주인을 정했습니다.
 
 | 무엇 | 주인 | 적용(`apply-config.sh`) 때 |
 |---|---|---|
 | `/poc` 플러그인 켜고 끄기 | Kong Manager · 설정 파일 | 지난 적용 뒤 Manager 에서 바꾼 스위치는 **설정 파일 `FEATURE_…` 에 적고 유지**. 설정 파일에서 바꿨으면 그 값 |
-| 긴급 차단 `kill-switch--…` | Kong Manager | **지금 상태 그대로** — 적용해도 차단이 풀리지 않음 |
-| 그 밖의 값 (한도 숫자·패턴·LLM 주소 등) | 설정 파일 · `conf/*.yaml` | Manager 에서 바꾼 값은 **되돌아감** — 적용 전에 목록을 보여 주고, 되돌리기 전 상태를 `backup/kong-before-apply-<시각>.json` 에 남김 |
+| 긴급 차단 `kill-switch--…` | Kong Manager | **지금 상태 그대로** - 적용해도 차단이 풀리지 않음 |
+| 그 밖의 값 (한도 숫자·패턴·LLM 주소 등) | 설정 파일 · `conf/*.yaml` | Manager 에서 바꾼 값은 **되돌아감** - 적용 전에 목록을 보여 주고, 되돌리기 전 상태를 `backup/kong-before-apply-<시각>.json` 에 남김 |
 | Manager 에서 새로 만든 것 (`kong-poc` 태그 없음) | Kong Manager | 건드리지 않음 |
 
 - 비교 기준은 지난 적용 직후의 Kong 상태입니다(데이터 폴더 `state/applied.json`, `manager-changes.py` 가 비교).
@@ -196,11 +196,11 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 - **적용으로 되돌아간 Manager 값을 되살리려면** `bash restore-config.sh`(백업 목록) → `bash restore-config.sh kong-before-apply-<시각>.json --dry-run`(바뀔 것) →
   `bash restore-config.sh kong-before-apply-<시각>.json`. 빌드한 새 환경이면 `bash remote.sh restore …`(새 코드는 먼저 `bash remote.sh update`).
   `kong-poc` 태그가 붙은 설정 전부를 적용 직전으로 되돌리고(Manager 에서 직접 만든 것은 그대로), 되돌리기 직전 상태를 `backup/kong-before-restore-<시각>.json` 에 남깁니다.
-  되살린 값은 설정 파일과 다르므로 다음 적용 때 다시 목록에 나와 되돌아갑니다 — Manager 로 관리하는 값이 많으면 적용 전에 꼭 `--dry-run`.
+  되살린 값은 설정 파일과 다르므로 다음 적용 때 다시 목록에 나와 되돌아갑니다 - Manager 로 관리하는 값이 많으면 적용 전에 꼭 `--dry-run`.
 - 지금 상태 전체를 파일로 남기려면 `bash dump-config.sh`(→ `backup/`). 그 파일을 `deck gateway sync` 하면 그 시점으로 돌아갑니다.
 - `verify.sh` 가 잠깐 켠 플러그인은 점검이 끝나면(끊겨도 다음 점검·적용 때) 처음 상태로 돌아가므로 Manager 에서 바꾼 것으로 잡히지 않습니다.
 
-### 모델 고르기 — 요청의 `model`
+### 모델 고르기 - 요청의 `model`
 
 `/poc` 는 요청 본문의 `model` 로 LLM 을 고릅니다(`ai-proxy-advanced` 의 `model_alias`). 앱은 OpenAI 방식 그대로 `model` 에 모델 이름만
 바꿔 넣습니다. LLM 자리: 1 사내 `DECK_CHAT_*` · 2 외부 `DECK_EXT_*` · **3번부터 `DECK_LLM<n>_*`**(번호를 늘려 계속) · Azure · GCP · AWS.
@@ -208,24 +208,24 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 
 | 요청의 `model` | 답하는 LLM |
 |---|---|
-| 없음 · 목록 밖 이름 (예: SDK 기본값 `gpt-4o`) | 기본 대상 — 사내 LLM, 실패하면 두 번째 LLM(또는 `FALLBACK=azure` 면 Azure)으로 장애 대체 (1-4). LLM 을 넣기 전에는 모의 LLM |
+| 없음 · 목록 밖 이름 (예: SDK 기본값 `gpt-4o`) | 기본 대상 - 사내 LLM, 실패하면 두 번째 LLM(또는 `FALLBACK=azure` 면 Azure)으로 장애 대체 (1-4). LLM 을 넣기 전에는 모의 LLM |
 | 넣은 LLM 의 모델 이름 (`DECK_CHAT_MODEL` · `DECK_EXT_MODEL` · `DECK_LLM<n>_MODEL` · Azure 배포 이름 · GCP·AWS 모델) | 그 LLM 만 |
-| `mock-llm` | 모의 LLM(받은 질문을 그대로 답함) — 실패하면 `backup-model`. 검증·시연용 (시험용 예시 단가: 100만 토큰당 입력 1000·출력 2000) |
+| `mock-llm` | 모의 LLM(수신한 질문을 그대로 응답) - 실패하면 `backup-model`. 검증·시연용 (시험용 예시 단가: 100만 토큰당 입력 1000·출력 2000) |
 
 - 이름을 지정한 요청은 그 LLM 이 실패해도 다른 LLM 으로 넘어가지 않습니다(502). 장애 대체는 기본 대상과 `mock-llm` 에서만입니다.
-- 목록 밖 이름은 채팅 전처리(`00-base.yaml` 의 `chat-preprocess`)가 지웁니다 — 남겨 두면 400(`cannot use own model`)이 납니다.
-  클라이언트가 보낸 이름은 요청 로그의 `client_model` 에 남습니다. 실제로 답한 모델은 응답 헤더 `X-Kong-LLM-Model`.
+- 목록 밖 이름은 채팅 전처리(`00-base.yaml` 의 `chat-preprocess`)가 지웁니다 - 남겨 두면 400(`cannot use own model`)이 납니다.
+  클라이언트가 지정한 모델 이름은 요청 로그의 `client_model` 에 남습니다. 실제로 답한 모델은 응답 헤더 `X-Kong-LLM-Model`.
 - 모의 LLM 장애 재현: 헤더 `X-Mock-Down: mock-llm` 이면 모의 LLM 이 503 을 내고 같은 요청을 `backup-model` 이 받습니다.
 - Kong 3.16 실측: 별칭(`model_alias`)이 없는 대상끼리 기본 묶음이고 별칭마다 따로 묶입니다. 기본 묶음이 없으면 `model` 없는 요청이
   500(`no targets configured for model alias: <default>`)이 되므로 기본 대상을 늘 둡니다.
-- OpenAI SDK 는 `base_url` 을 `http://<게이트웨이>/poc` 로 둡니다(SDK 가 `/poc/chat/completions` 를 부름 — `/poc` 아래 어느 주소든 이 경로).
+- OpenAI SDK 는 `base_url` 을 `http://<게이트웨이>/poc` 로 둡니다(SDK 가 `/poc/chat/completions` 를 부름 - `/poc` 아래 어느 주소든 이 경로).
 
-**LLM 추가하기** — 빌드 없이 설정 값만 넣습니다 (3번부터 번호를 하나씩 늘림):
+**LLM 추가하기** - 빌드 없이 설정 값만 넣습니다 (3번부터 번호를 하나씩 늘림):
 
 ```bash
 bash set-env.sh DECK_LLM3_URL 'https://llm3.example.internal/v1/chat/completions'
 bash set-env.sh DECK_LLM3_MODEL 'your-third-model'
-bash set-env.sh LLM3_AUTH_HEADER                 # 'Bearer 키' 입력 — 화면에 안 보임
+bash set-env.sh LLM3_AUTH_HEADER                 # 'Bearer 키' 입력 - 화면에 안 보임
 bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경이면 bash remote.sh restart · bash remote.sh apply
 ```
 
@@ -236,55 +236,55 @@ bash stop.sh && bash start.sh && bash apply-config.sh   # 빌드한 새 환경�
 
 ---
 
-## AI 에이전트 — 일반 HTTP · A2A · 에이전트끼리
+## AI 에이전트 - 일반 HTTP · A2A · 에이전트끼리
 
 에이전트 하나 = Upstream(실제 주소 · 상태 점검) + Service + Route 입니다(`conf/40-ocr-agents.yaml`). 주소(`DECK_AGENT_A_URL` · `_B_URL` · `_C_URL`)를 비워 두면 모의 에이전트가 답합니다.
 
-| 경로 | 에이전트 | 붙은 것 | 부를 수 있는 계정 (`acl`) |
+| 경로 | 에이전트 | 적용 플러그인 | 호출 허용 Consumer(`acl`) |
 |---|---|---|---|
 | `/agents/a` | agent-a · 일반 HTTP | 키 인증 · 허용 목록 · 긴급 차단 | team-a |
 | `/agents/b` | agent-b · 일반 HTTP | 키 인증 · 허용 목록 · 긴급 차단 | team-b · agent-c |
 | `/agents/c` | agent-c · **A2A** | 키 인증 · 허용 목록 · 긴급 차단 + **AI A2A Proxy** | agent-a · agent-b |
 
-- **에이전트마다 호출 키** — 계정 `agent-a` · `agent-b` · `agent-c`(키 `DECK_AGENT_A_KEY` · `_B_KEY` · `_C_KEY`, 비어 있으면 기동 · 적용할 때 만들어 설정 파일에 적음).
-  에이전트가 다른 에이전트를 부를 때 이 키로 Kong 을 거친다. 대상 경로의 허용 목록에 없는 조합만 403 — 지금 설정으로는 **A → B 만** 막히고 A → C · C → B 는 된다.
-  에이전트 주소로 바로 부르면 Kong 이 보지 못해 통제되지 않는다 — 에이전트끼리도 Kong 주소를 쓰는 것이 전제.
-- **AI A2A Proxy** — 요청을 바꾸지 않고 관찰만 한다. Agent Card(`/.well-known/agent-card.json`) 속 주소를 Kong 주소로 바꿔 돌려주고(클라이언트가 카드를 따라 Kong 으로 옴),
+- **에이전트마다 호출 키** - 계정 `agent-a` · `agent-b` · `agent-c`(키 `DECK_AGENT_A_KEY` · `_B_KEY` · `_C_KEY`, 비어 있으면 기동 · 적용할 때 만들어 설정 파일에 적음).
+  에이전트가 다른 에이전트를 부를 때 이 키로 Kong 을 거친다. 대상 경로의 허용 목록에 없는 조합만 403 - 지금 설정으로는 **A → B 만** 막히고 A → C · C → B 는 된다.
+  에이전트 주소를 직접 호출하면 Kong 을 거치지 않아 통제되지 않는다 - 에이전트끼리도 Kong 주소를 쓰는 것이 전제.
+- **AI A2A Proxy** - 요청을 바꾸지 않고 관찰만 한다. Agent Card(`/.well-known/agent-card.json`) 속 주소를 Kong 주소로 바꿔 돌려주고(클라이언트가 카드를 따라 Kong 으로 옴),
   A2A 호출마다 메서드 · 작업 ID · 작업 상태 · 지연을 요청 로그(`ai.a2a.rpc`)와 지표(`kong_ai_a2a_requests_total` · `kong_ai_a2a_task_states_total` 등)에 남긴다.
   메시지 본문까지는 `DECK_A2A_LOG_PAYLOADS=true`. 앞단(인그레스) 뒤에서 카드 주소가 바깥 주소로 나오려면 `TRUSTED_IPS` 에 앞단 주소 대역.
-- **상태 점검** — 에이전트마다 Upstream(`agent-a.kong-poc` …)에 실제 주소를 Target 으로 두고, Kong 이 직접 주기적으로 점검한다(능동 점검 — Gateway Service 에는 이 설정이 없고 Upstream 에만 있다).
-  연달아 2번 실패하면 장애로 보고 그 에이전트로 보내지 않는다 — Target 이 하나뿐이면 Kong 이 바로 503. 다시 2번 성공하면 정상. 간격은 `DECK_AGENT_HEALTH_INTERVAL`(기본 5초).
-  점검 방식은 `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_` — 에이전트 서버의 경로(예: `/health`)를 넣으면 그 경로를 GET(200 · 302 정상 · 404 · 429 · 5xx 장애), 비우면 TCP 연결만 본다(모의 에이전트는 `/agents/<x>/health`).
-  없는 경로를 넣으면 멀쩡한 에이전트가 장애로 막히므로 그 경로가 200 을 주는지 먼저 확인한다. 에이전트 서버가 여럿이면 Target 을 늘려 정상인 서버에만 나눠 보낸다.
-- **추적** — 에이전트가 받은 `X-Correlation-ID` 를 다음 호출에 붙이면 사용자 → A → B · C 가 한 ID 로 이어진다. 모의 에이전트는 주소 뒤 `?call=b,c` 면 자기 키로 B · C 에 A2A 작업을 맡긴다.
-- **보는 곳** — Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄(상태 — 지금 · 시간대별, 호출 계정 × 대상 에이전트 · 최근 A2A 작업), 「요청 기록」의 경로 · A2A · 추적 ID 칸(추적 ID 를 누르면 이어진 호출만).
+- **상태 점검** - 에이전트마다 Upstream(`agent-a.kong-poc` …)에 실제 주소를 Target 으로 두고, Kong 이 직접 주기적으로 점검한다(능동 점검 - Gateway Service 에는 이 설정이 없고 Upstream 에만 있다).
+  연달아 2번 실패하면 장애로 보고 그 에이전트로 보내지 않는다 - Target 이 하나뿐이면 Kong 이 바로 503. 다시 2번 성공하면 정상. 간격은 `DECK_AGENT_HEALTH_INTERVAL`(기본 5초).
+  점검 방식은 `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_` - 에이전트 서버의 경로(예: `/health`)를 넣으면 그 경로를 GET(200 · 302 정상 · 404 · 429 · 5xx 장애), 비우면 TCP 연결만 본다(모의 에이전트는 `/agents/<x>/health`).
+  없는 경로를 지정하면 정상 에이전트가 장애로 판정되어 차단되므로 그 경로가 200 을 주는지 먼저 확인한다. 에이전트 서버가 여럿이면 Target 을 늘려 정상인 서버에만 분산한다.
+- **추적** - 에이전트가 수신한 `X-Correlation-ID` 를 다음 호출에 그대로 전달하면 사용자 → A → B · C 가 한 ID 로 이어진다. 모의 에이전트는 주소 뒤 `?call=b,c` 면 자기 키로 B · C 에 A2A 작업을 맡긴다.
+- **보는 곳** - Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄(상태 - 지금 · 시간대별, 호출 계정 × 대상 에이전트 · 최근 A2A 작업), 「요청 기록」의 경로 · A2A · 추적 ID 칸(추적 ID 를 누르면 이어진 호출만).
 
-시연 명령은 VERIFY.md — 1-1 「AI 에이전트 등록」 · 1-1 「에이전트 상태 점검」 · 1-3 비동기 · 2-2 「에이전트끼리」 · 3-2 「여러 에이전트를 거치는 호출」.
+시연 명령은 VERIFY.md - 1-1 「AI 에이전트 등록」 · 1-1 「에이전트 상태 점검」 · 1-3 비동기 · 2-2 「에이전트끼리」 · 3-2 「여러 에이전트를 거치는 호출」.
 
-## 팀 워크스페이스 — 팀마다 Kong Manager 권한 나누기
+## 팀 워크스페이스 - 팀마다 Kong Manager 권한 나누기
 
 팀마다 Kong 설정을 따로 관리하게 하려면 워크스페이스를 나눕니다. `workspace-copy.sh` 가 **default 의 지금 PoC 설정을 새 워크스페이스에
 같게 만들고, default 설정은 읽기만 합니다**(끝에 default 를 전후로 비교해 보여 줌 · 번들의 적용(`apply-config.sh`)은 default 만 다룸).
 
 ```bash
 bash workspace-copy.sh --dry-run it-infra     # 무엇이 만들어지는지
-bash workspace-copy.sh it-infra               # 만들기 — 이미 만든 워크스페이스는 건너뜀 (--reset 이면 default 기준으로 다시 맞춤, 키는 그대로)
-bash workspace-copy.sh --roles default        # default 를 한 팀이 쓸 때 — default 에 팀 역할만
+bash workspace-copy.sh it-infra               # 만들기 - 이미 만든 워크스페이스는 건너뜀 (--reset 이면 default 기준으로 다시 맞춤, 키는 그대로)
+bash workspace-copy.sh --roles default        # default 를 한 팀이 쓸 때 - default 에 팀 역할만
 # 빌드한 새 환경: bash remote.sh update (새 코드) → bash remote.sh workspace-copy [--dry-run | --reset | --roles] <워크스페이스> …
 ```
 
-- **옮기는 것**: default 에서 `kong-poc` 태그가 붙은 지금 설정 — Kong Manager 에서 바꾼 LLM 대상 · 스위치, 지운 경로까지 그대로 따라간다.
+- **옮기는 것**: default 에서 `kong-poc` 태그가 붙은 지금 설정 - Kong Manager 에서 바꾼 LLM 대상 · 스위치, 지운 경로까지 그대로 따라간다.
   경로와 플러그인 · 전역 플러그인(요청 로그 · 지표 · 추적 ID · 전처리) · 계정과 그룹 · 긴급 차단. **빼는 것**: `/grafana` · `/ai/embed` · 경로 없는 서비스.
 - **경로는 앞에 워크스페이스 이름**: `/poc` → `/it-infra/poc` (경로는 워크스페이스끼리 같을 수 없어 409). 경로 이름은 그대로 `poc` 라 전처리가 똑같이 돈다.
-- **계정 키는 새로** 만들어 유지 폴더 `secrets/workspace-<이름>-keys.txt`(600)에 둔다 — 키는 그 워크스페이스에서만 통한다(다른 팀 · default 는 401).
+- **계정 키는 새로** 만들어 유지 폴더 `secrets/workspace-<이름>-keys.txt`(600)에 둔다 - 키는 그 워크스페이스에서만 통한다(다른 팀 · default 는 401).
 - **역할**: 워크스페이스를 만들 때 Kong Manager 의 「New Workspace」와 같은 역할 4개(`workspace-admin` · `workspace-super-admin` ·
-  `workspace-read-only` · `workspace-portal-admin`)를 만든다 — Admin API 로만 만들면 역할이 없다. `--roles default` 는 default 에 같은 역할을 만들되
-  워크스페이스 · 라이선스 관리는 뺀다(default 범위 역할은 워크스페이스 만들기까지 허용되기 때문 — 3.16 실측).
+  `workspace-read-only` · `workspace-portal-admin`)를 만든다 - Admin API 로만 만들면 역할이 없다. `--roles default` 는 default 에 같은 역할을 만들되
+  워크스페이스 · 라이선스 관리는 뺀다(default 범위 역할은 워크스페이스 만들기까지 허용되기 때문 - 3.16 실측).
 - **Manager 계정**: Teams → Invite Admin → 워크스페이스 · 역할(`workspace-admin`) → 메일 서버가 없으니 그 계정의 **Generate Registration Link** 를 전달(3일 유효).
   계정 이름 · 이메일은 워크스페이스가 달라도 겹치면 안 된다. 팀 계정에는 default 의 `admin` · `read-only` · `super-admin` 을 주지 않는다(모든 워크스페이스에 걸림).
-- **겹치면 안 되는 것**: 경로 — 다른 워크스페이스 경로와 같거나 그 아래면 409, 앞부분만 겹치는 짧은 경로는 만들어지니 팀마다 접두어를 정한다.
-  번들 경로(`/poc` `/ocr` `/agents/a` `/agents/b` `/agents/c` `/ai/embed` `/grafana`)는 팀이 쓰지 않는다 — 먼저 쓰면 적용이 409 로 멈춘다.
-- **Manager 에서 경로를 새로 만들 때** 화면의 Basic 은 프로토콜이 https 로 고정 — 이 번들은 Kong 을 http 로 받으므로 426 이 난다. Advanced 에서 `http,https`.
+- **겹치면 안 되는 것**: 경로 - 다른 워크스페이스 경로와 같거나 그 아래면 409, 앞부분만 겹치는 짧은 경로는 만들어지니 팀마다 접두어를 정한다.
+  번들 경로(`/poc` `/ocr` `/agents/a` `/agents/b` `/agents/c` `/ai/embed` `/grafana`)는 팀이 쓰지 않는다 - 먼저 쓰면 적용이 409 로 멈춘다.
+- **Manager 에서 경로를 새로 만들 때** 화면의 Basic 은 프로토콜이 https 로 고정 - 이 번들은 Kong 을 http 로 받으므로 426 이 난다. Advanced 에서 `http,https`.
 - 팀 Grafana(그 워크스페이스 데이터만) 는 「모니터링」의 `GRAFANA_TEAMS`.
 
 ## 시험해 보기
@@ -293,14 +293,14 @@ bash workspace-copy.sh --roles default        # default 를 한 팀이 쓸 때 �
 KEY=$(bash set-env.sh --get DECK_CLIENT_KEY)
 H=(-H "apikey: $KEY" -H 'Content-Type: application/json')
 
-# 1-1 모델 고르기 — 기본 대상 · 모의 LLM (넣은 LLM 은 "model":"<그 모델 이름>")
+# 1-1 모델 고르기 - 기본 대상 · 모의 LLM (넣은 LLM 은 "model":"<그 모델 이름>")
 curl -s localhost:8000/poc "${H[@]}" -d '{"messages":[{"role":"user","content":"한 단어로: 한국 수도는?"}]}'
 curl -s localhost:8000/poc "${H[@]}" -d '{"model":"mock-llm","messages":[{"role":"user","content":"안녕"}]}'
 
-# 1-2 스트리밍 — 조각(data:)이 차례로 도착
+# 1-2 스트리밍 - 조각(data:)이 차례로 도착
 curl -sN localhost:8000/poc "${H[@]}" -d '{"messages":[{"role":"user","content":"하나부터 다섯까지 세어줘"}],"stream":true}'
 
-# 4-1 마스킹 — 켜고 보낸 뒤 끈다. 모의 LLM 이 받은 질문이 그대로 돌아온다
+# 4-1 마스킹 - 활성화해 전송한 뒤 비활성화. 모의 LLM 이 수신한 질문이 그대로 돌아온다
 bash switch.sh pii-masking on
 curl -s localhost:8000/poc "${H[@]}" \
   -d '{"model":"mock-llm","messages":[{"role":"user","content":"주민번호 900101-1234567 연락처 010-1234-5678"}]}'
@@ -332,13 +332,13 @@ r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "c
 | 붙일 것 | `.env` |
 |---|---|
 | 사내 LLM (OpenAI 호환) | `DECK_CHAT_URL` · `DECK_CHAT_MODEL` · `LLM_AUTH_HEADER` |
-| 두 번째 LLM (OpenAI 호환) — 기본 대상의 장애 대체 · 요청의 `model` 로 선택 | `DECK_EXT_URL` · `DECK_EXT_MODEL` · `EXT_AUTH_HEADER` |
-| 세 번째부터 LLM (OpenAI 호환) — 요청의 `model` 로 선택 | `DECK_LLM<n>_URL` · `DECK_LLM<n>_MODEL` · `LLM<n>_AUTH_HEADER` (n = 3, 4, …) |
+| 두 번째 LLM (OpenAI 호환) - 기본 대상의 장애 대체 · 요청의 `model` 로 선택 | `DECK_EXT_URL` · `DECK_EXT_MODEL` · `EXT_AUTH_HEADER` |
+| 세 번째부터 LLM (OpenAI 호환) - 요청의 `model` 로 선택 | `DECK_LLM<n>_URL` · `DECK_LLM<n>_MODEL` · `LLM<n>_AUTH_HEADER` (n = 3, 4, …) |
 | Azure OpenAI · GCP Vertex(Gemini) · AWS Bedrock | `DECK_AZURE_*`·`AZURE_API_KEY` · `DECK_GCP_*`·`GCP_SERVICE_ACCOUNT_JSON` · `DECK_AWS_*`·`AWS_*` |
 | OCR · Agent | `DECK_OCR_URL` · `DECK_AGENT_A_URL` · `DECK_AGENT_B_URL` · `DECK_AGENT_C_URL`(A2A) (비우면 모의 서버) · `DECK_A2A_LOG_PAYLOADS` |
-| 에이전트 상태 점검 | `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_`(에이전트 서버의 점검 경로 — 비우면 TCP 연결만) · `DECK_AGENT_HEALTH_INTERVAL`(초, 기본 5) |
-| 앞단(인그레스) 주소 대역 — A2A 카드 주소를 바깥 주소로 | `TRUSTED_IPS` (바꾸면 다시 시작) |
-| Kong Manager 로그인 유지 | `MANAGER_IDLE_MINUTES`(아무것도 안 하면 로그아웃까지 분, 기본 15) · `MANAGER_LOGIN_HOURS`(계속 써도 다시 로그인까지 시간, 기본 24) — 바꾸면 다시 시작 |
+| 에이전트 상태 점검 | `DECK_AGENT_A_HEALTH_PATH` · `_B_` · `_C_`(에이전트 서버의 점검 경로 - 비우면 TCP 연결만) · `DECK_AGENT_HEALTH_INTERVAL`(초, 기본 5) |
+| 앞단(인그레스) 주소 대역 - A2A 카드 주소를 바깥 주소로 | `TRUSTED_IPS` (바꾸면 다시 시작) |
+| Kong Manager 로그인 유지 | `MANAGER_IDLE_MINUTES`(아무것도 안 하면 로그아웃까지 분, 기본 15) · `MANAGER_LOGIN_HOURS`(계속 써도 다시 로그인까지 시간, 기본 24) - 바꾸면 다시 시작 |
 | 사내 SSO (OIDC) | `DECK_OIDC_ISSUER` · `DECK_OIDC_CLIENT_ID` · `OIDC_CLIENT_SECRET` → `/poc` 에 SSO 플러그인 (`FEATURE_SSO` 로 켬) |
 | 중앙 로그 · 분산 추적 | `DECK_LOG_HTTP_URL` · `DECK_OTEL_ENDPOINT` |
 | 임베딩 (의미 기반 가드·시맨틱 캐시) | `DECK_EMBED_URL` · `DECK_EMBED_MODEL` · `DECK_EMBED_DIMS` · `EMBED_AUTH_HEADER` |
@@ -350,7 +350,7 @@ bash apply-config.sh
 bash verify.sh
 ```
 
-- 인증 헤더·API 키는 설정에 값으로 들어가지 않고 Kong Vault(`{vault://env/...}`)로 참조됩니다 — Manager 에 노출되지 않습니다.
+- 인증 헤더·API 키는 설정에 값으로 들어가지 않고 Kong Vault(`{vault://env/...}`)로 참조됩니다 - Manager 에 노출되지 않습니다.
 - **LLM 주소가 IP 여도 됩니다.** Kong 에는 `ip-10-1-2-3.kong-poc` 같은 이름으로 넘깁니다(아래 「Kong 3.16 에서 확인한 것」).
   이때 LLM 서버가 받는 `Host` 헤더도 그 이름이 되므로, Host 로 서비스를 가르는 서버(인그레스 등)는 이름 주소를 쓰세요.
 
@@ -360,9 +360,9 @@ bash verify.sh
 
 | 라이선스 상태 | Kong 동작 (실측) | 스크립트 |
 |---|---|---|
-| 유효 | 전부 동작 | — |
-| 만료 후 유예 기간 (Kong 로그 기준 약 30일) | 전부 동작 — 설정 변경·로그인·Enterprise 플러그인 포함 | 경고 |
-| 없음 · 유예 종료 | **읽기 전용** — 설정 쓰기 403. 기존 설정으로 프록시는 계속 처리, Manager 로그인·조회 가능 | `apply-config.sh` 가 멈춤 |
+| 유효 | 전부 동작 | - |
+| 만료 후 유예 기간 (Kong 로그 기준 약 30일) | 전부 동작 - 설정 변경·로그인·Enterprise 플러그인 포함 | 경고 |
+| 없음 · 유예 종료 | **읽기 전용** - 설정 쓰기 403. 기존 설정으로 프록시는 계속 처리, Manager 로그인·조회 가능 | `apply-config.sh` 가 멈춤 |
 
 라이선스를 넣거나 바꾼 뒤에는 `bash stop.sh && bash start.sh` (Kong 은 기동할 때 라이선스를 읽습니다).
 AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-guardrail`·`ai-semantic-*`)은 라이선스에
@@ -372,26 +372,26 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 
 ## 스크립트
 
-| 스크립트 | 하는 일 |
+| 스크립트 | 역할 |
 |---|---|
 | `start.sh` | 설치(없으면)·기동. 여러 번 실행해도 안전. 파드를 다시 만들었거나 Kong 버전이 바뀌면 다시 설치하고 DB 를 맞춤 |
-| `run.sh` | **빌드한 새 환경의 시작 명령** — 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
-| `remote.sh` | 빌드한 새 환경에 일을 맡김 — `status` · `apply` · `restart` · `verify` · `switch` · `vectors` · `guard-test` · `logs-admin` · `workspace-copy` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
-| `workspace-copy.sh` | **팀 워크스페이스** — default 의 지금 PoC 설정을 새 워크스페이스에 같게(경로 `/<워크스페이스>/…` · 새 키 · Manager 와 같은 역할 4개), default 는 읽기만. `--dry-run` · `--reset` · `--roles default`. 빌드한 새 환경이면 `bash remote.sh workspace-copy …` (위 「팀 워크스페이스」) |
-| `switch.sh` | `/poc` 플러그인·긴급 차단 바로 켜고 끄기 — `bash switch.sh <이름> on|off` (Kong Manager 스위치와 같음) · 이름 없이 = 지금 상태 |
-| `vectors.sh` | 벡터 DB(`kong-pgvector`)에 Kong 이 넣은 것 보기 — 시맨틱 캐시의 저장된 답 · 의미 기반 가드의 예문. `--query '문장'` 이면 가까운 것과 거리(막히는지·캐시가 맞는지) · 빌드한 새 환경이면 `bash remote.sh vectors` |
-| `set-env.sh` | 설정 값 하나 바꾸기 — `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
-| `set-license.sh` | 받은 라이선스 파일을 제자리에 넣기 — `bash set-license.sh <파일>` |
+| `run.sh` | **빌드한 새 환경의 시작 명령** - 설치(없으면)·기동 후 계속 떠 있으면서 멈춘 것을 다시 띄움. 종료 신호를 받으면 차례로 내림 (아래 「빌드해서 새 환경으로 돌리기」) |
+| `remote.sh` | 빌드한 새 환경에 일을 맡김 - `status` · `apply` · `restart` · `verify` · `switch` · `vectors` · `guard-test` · `logs-admin` · `workspace-copy` · **`update`·`rollback`(빌드 없이 코드 갱신)** (같은 유지 폴더를 붙인 개발 파드에서) |
+| `workspace-copy.sh` | **팀 워크스페이스** - default 의 지금 PoC 설정을 새 워크스페이스에 같게(경로 `/<워크스페이스>/…` · 새 키 · Manager 와 같은 역할 4개), default 는 읽기만. `--dry-run` · `--reset` · `--roles default`. 빌드한 새 환경이면 `bash remote.sh workspace-copy …` (위 「팀 워크스페이스」) |
+| `switch.sh` | `/poc` 플러그인·긴급 차단 바로 켜고 끄기 - `bash switch.sh <이름> on|off` (Kong Manager 스위치와 같음) · 이름 없이 = 지금 상태 |
+| `vectors.sh` | 벡터 DB(`kong-pgvector`)에 Kong 이 넣은 것 보기 - 시맨틱 캐시의 저장된 답 · 의미 기반 가드의 예문. `--query '문장'` 이면 가까운 것과 거리(막히는지·캐시가 맞는지) · 빌드한 새 환경이면 `bash remote.sh vectors` |
+| `set-env.sh` | 설정 값 하나 바꾸기 - `bash set-env.sh <키> <값>` (설정 파일이 어디 있든 찾아서 고침) · `<키>` 만 주면 입력을 물음 |
+| `set-license.sh` | 라이선스 파일 배치 - `bash set-license.sh <파일>` |
 | `apply-config.sh` | `conf/` 를 Kong 에 적용. `--dry-run` 미리 보기. `kong-poc` 태그가 붙은 것만 관리. Kong Manager 에서 켜고 끈 `/poc` 스위치는 설정 파일에 적고, 긴급 차단은 그대로 둠 (`manager-changes.py`) |
-| `verify.sh` | 환경·설치·접속·요구사항별 점검 — `/poc` 의 플러그인을 영역마다 잠깐 켜서 확인하고 처음 상태로. `--full` 은 70초 장기 연결까지 |
-| `guard-test.sh` | 가드레일(4-1~4-5)을 **문장 묶음**으로 시험 — 영역마다 잡은 비율 · 잘못 막은 비율과 놓친 문장 목록. 기본 묶음 `tests/guard-set.tsv`(125문장), 고객 문장은 유지 폴더의 `guard-set.tsv`(`--init` 으로 복사). 빌드한 새 환경이면 `bash remote.sh guard-test`. [VERIFY.md](VERIFY.md) 4-x |
-| `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 점검 — 앞단(인그레스) 경로와 지금 켜진 플러그인 (Python 표준 라이브러리만 — Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
+| `verify.sh` | 환경·설치·접속·요구사항별 점검 - `/poc` 의 플러그인을 영역마다 잠깐 켜서 확인하고 처음 상태로. `--full` 은 70초 장기 연결까지 |
+| `guard-test.sh` | 가드레일(4-1~4-5)을 **문장 묶음**으로 시험 - 영역마다 잡은 비율 · 잘못 막은 비율과 놓친 문장 목록. 기본 묶음 `tests/guard-set.tsv`(125문장), 고객 문장은 유지 폴더의 `guard-set.tsv`(`--init` 으로 복사). 빌드한 새 환경이면 `bash remote.sh guard-test`. [VERIFY.md](VERIFY.md) 4-x |
+| `verify-remote.py` | **파드 밖 PC 에서** 외부 주소로 점검 - 앞단(인그레스) 경로와 지금 켜진 플러그인 (Python 표준 라이브러리만 - Windows·macOS·Linux). [VERIFY.md](VERIFY.md) 3절 |
 | `status.sh` | 프로세스·경로 목록 |
-| `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력 — DB 가 빌드한 새 환경에 있으면 그쪽에 맡겨 보여 줌) |
-| `set-data-dir.sh` | **유지 폴더(PV) 지정** — 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
+| `logs.sh` | 요청 로그 요약 · `-f` 실시간 · `export DIR` · `admin`(설정 변경 이력 - DB 가 빌드한 새 환경에 있으면 그쪽에 맡겨 보여 줌) |
+| `set-data-dir.sh` | **유지 폴더(PV) 지정** - 설정·라이선스·DB·로그·백업·점검 기록을 그 폴더로 옮긴다(저장소 `.env` 에는 위치만). 파드를 다시 만든 뒤 되살릴 때도 이것 하나 |
 | `dump-config.sh` | 지금 설정을 `<데이터 폴더>/backup/` 에 파일로 (Manager 에서 바꾼 것 포함) |
-| `restore-config.sh` | 설정을 백업 시점으로 되돌림 — 적용이 되돌린 Manager 값을 되살릴 때(`kong-before-apply-<시각>.json`). 이름 없이 = 백업 목록 · `--dry-run`. 빌드한 새 환경이면 `bash remote.sh restore …` |
-| `stop.sh` | 정지 (데이터는 남김) — Kong·PostgreSQL·PII 가드·모의 서버·Prometheus·Grafana |
+| `restore-config.sh` | 설정을 백업 시점으로 되돌림 - 적용이 되돌린 Manager 값을 되살릴 때(`kong-before-apply-<시각>.json`). 이름 없이 = 백업 목록 · `--dry-run`. 빌드한 새 환경이면 `bash remote.sh restore …` |
+| `stop.sh` | 정지 (데이터는 남김) - Kong·PostgreSQL·PII 가드·모의 서버·Prometheus·Grafana |
 | `install.sh` | 프로그램만 설치 (`start.sh` 가 필요할 때 부름) |
 | `kong-check.sh` | 설치 전 환경 점검 |
 
@@ -400,32 +400,32 @@ AI 플러그인(`ai-proxy-advanced`·`ai-rate-limiting-advanced`·`ai-custom-gua
 ### 유지 폴더 (파드를 다시 만들어도 남길 파일)
 
 기본으로는 DB·로그를 저장소 안 `data/` 에 둡니다. 플랫폼에 **파드를 다시 만들어도 남는 폴더(쿠버네티스의 PV 같은 곳)**가
-따로 있으면 그곳을 지정합니다 — 처음 설치할 때든, 이미 쓰던 중이든 같은 명령입니다.
+따로 있으면 그곳을 지정합니다 - 처음 설치할 때든, 이미 쓰던 중이든 같은 명령입니다.
 
 ```bash
-bash set-data-dir.sh --check <유지 폴더>   # 먼저 확인만 — 실제 위치·DB 를 둘 수 있는 저장소인지 (아무것도 바꾸지 않음)
+bash set-data-dir.sh --check <유지 폴더>   # 먼저 확인만 - 실제 위치·DB 를 둘 수 있는 저장소인지 (아무것도 바꾸지 않음)
 bash set-data-dir.sh <유지 폴더>           # 예) bash set-data-dir.sh /datasets/DT0000000000/data
 ```
 
 | `<유지 폴더>/kong-poc/` | 내용 |
 |---|---|
-| `pgdata/` | DB — Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
+| `pgdata/` | DB - Kong 설정 전체 · 관리 감사로그 · 벡터 DB(의미 기반 가드·캐시) |
 | `logs/` | Kong 로그 전부 (아래 「로그」 표) · PostgreSQL · PII 가드 로그 |
 | `backup/` · `reports/` | 설정 백업(`dump-config.sh`) · 점검 기록(`verify.sh` 를 돌릴 때마다 저장) |
-| `prometheus/` · `prometheus.id` | 지표 기록 사본 — 다시 빌드한 새 환경이 되살려 Grafana 그래프가 이어짐 (15일 · 2GB 까지 · 아래 「모니터링」) |
-| `settings.env` · `secrets/license.json` | 설정·라이선스 **원본** — `bash set-env.sh` · `bash set-license.sh` 로 고침. 저장소 `.env` 에는 이 폴더 위치 한 줄만 |
+| `prometheus/` · `prometheus.id` | 지표 기록 사본 - 다시 빌드한 새 환경이 되살려 Grafana 그래프가 이어짐 (15일 · 2GB 까지 · 아래 「모니터링」) |
+| `settings.env` · `secrets/license.json` | 설정·라이선스 **원본** - `bash set-env.sh` · `bash set-license.sh` 로 고침. 저장소 `.env` 에는 이 폴더 위치 한 줄만 |
 | `run.lock` · `requests/` | 지금 이 폴더로 돌고 있는 환경의 기록(20초마다 갱신) · `remote.sh` 가 맡긴 일과 결과 |
-| `pgvector-*/` · `src/` | pgvector 빌드 결과 — 다시 설치할 때 빌드 없이 복사만 |
+| `pgvector-*/` · `src/` | pgvector 빌드 결과 - 다시 설치할 때 빌드 없이 복사만 |
 
 - **주피터 탐색기에 보이는 경로를 그대로 줘도 됩니다.** 탐색기의 `/datasets/…` 는 주피터 최상위 폴더 기준이라 파드 안의 절대 경로와
   다를 수 있어, 주피터 최상위 폴더 · `/project` · 홈 아래에서 찾고 없으면 깊이 6 까지 검색합니다 (찾은 위치를 알려 줌).
 - 옮기기 전에 그 폴더가 DB 를 둘 수 있는지 확인하고(권한 700 · 파드와 함께 사라지는 overlay 나 오브젝트 스토리지(FUSE)·네트워크 공유가
   아닌지), 안 되면 아무것도 옮기지 않습니다. 실행 중이면 잠시 내렸다가 옮긴 뒤 다시 띄우고 설정까지 다시 적용합니다.
-- 원래 자리는 지우지 않고 `data.moved-<시각>` 으로 남겨 둡니다 — 확인 후 지워도 됩니다.
+- 원래 자리는 지우지 않고 `data.moved-<시각>` 으로 남겨 둡니다 - 확인 후 지워도 됩니다.
 - **파드를 다시 만들었으면**: 저장소를 받고(`git clone`) → `bash set-data-dir.sh <같은 유지 폴더>` 하나로 유지 폴더의 설정·DB 를 쓰도록
-  위치를 적고 프로그램을 다시 설치해 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 —
+  위치를 적고 프로그램을 다시 설치해 기동합니다. `cp .env.example .env` 는 하지 마세요(새 비밀번호가 생겨 기존 DB 와 맞지 않음 - 
   했더라도 유지 폴더의 설정을 쓰고 새로 만든 것은 `settings.env.from-repo-<시각>` 으로 보관합니다).
-- 예전 방식(저장소 `.env` 가 원본, 유지 폴더엔 사본)으로 쓰던 저장소는 새 버전을 받은 뒤 아무 스크립트나 한 번(`bash status.sh`) 실행하면
+- 예전 방식(저장소 `.env` 가 원본, 유지 폴더엔 사본)으로 쓰던 저장소는 새 버전으로 갱신한 뒤 아무 스크립트나 한 번(`bash status.sh`) 실행하면
   설정·라이선스가 유지 폴더로 옮겨집니다.
 - 포트: 프록시 `:8000` · Admin API `:8001` · Manager `:8002` · 지표 `:8100` · PostgreSQL `127.0.0.1:5432` · PII 가드 `127.0.0.1:18080` · 모의 서버 `127.0.0.1:18090` · Prometheus `127.0.0.1:9090` · Grafana `127.0.0.1:3000`(프록시의 `/grafana`).
 
@@ -440,8 +440,8 @@ apt 로 설치한 Kong·PostgreSQL 은 들어가지 않습니다 → 새 환경�
 ```bash
 cd /project/work/flow/kong-ai-gateway-poc
 bash status.sh        # 「설정 파일」·「라이선스」가 유지 폴더 경로인지 확인 (예전 방식이면 이때 옮겨짐)
-bash verify.sh        # 「빌드 준비 — 저장소 폴더에 DB 사본·비밀값 없음」이 OK 인지
-bash stop.sh          # 반드시 내린다 — 같은 DB 를 두 곳에서 띄우면 DB 가 깨진다
+bash verify.sh        # 「빌드 준비 - 저장소 폴더에 DB 사본·비밀값 없음」이 OK 인지
+bash stop.sh          # 반드시 내린다 - 같은 DB 를 두 곳에서 띄우면 DB 가 깨진다
 ```
 
 - `verify.sh` 가 「빌드 전에 저장소 폴더에서 치울 것」을 알려 주면 지우고 빌드합니다. 유지 폴더로 옮기기 전 자리(`data.moved-<시각>`)는
@@ -453,18 +453,18 @@ bash stop.sh          # 반드시 내린다 — 같은 DB 를 두 곳에서 띄�
 
 | 항목 | 값 |
 |---|---|
-| 시작 명령 | `run.sh` — 끝나지 않고 계속 떠 있음. 플랫폼이 시작 스크립트(예: flow 폴더의 `run-application.sh`)를 부르면 그 안에 `exec bash "$(dirname "$0")/kong-ai-gateway-poc/run.sh"` (`exec` 라야 종료 신호가 run.sh 에 닿아 DB 까지 정상 종료) |
-| 실행 사용자 | 개발 파드와 같은 사용자(uid) — DB 폴더의 주인이 같아야 DB 가 뜸 |
-| 유지 폴더 | 쓰기 가능하게 붙어 있어야 함 — 경로는 달라도 됨 (아래) |
-| 필요 권한 | sudo(비밀번호 없이) · Ubuntu 저장소(apt) 접속 — 프로그램 재설치에 필요 |
+| 시작 명령 | `run.sh` - 끝나지 않고 계속 떠 있음. 플랫폼이 시작 스크립트(예: flow 폴더의 `run-application.sh`)를 실행하면 그 안에 `exec bash "$(dirname "$0")/kong-ai-gateway-poc/run.sh"` (`exec` 라야 종료 신호가 run.sh 에 닿아 DB 까지 정상 종료) |
+| 실행 사용자 | 개발 파드와 같은 사용자(uid) - DB 폴더의 주인이 같아야 DB 가 뜸 |
+| 유지 폴더 | 쓰기 가능하게 붙어 있어야 함 - 경로는 달라도 됨 (아래) |
+| 필요 권한 | sudo(비밀번호 없이) · Ubuntu 저장소(apt) 접속 - 프로그램 재설치에 필요 |
 | 포트 | 8000(프록시) · 8001(Admin API) · 8002(Manager) · 8100(지표) |
-| 복제본 | 1개 — 같은 DB 를 둘 이상이 쓸 수 없음 |
+| 복제본 | 1개 - 같은 DB 를 둘 이상이 쓸 수 없음 |
 
 새 환경의 외부 주소가 개발 파드와 다르면 빌드 전에 바꿔 둡니다:
 `bash set-env.sh MANAGER_URL <8002 외부 주소>` · `bash set-env.sh ADMIN_API_URL <8001 외부 주소>`.
 **환경마다(빌드할 때마다) 주소 속 ID 가 바뀌면** 그 자리를 `{ENV_ID}` 로 적어 둡니다. 그러면 Kong 이 **요청마다**
 브라우저가 연 Manager 주소(`manager-<ID>.도메인`)에서 Admin API 주소(`adminapi-<ID>.도메인`)를 만들어 Manager 에 알려 주고,
-Admin API 는 `manager-<아무 ID>.도메인` 에서 온 요청만 허용합니다 — ID 를 몰라도 되므로 다시 빌드해도 설정을 고칠 필요가 없고,
+Admin API 는 `manager-<아무 ID>.도메인` 에서 온 요청만 허용합니다 - ID 를 몰라도 되므로 다시 빌드해도 설정을 고칠 필요가 없고,
 개발 파드와 새 환경이 같은 설정 파일을 그대로 씁니다. (nginx `map`·`sub_filter`·`more_set_headers`, `lib.sh` 의 `gui_by_host`)
 
 ```bash
@@ -475,9 +475,9 @@ bash set-env.sh ADMIN_API_URL 'https://adminapi-{ENV_ID}.<플랫폼 도메인>'
 `verify.sh` 는 이 동작을 직접 시험합니다(「외부 주소 자동」). 화면·기록에 보여 주는 주소와 Kong 의 `admin_gui_url` 은
 `KONG_POC_ENV_ID` → 플랫폼의 `INFER_SERVICE_ID`(빌드한 새 환경의 서비스 ID, 소문자로) → 파드 이름의 `영문 3자 + 숫자 10자리` 조각
 (없으면 `unknown`) 순서로 채웁니다. Manager 화면 동작에는 쓰이지 않지만, **관리자 가입 링크·비밀번호 재설정 링크의 주소**가
-이 값으로 만들어집니다 — 링크의 주소가 브라우저의 Manager 주소와 다르면 앞부분(`https://manager-…`)만 바꿔 열면 됩니다.
+이 값으로 만들어집니다 - 링크의 주소가 브라우저의 Manager 주소와 다르면 앞부분(`https://manager-…`)만 바꿔 열면 됩니다.
 
-**새 환경이 뜬 뒤 (개발 파드에서)** — 새 환경에 터미널이 없어도 유지 폴더를 거쳐 일을 맡길 수 있습니다.
+**새 환경이 뜬 뒤 (개발 파드에서)** - 새 환경에 터미널이 없어도 유지 폴더를 거쳐 일을 맡길 수 있습니다.
 
 ```bash
 bash remote.sh status     # 새 환경의 프로세스·라우트
@@ -486,17 +486,17 @@ bash set-env.sh FEATURE_SEMANTIC_CACHE on && bash remote.sh apply      # 설정�
 bash set-license.sh <새 라이선스 파일> && bash remote.sh restart         # 라이선스 교체
 ```
 
-- 새 환경에서는 저장소가 다른 곳(예: `/infer-model/<모델>/source/flow/kong-ai-gateway-poc`)에 놓여도 됩니다 — 스크립트가 자기 위치를 찾습니다.
+- 새 환경에서는 저장소가 다른 곳(예: `/infer-model/<모델>/source/flow/kong-ai-gateway-poc`)에 놓여도 됩니다 - 스크립트가 자기 위치를 찾습니다.
 - 유지 폴더도 다른 경로로 붙어도 됩니다. ① 저장소 `.env` 의 `DATA_DIR` → ② 바로가기를 푼 실제 위치(`DATA_DIR_REAL`) → ③ 이 환경에 붙은 저장소(마운트)
   아래에서 같은 폴더(`…/data/kong-poc/settings.env`) 순서로 찾고, 경로가 바뀌었으면 Kong 설정 속 요청 로그 위치도 맞춥니다.
-  끝내 못 찾으면 `run.sh` 가 **환경 정보**(호스트 이름·사용자·sudo·외부 접속·붙은 저장소·폴더 목록)를 남기고 멈춥니다 — 그 기록으로 다음 조치를 정합니다.
+  끝내 못 찾으면 `run.sh` 가 **환경 정보**(호스트 이름·사용자·sudo·외부 접속·붙은 저장소·폴더 목록)를 남기고 멈춥니다 - 그 기록으로 다음 조치를 정합니다.
   위치를 직접 줄 때는 `KONG_POC_DATA_DIR=<붙은 경로>/kong-poc bash run.sh`.
 - 개발 파드에서 `start.sh` 를 실행하면 「다른 환경이 이 유지 폴더로 실행 중」이라며 멈춥니다(실행 기록 `run.lock`). 개발 파드에서
   다시 띄우려면 새 환경을 먼저 내리세요. 새 환경이 없어졌는데 기록만 남았으면 90초 뒤 이어받습니다.
 - 다시 빌드하면 플랫폼이 새 환경을 띄울 때 이전 환경이 아직 내려가는 중일 수 있습니다. 새 환경의 `run.sh` 는 실패하지 않고
   이전 환경이 실행 기록을 지우거나(정상 종료) 90초 넘게 갱신하지 않을 때까지 기다렸다가(최대 10분) 이어받습니다.
   이전 환경이 `exec bash run.sh` 로 떠 있었다면 종료 신호에 DB 까지 정상 종료하고 기록을 지우므로 바로 이어받습니다.
-- 코드(`conf/*.yaml`·스크립트·플러그인)를 바꿔도 다시 빌드하지 않아도 됩니다 — 아래 「빌드 없이 코드 바꾸기」. 설정 값(`settings.env`)만
+- 코드(`conf/*.yaml`·스크립트·플러그인)를 바꿔도 다시 빌드하지 않아도 됩니다 - 아래 「빌드 없이 코드 바꾸기」. 설정 값(`settings.env`)만
   바꾸는 건 `bash remote.sh apply`(키·라이선스는 `restart`).
 - 처음 만든 DB(빈 유지 폴더)로 뜨면 `run.sh` 가 요구사항 설정까지 한 번 적용합니다. 이미 설정이 있으면 건드리지 않습니다
   (Manager 에서 바꾼 값을 지키려고).
@@ -517,8 +517,8 @@ bash remote.sh rollback    # 문제가 있으면 바로 전 코드로 (처음 up
 |---|---|
 | update 를 한 적이 없음 | 빌드한 스냅샷 |
 | update 뒤 | 유지 폴더의 사본 `code/` (바로 전 것은 `code.prev/`) |
-| 사본이 세 번 연속 기동에 실패함 | 빌드한 스냅샷 — `bash remote.sh status` 가 알려 줌. 고쳐서 update, 또는 rollback |
-| 사본을 넣은 뒤 다시 빌드함 | 빌드한 코드 — 사본은 `code.prev/` 로 비켜 두므로 rollback 으로 돌아감 |
+| 사본이 세 번 연속 기동에 실패함 | 빌드한 스냅샷 - `bash remote.sh status` 가 알려 줌. 고쳐서 update, 또는 rollback |
+| 사본을 넣은 뒤 다시 빌드함 | 빌드한 코드 - 사본은 `code.prev/` 로 비켜 두므로 rollback 으로 돌아감 |
 
 - update 는 넣기 전에 스크립트 문법과 설치 파일 체크섬을 확인하고, 틀리면 넣지 않습니다. 설치 파일(`pkgs/`)이 그대로면 바로 전 사본과
   하드 링크로 나눠 써서 거의 복사하지 않습니다. `.git`·`data/`·`secrets/` 는 넣지 않습니다.
@@ -531,10 +531,10 @@ bash remote.sh rollback    # 문제가 있으면 바로 전 코드로 (처음 up
 
 ---
 
-## 모니터링 — Grafana (3-3)
+## 모니터링 - Grafana (3-3)
 
-`MONITORING=on`(기본)이면 파드 안에 **Prometheus**(Kong 지표 `:8100` 를 15초마다 모으고 `alerts/kong-alerts.yml` 경보 규칙을 계산)와
-**Grafana 12.4.12** 가 뜹니다. 화면은 **프록시 주소의 `/grafana/`** 입니다 — 플랫폼이 이미 열어 준 8000 주소를 쓰므로 포트를 새로 열지 않습니다.
+`MONITORING=on`(기본)이면 파드 안에 **Prometheus**(Kong 지표 `:8100` 를 15초마다 모으고 `alerts/kong-alerts.yml` 알림 규칙을 계산)와
+**Grafana 12.4.12** 가 뜹니다. 화면은 **프록시 주소의 `/grafana/`** 입니다 - 플랫폼이 이미 열어 준 8000 주소를 쓰므로 포트를 새로 열지 않습니다.
 
 ```
 https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_ADMIN_PASSWORD (비어 있으면 처음 기동할 때 만들어 적음)
@@ -542,35 +542,35 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 | 대시보드 | 내용 |
 |---|---|
-| Kong AI Gateway PoC (첫 화면) | 고른 기간의 요청 · LLM 요청 · 토큰 · 차단 비율 · 게이트웨이 오버헤드(전체 · 정상 요청만) · 라이선스 남은 날, 모델 · 사용자별 요청 수와 토큰, 사용자별 토큰 한도의 남은 양(2-4 토큰 한도를 켰을 때만), 응답 결과(통과 · 정책 차단 · 오류), 사용자별 예상 비용, 경로별 요청, 지연(Kong 자체 · 답변 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 에이전트(호출 계정 × 대상 에이전트 · 최근 A2A 작업). 막대를 누르면 그 사용자 · 모델의 요청 기록 |
+| Kong AI Gateway PoC (첫 화면) | 요청 · LLM 요청 · 토큰 · 차단율 · 게이트웨이 오버헤드(전체 · 성공 요청) · 라이선스 잔여 기간, 모델 · Consumer별 요청 수와 토큰, Consumer별 토큰 한도 잔여량(토큰 한도 적용 시), 응답 코드 분포, Consumer별 예상 비용, Route별 요청 수, 지연(Kong 처리 · 응답 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 활성 알림, 에이전트(목록 · 호출 관계도 · 가용률 · 상태 · 호출 현황 · A2A 작업 · 최종 사용자(SSO) 호출 현황), 월별 · Consumer별 사용량. 막대를 선택하면 해당 Consumer · 모델의 요청 기록 |
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
-| 요청 기록 — 질문 · 답변 | 요청 한 건이 한 줄 — 시각 · 사용자 · 경로 · 모델 · 상태 · 차단 사유 · A2A(메서드 · 작업 상태) · 토큰 · 지연 · 질문 · 답변 · 추적 ID. 질문이나 답변을 누르면 아래에 전문, 추적 ID 를 누르면 같은 ID 로 이어진 호출만. 사용자 · 모델 · 경로 · 상태 · 글자(추적 ID 포함)로 고름 |
+| 요청 기록 - 프롬프트 · 응답 | 요청 단위 목록 - 시각 · Consumer · 최종 사용자(SSO) · Route · 모델 · 상태 코드 · 차단 · 오류 사유 · A2A(메서드 · 작업 상태) · 토큰 · 지연 · 프롬프트 · 응답 · 추적 ID. 프롬프트 · 응답을 선택하면 하단에 전문, 추적 ID 를 선택하면 연결된 호출만 조회. Consumer · 모델 · Route · 상태 코드 · 검색어(추적 ID 포함)로 필터, 「표시 열」로 열 선택 |
 
 - Prometheus 는 Ubuntu 저장소에서 apt 로, Grafana 는 저장소 `pkgs/` 의 조각을 합쳐 설치합니다(`install.sh`). 자세한 것은 `addons/monitoring/README.md`.
 - Grafana 화면 요청은 요청 로그·지표에 남기지 않습니다(`conf/80-monitoring.yaml`).
 - **다시 빌드해도 그래프가 이어집니다.** Prometheus 는 로컬 디스크(`~/.kong-poc/prometheus`)에서 돌고(저장소가 NFS 를 지원하지 않음),
-  유지 폴더의 `prometheus/` 에 사본을 둡니다 — 완성된 블록(2시간 단위)은 5분마다, 아직 블록이 되지 않은 최근 기록은 종료할 때
+  유지 폴더의 `prometheus/` 에 사본을 둡니다 - 완성된 블록(2시간 단위)은 5분마다, 아직 블록이 되지 않은 최근 기록은 종료할 때
   (종료 신호 → `stop.sh`, Prometheus 가 내려간 뒤). 새 환경이 뜰 때 로컬 기록이 그 사본에서 이어진 게 아니면 사본으로 되살립니다
-  (`prometheus.id` 로 가림 — 바꾸기 전 로컬 기록은 `~/.kong-poc/prometheus.prev` 에 한 벌).
+  (`prometheus.id` 로 가림 - 바꾸기 전 로컬 기록은 `~/.kong-poc/prometheus.prev` 에 한 벌).
   종료 신호 없이 끊기면 최근 기록(최대 약 3시간)은 빠집니다. 사본 상태는 `bash status.sh`(지표 사본 줄) · `verify.sh` 3-3 · `logs/prometheus-copy.log`.
 - 보관은 `PROM_RETENTION`(15d) · `PROM_RETENTION_SIZE`(2GB) 가운데 먼저 닿는 쪽까지(`bash set-env.sh PROM_RETENTION 30d` 뒤 `bash remote.sh restart`).
   사본을 두지 않으려면 `PROM_PERSIST=off`(다시 빌드하면 처음부터). Grafana 화면에서 바꾼 설정은 로컬 디스크라 빌드하면 사라집니다.
 - **건수 · 토큰 · 비용은 요청 기록(DB) 기준**입니다. Prometheus 지표는 새로 생긴 사용자 · 응답 코드의 첫 요청을 세지 못해 요청이 드문 PoC에서는
-  적게 나오기 때문입니다(재현 환경 6시간: 요청 기록 102건 · 지표 61건). 지연 · 라이선스는 Prometheus 지표입니다. 의미 기반 가드 · 캐시가 부르는
-  임베딩 호출은 LLM 패널에서 뺍니다 — `start.sh` 가 대시보드를 로컬 디스크(`~/.kong-poc/grafana-dashboards`)로 옮기며 `DECK_EMBED_MODEL` 을 채웁니다.
+  적게 나오기 때문입니다(재현 환경 6시간: 요청 기록 102건 · 지표 61건). 지연 · 라이선스는 Prometheus 지표입니다. 의미 기반 가드 · 캐시가 호출하는
+  임베딩 호출은 LLM 패널에서 뺍니다 - `start.sh` 가 대시보드를 로컬 디스크(`~/.kong-poc/grafana-dashboards`)로 옮기며 `DECK_EMBED_MODEL` 을 채웁니다.
 - **요청 기록**(`addons/reqlog`): 요청 로그(`logs/audit.log`)를 10초마다 같은 PostgreSQL 의 DB `reqlog` 로 옮겨 「요청 기록」 대시보드가 읽습니다.
-  질문 · 답변은 Kong Manager 에서 대상(Target)의 **Log payloads** 를 켠 요청만 남습니다(스트리밍 답변도 이어 붙여 남음).
-  요청마다 **접속 IP**(Kong 이 받은 접속 주소 — 앞단 프록시를 거치면 프록시 IP)와 **원래 IP**(프록시가 붙여 준 `X-Forwarded-For`,
-  없으면 `-`)도 남아 요청 목록 · 선택한 요청에 보입니다. 원래 IP 는 이 칸을 더한 뒤 들어온 요청부터 남습니다.
-  막히거나 실패한 요청(4xx · 5xx)은 **차단 · 오류 사유**(응답 본문의 메시지 — 예: `request blocked by ACL`, `No API key found in request`)가,
+  프롬프트 · 응답은 Kong Manager 에서 Target 의 **Log payloads** 를 활성화한 요청만 기록됩니다(스트리밍 응답은 조각을 합쳐 기록).
+  요청마다 **클라이언트 IP**(Kong 이 수신한 접속 주소 - 앞단 프록시를 거치면 프록시 IP)와 **원 IP(XFF)**(프록시가 붙인 `X-Forwarded-For`,
+  없으면 `-`)가 기록되어 요청 목록 · 선택 요청 상세에 표시됩니다. 원 IP 는 이 열을 추가한 이후 요청부터 기록됩니다.
+  막히거나 실패한 요청(4xx · 5xx)은 **차단 · 오류 사유**(응답 본문의 메시지 - 예: `request blocked by ACL`, `No API key found in request`)가,
   모든 요청은 **Kong ms**(그 가운데 Kong 이 쓴 시간)가 남습니다. 사유와 토큰 한도의 남은 양은 전역 플러그인 `post-function`
   (`block-message`)이 만들어 남기므로, 이 플러그인을 고친 판을 적용한 뒤 들어온 요청부터 보입니다.
-  DB 에는 `REQLOG_KEEP_DAYS`(30)일만 두고 지난 것은 지웁니다 — 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
+  DB 에는 `REQLOG_KEEP_DAYS`(30)일만 두고 지난 것은 지웁니다 - 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
   Grafana 는 읽기 전용 계정 `reqlog_reader`(비밀번호 `REQLOG_DB_PASSWORD`, 처음 기동할 때 만듦)로 읽습니다.
-  질문 · 답변 원문이 그대로 쌓이므로, 볼 사람(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
-- **팀 Grafana** — `GRAFANA_TEAMS="it-infra agentic-ai:default"`(「이름[:워크스페이스]」) 를 넣고 다시 띄우면(`bash remote.sh restart`) 팀마다
-  Grafana 조직과 보기 전용 계정(로그인 = 이름, 비밀번호 = 설정 파일의 `GRAFANA_TEAM_<이름>_PASSWORD` — 없으면 만들어 적음)이 생기고,
-  대시보드 3개가 그 워크스페이스 데이터만 보여 준다. 지표는 쿼리마다 `workspace="<워크스페이스>"` 를 붙이고(요청 · 지연 · 대역폭 · AI 지표 —
+  프롬프트 · 응답 원문이 그대로 저장되므로 조회 권한(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
+- **팀 Grafana** - `GRAFANA_TEAMS="it-infra agentic-ai:default"`(「이름[:워크스페이스]」) 를 넣고 다시 띄우면(`bash remote.sh restart`) 팀마다
+  Grafana 조직과 보기 전용 계정(로그인 = 이름, 비밀번호 = 설정 파일의 `GRAFANA_TEAM_<이름>_PASSWORD` - 없으면 만들어 적음)이 생기고,
+  대시보드 3개가 그 워크스페이스 데이터만 보여 준다. 지표는 쿼리마다 `workspace="<워크스페이스>"` 를 붙이고(요청 · 지연 · 대역폭 · AI 지표 - 
   연결 수 · 메모리 같은 노드 전체 지표는 그대로), 요청 기록은 그 워크스페이스 행만 읽히는 DB 계정(`reqlog_t_<이름>`, 행 단위 제한)으로 읽는다.
   admin 은 기존 조직에서 전부 본다. 지표 저장소(Prometheus)는 사용자별로 막지 못해 팀 계정은 화면에서 쿼리를 쓰지 못하는 보기 전용으로만 둔다.
   Grafana 기록은 로컬 디스크라 새 환경이 뜰 때마다 `start.sh` 가 다시 맞춘다(`addons/monitoring/grafana-teams.py`).
@@ -580,12 +580,12 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 | 로그 | 내용 | 저장 위치 | 보관 |
 |---|---|---|---|
-| **요청 상세 로그** | 모든 호출 1건 = JSON 한 줄 — 사용자(부서 키), 경로·서비스, 상태, 단계별 지연(Kong·LLM), 모델, 토큰 수, 추적 ID, 접속 IP, 마스킹 건수, 클라이언트가 보낸 모델 이름 | `logs/audit.log` (+ 중앙 저장소 `DECK_LOG_HTTP_URL`) | 삭제할 때까지 |
-| **관리 감사로그** | Admin API·Kong Manager 로 설정을 바꾼 이력 — 누가, 언제, 무엇을 (비밀번호 변경 포함) | DB (`audit_requests` — `pgdata/` 와 함께 유지) | 30일 후 자동 삭제 |
+| **요청 상세 로그** | 모든 호출 1건 = JSON 한 줄 - 사용자(부서 키), 경로·서비스, 상태, 단계별 지연(Kong·LLM), 모델, 토큰 수, 추적 ID, 접속 IP, 마스킹 건수, 클라이언트가 지정한 모델 이름 | `logs/audit.log` (+ 중앙 저장소 `DECK_LOG_HTTP_URL`) | 삭제할 때까지 |
+| **관리 감사로그** | Admin API·Kong Manager 로 설정을 바꾼 이력 - 누가, 언제, 무엇을 (비밀번호 변경 포함) | DB (`audit_requests` - `pgdata/` 와 함께 유지) | 30일 후 자동 삭제 |
 | Kong 접속 로그 | 프록시·Admin API·Manager 의 요청 한 줄 기록 (nginx 형식) | `logs/kong-access.log` · `kong-admin-access.log` · `kong-manager-access.log` | 삭제할 때까지 |
 | Kong 오류 로그 | 기동·플러그인 오류·경고 | `logs/kong-error.log` | 삭제할 때까지 |
 
-위치는 데이터 폴더(`DATA_DIR` — 기본 `data/`, 유지 폴더를 지정했으면 `<유지 폴더>/kong-poc/`) 기준입니다.
+위치는 데이터 폴더(`DATA_DIR` - 기본 `data/`, 유지 폴더를 지정했으면 `<유지 폴더>/kong-poc/`) 기준입니다.
 
 **기록하지 않는 것**: 요청·응답 본문(`log_payloads: false`), 사용자 키(`hide_credentials`), 업스트림 인증 헤더, LLM 응답 헤더.
 
@@ -602,10 +602,10 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 ```bash
 bash vectors.sh                                   # 표마다 무엇이 들어 있나 (빌드한 새 환경이면 bash remote.sh vectors)
-bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 가까운 것 3개와 코사인 거리 — 기준보다 작으면 막힘·캐시 적중
+bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 가까운 것 3개와 코사인 거리 - 기준보다 작으면 차단 · 캐시 적중
 ```
 
-`--query` 는 Kong 과 같은 방식으로 임베딩합니다 — 의미 기반 가드는 문장 그대로, 시맨틱 캐시는 마지막 메시지를 `user: 문장` 모양으로
+`--query` 는 Kong 과 같은 방식으로 임베딩합니다 - 의미 기반 가드는 문장 그대로, 시맨틱 캐시는 마지막 메시지를 `user: 문장` 모양으로
 (Kong 3.16 의 `kong/llm/plugin/ctx.lua` 와 `shared-filters/guardrails/utils.lua`). 재현 환경에서 캐시 미리 보기와 실제 `X-Cache-Status` 가
 같았습니다(같은 질문 0.000 Hit · 표현만 바꾼 질문 0.089 Hit · 다른 질문 0.357 Miss). 기준 거리를 고를 때 씁니다.
 
@@ -618,27 +618,27 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 | 확인한 동작 | 대응 |
 |---|---|
 | AI 플러그인의 LLM 주소(`upstream_url`)가 **IP 면** 장애 대체가 되지 않고, 서비스 주소와 다른 호스트로 보내지도 못함. 이름 주소는 정상 | IP 에 이름(`ip-a-b-c-d.kong-poc`)을 붙여 넘기고, 그 이름은 Kong 만 읽는 hosts 파일(`~/.kong-poc/hosts`)에 적음. 시스템 `/etc/hosts` 는 그대로 |
-| 경로 기본값(`response_buffering: true`)이면 SSE 응답을 **다 모아 한 번에** 보냄 — 첫 토큰이 마지막 토큰과 같이 도착 | 채팅·Agent 경로는 `response_buffering: false`. 첫 조각 지연 2ms 안팎 |
-| Kong 기동 직후 처음 20~30번 요청은 몇 ms 더 느림 (워커가 코드를 데우는 중 — 쉬기만 해서는 안 풀리고 요청이 지나가야 풀림) | `verify.sh` 는 지연을 재기 전에 30번 먼저 보낸다 |
+| 경로 기본값(`response_buffering: true`)이면 SSE 응답을 **다 모아 한 번에** 보냄 - 첫 토큰이 마지막 토큰과 같이 도착 | 채팅·Agent 경로는 `response_buffering: false`. 첫 조각 지연 2ms 안팎 |
+| Kong 기동 직후 처음 20~30번 요청은 몇 ms 더 느림 (워커가 코드를 데우는 중 - 쉬기만 해서는 안 풀리고 요청이 지나가야 풀림) | `verify.sh` 는 지연을 재기 전에 30번 먼저 호출한다 |
 | 의미 기반 가드(`ai-semantic-prompt-guard`)가 vault 로 넣은 벡터 DB 비밀번호를 읽지 못함 (`missing password`) | 벡터 DB(`kong-pgvector`)만 파드 안(127.0.0.1)에서 비밀번호 없이 접속. Kong DB 는 계속 비밀번호 |
 | Kong 기본 PII 서비스(`ai-sanitizer` + PII 컨테이너)는 한국 개인정보 형식을 거의 못 잡고 컨테이너가 필요 | 4-1 은 이 번들 전용 플러그인 `pii-masking`(정규식, `addons/kong-plugins`), 문맥 판정은 PII 가드(`addons/pii-guard`) |
 | `ai-custom-guardrail` 은 차단(block)만 하고 문장 일부를 바꾸지 못함 | 4-4 는 표준 문구로 대체, 4-5 는 이 번들 전용 플러그인 `response-masking` 으로 가림 |
-| 요청 본문에 `model` 이 있으면 설정과 다른 이름은 400(`cannot use own model`), **같은 이름이어도 장애 대체가 일어나지 않음** (OpenAI SDK 는 항상 보냄) | 채팅 전처리(`00-base.yaml` 의 `chat-preprocess`)가 목록 밖 이름을 지움 — 끄지 말 것. 이름을 고른 요청은 별칭 대상(`model_alias`)이 받음 |
-| 같은 이름의 플러그인은 요청마다 **하나만** 돈다 — 가장 좁은 범위(계정 > 경로 > 서비스 > 전역)가 이김. 경로에 `pre-function` 을 붙이면 전역 `pre-function`(채팅 전처리)이 돌지 않음 | 마스킹(4-1·4-5)을 이 번들 전용 플러그인으로 따로 둠 |
+| 요청 본문에 `model` 이 있으면 설정과 다른 이름은 400(`cannot use own model`), **같은 이름이어도 장애 대체가 일어나지 않음** (OpenAI SDK 는 항상 보냄) | 채팅 전처리(`00-base.yaml` 의 `chat-preprocess`)가 목록 밖 이름을 지움 - 끄지 말 것. 이름을 고른 요청은 별칭 대상(`model_alias`)이 받음 |
+| 같은 이름의 플러그인은 요청마다 **하나만** 돈다 - 가장 좁은 범위(계정 > 경로 > 서비스 > 전역)가 이김. 경로에 `pre-function` 을 붙이면 전역 `pre-function`(채팅 전처리)이 돌지 않음 | 마스킹(4-1·4-5)을 이 번들 전용 플러그인으로 따로 둠 |
 | 의미 기반 답변 가드가 막으면 400 `bad response`(공식 문서는 403) · 켜 두면 스트리밍 요청에도 한 번에 답함 | 전역 `block-message` 가 400 `bad response` 를 표준 문구로 바꿈 |
 | decK 는 새것을 먼저 만들고 옛것을 지움 → 이름 있는 플러그인의 붙는 곳(서비스 ↔ 경로)을 바꾸면 409(이름 중복) | `apply-config.sh` 가 그런 플러그인만 먼저 지움 |
 | curl 로 큰 파일을 보내면 `Expect: 100-continue` 때문에 상한 초과가 413 이 아니라 417(화면엔 400)로 보임 | 정상 거절. 확인할 때는 `-H 'Expect:'` |
 | AI A2A Proxy 는 Agent Card 속 주소를 **요청의 Host + Kong 포트**(예: `http://<호스트>:8000/agents/c`)로 바꿈. 앞단의 `X-Forwarded-*` 는 `trusted_ips` 에 든 주소에서 온 것만 씀 | 설정 파일 `TRUSTED_IPS` → `KONG_TRUSTED_IPS` (기본 비움). 넣으면 `https://<외부 주소>/agents/c` |
 | `kong reload` 는 지금 떠 있는 설정(`.kong_env`)을 바탕으로 읽어, 환경변수를 지운 설정(예: `trusted_ips`)은 그대로 남음 | `TRUSTED_IPS` 를 바꾸면 다시 시작(`bash stop.sh && bash start.sh`) |
 | 능동 상태 점검(주기적으로 대상을 찔러 봄)은 **Upstream 에만** 있고 Gateway Service 에는 점검 설정이 없음. Upstream 기본값은 점검 간격 0(점검 안 함) · `https_verify_certificate: true` · 404 를 장애로 봄 | 에이전트를 Upstream + Target 으로 바꾸고 간격 · 실패 횟수를 넣음. 인증서 검사는 서비스와 같게 끔, 점검 경로는 넣을 때만 HTTP(없으면 TCP) |
-| AI Proxy Advanced 의 대상(LLM)에는 능동 점검 설정이 없음 — 실패한 요청 수로 대상을 잠시 빼는 서킷 브레이커(`balancer.max_fails` · `fail_timeout`, `max_fails` 기본 0)만 | LLM 은 재시도 · 다음 대상으로 넘김(1-4)으로 장애를 넘김. 상태 점검 화면은 에이전트에만 |
+| AI Proxy Advanced 의 대상(LLM)에는 능동 점검 설정이 없음 - 실패한 요청 수로 대상을 잠시 빼는 서킷 브레이커(`balancer.max_fails` · `fail_timeout`, `max_fails` 기본 0)만 | LLM 은 재시도 · 다음 대상으로 넘김(1-4)으로 장애를 넘김. 상태 점검 화면은 에이전트에만 |
 
 ---
 
 ## 검증
 
-고객 파드와 같은 조건으로 재현한 환경 — Ubuntu 22.04 · uid 3000 · sudo · JupyterLab + jupyter-server-proxy ·
-4 vCPU / 8 GB · 8080 사용 중 · Kong·Release·PGDG·OpenAI 도메인 차단 — 에서 Kong 3.16.0.0 으로 확인했습니다.
+고객 파드와 같은 조건으로 재현한 환경 - Ubuntu 22.04 · uid 3000 · sudo · JupyterLab + jupyter-server-proxy ·
+4 vCPU / 8 GB · 8080 사용 중 · Kong·Release·PGDG·OpenAI 도메인 차단 - 에서 Kong 3.16.0.0 으로 확인했습니다.
 
 | 항목 | 결과 |
 |---|---|
@@ -648,8 +648,8 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 | Kong Manager 와 같이 쓰기 | Manager 에서 마스킹 켬·한도 숫자 바꿈·계정 긴급 차단 켬 → 적용 → 마스킹은 설정 파일에 적혀 유지, 한도는 되돌아감(목록·백업), 긴급 차단은 그대로 |
 | 점검을 중간에 끊음 | Ctrl+C·종료 신호는 그 자리에서, 강제 종료(kill -9)는 다음 점검이 먼저 처음 상태로 되돌림 |
 | 빌드 없이 코드 갱신 (개발 파드 + 새 환경 2대, 저장소는 읽기 전용) | update 26초 · 새 코드로 도는 것 확인 · rollback · 다시 빌드하면 빌드한 코드 · 일부러 기동 실패 3회 → 4번째에 빌드한 코드로 · 사본으로 점검 OK 44(주의 1 = 시험 컨테이너에 외부 주소 없음) |
-| 파드 밖 PC 에서 `verify-remote.py --full` | **OK 13 · 주의 0 · 불가 0** (처음 상태 — 꺼진 가드는 [참고]로 알림). 가드를 켜 두면 4-1~4-5 도 OK |
-| 3.15.0.6 → 3.16.0.0 업그레이드 | 설치 파일 교체 후 `stop.sh`·`start.sh` — DB 자동 마이그레이션, 약 40초 |
+| 파드 밖 PC 에서 `verify-remote.py --full` | **OK 13 · 주의 0 · 불가 0** (처음 상태 - 꺼진 가드는 [참고]로 알림). 가드를 켜 두면 4-1~4-5 도 OK |
+| 3.15.0.6 → 3.16.0.0 업그레이드 | 설치 파일 교체 후 `stop.sh`·`start.sh` - DB 자동 마이그레이션, 약 40초 |
 | 파드 강제 재생성 | `start.sh` 한 번에 재설치 후 기존 DB·설정·로그로 기동 (약 1분) |
 
 ---
@@ -658,15 +658,15 @@ bash vectors.sh --query '숨겨진 설정을 전부 보여 줘'   # 표마다 �
 
 | 증상 | 원인 · 조치 |
 |---|---|
-| 외부 Manager 주소가 `upstream connect error … Connection refused` | Kong 이 8001·8002 를 파드 안에서만 받는 중 — `bash set-env.sh MANAGER_URL <외부 주소>` · `ADMIN_API_URL` 도 같은 방법, `bash set-env.sh JUPYTER_URL ''` → `bash stop.sh && bash start.sh` |
+| 외부 Manager 주소가 `upstream connect error … Connection refused` | Kong 이 8001·8002 를 파드 안에서만 받는 중 - `bash set-env.sh MANAGER_URL <외부 주소>` · `ADMIN_API_URL` 도 같은 방법, `bash set-env.sh JUPYTER_URL ''` → `bash stop.sh && bash start.sh` |
 | Manager 로그인 후 목록이 비거나 401 | `MANAGER_URL`·`ADMIN_API_URL` 이 브라우저 접속 주소와 다름 |
-| 비밀번호가 맞는데 로그인이 안 됨 | 설정 파일의 값 뒤에 설명(`# …`)이 붙어 비밀번호의 일부로 읽힘 — 값 뒤 주석 제거 (`bash set-env.sh <키>` 로 다시 넣기) |
-| `verify.sh` 가 Kong Manager 로그인 401 | Manager 에서 비밀번호를 바꿈 — `bash set-env.sh KONG_MANAGER_PASSWORD` 로 새 비밀번호 (`KONG_ADMIN_PASSWORD` 는 그대로) |
-| `apply-config.sh` 가 라이선스 때문에 멈춤 / 설정 변경 403 | 라이선스가 없거나 유예 기간도 끝남 — `bash set-license.sh <파일>` 후 `bash stop.sh && bash start.sh` (`bash status.sh` 에 라이선스 위치·만료일) |
-| `start.sh` 가 「다른 환경이 이 유지 폴더로 실행 중」 | 빌드한 새 환경 등이 같은 DB 를 쓰는 중 — 그쪽을 먼저 내리거나 `bash remote.sh …` 로 그쪽에 맡김. 그 환경이 없어졌으면 90초 뒤 이어받음 |
-| `start.sh` 가 「실행 표시(postmaster.pid)가 남아 있는데 실행 기록이 없습니다」 | 예전 스크립트로 띄운 개발 파드가 아직 돌 수 있음 — 그 파드에서 `bash stop.sh`. 아무 데서도 안 도는 게 확실하면 `FORCE_UNLOCK=1 bash start.sh` |
-| `/poc` 에 `"stream": true` 요청이 400 `response streaming is not enabled` | 답변 검사(`FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK`)가 켜져 있음 — 정상 동작 (의미 기반 답변 가드는 400 대신 한 번에 답함) |
-| 적용했더니 Manager 에서 바꾼 값이 돌아감 | 설정 파일이 기준인 값 — 적용 직전으로 되살리기: `bash restore-config.sh kong-before-apply-<시각>.json`(새 환경은 `bash remote.sh restore …`). 계속 쓸 값은 설정 파일로 옮김 (`/poc` 스위치·긴급 차단은 유지됨) |
-| LLM 호출이 503 `name resolution failed` | LLM 주소의 호스트 이름을 파드에서 찾을 수 없음 — 주소 확인. IP 를 바꿨다면 `bash apply-config.sh` 가 Kong 에 새 이름을 반영 |
+| 비밀번호가 맞는데 로그인이 안 됨 | 설정 파일의 값 뒤에 설명(`# …`)이 붙어 비밀번호의 일부로 읽힘 - 값 뒤 주석 제거 (`bash set-env.sh <키>` 로 다시 넣기) |
+| `verify.sh` 가 Kong Manager 로그인 401 | Manager 에서 비밀번호를 바꿈 - `bash set-env.sh KONG_MANAGER_PASSWORD` 로 새 비밀번호 (`KONG_ADMIN_PASSWORD` 는 그대로) |
+| `apply-config.sh` 가 라이선스 때문에 멈춤 / 설정 변경 403 | 라이선스가 없거나 유예 기간도 끝남 - `bash set-license.sh <파일>` 후 `bash stop.sh && bash start.sh` (`bash status.sh` 에 라이선스 위치·만료일) |
+| `start.sh` 가 「다른 환경이 이 유지 폴더로 실행 중」 | 빌드한 새 환경 등이 같은 DB 를 쓰는 중 - 그쪽을 먼저 내리거나 `bash remote.sh …` 로 그쪽에 맡김. 그 환경이 없어졌으면 90초 뒤 이어받음 |
+| `start.sh` 가 「실행 표시(postmaster.pid)가 남아 있는데 실행 기록이 없습니다」 | 예전 스크립트로 띄운 개발 파드가 아직 돌 수 있음 - 그 파드에서 `bash stop.sh`. 아무 데서도 안 도는 게 확실하면 `FORCE_UNLOCK=1 bash start.sh` |
+| `/poc` 에 `"stream": true` 요청이 400 `response streaming is not enabled` | 답변 검사(`FEATURE_OUTPUT_GUARD`·`FEATURE_OUTPUT_MASK`)가 켜져 있음 - 정상 동작 (의미 기반 답변 가드는 400 대신 한 번에 답함) |
+| 적용했더니 Manager 에서 바꾼 값이 돌아감 | 설정 파일이 기준인 값 - 적용 직전으로 되살리기: `bash restore-config.sh kong-before-apply-<시각>.json`(새 환경은 `bash remote.sh restore …`). 계속 쓸 값은 설정 파일로 옮김 (`/poc` 스위치·긴급 차단은 유지됨) |
+| LLM 호출이 503 `name resolution failed` | LLM 주소의 호스트 이름을 파드에서 찾을 수 없음 - 주소 확인. IP 를 바꿨다면 `bash apply-config.sh` 가 Kong 에 새 이름을 반영 |
 | `start.sh` 가 설치 중 멈춤 | `data/logs/install.log` 끝부분 확인 (apt 저장소 접속·디스크) |
-| 임베딩 호출이 400 | 임베딩 서버가 `dimensions` 파라미터를 거부 — 게이트웨이의 `/ai/embed` 가 제거하므로 그 경로를 쓰는지 확인 |
+| 임베딩 호출이 400 | 임베딩 서버가 `dimensions` 파라미터를 거부 - 게이트웨이의 `/ai/embed` 가 제거하므로 그 경로를 쓰는지 확인 |

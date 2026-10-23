@@ -7,6 +7,7 @@ A2A 에이전트 경로(AI A2A Proxy)는 메서드 · 작업 ID · 작업 상태
 
   python3 reqlog.py          지금까지 쌓인 것을 옮기고 끝
   python3 reqlog.py --loop   10초마다 옮김 · 1시간마다 보관 기간이 지난 행을 지움 (start.sh 가 띄운다)
+                             ADMIN_PORT · KONG_ADMIN_PASSWORD 가 있으면 1분마다 에이전트 목록도 새로 읽음 (agents.py → agents 표)
 
 환경변수: LOGS · DATA_DIR · RUN_DIR · PG_BIN · PG_PORT · REQLOG_KEEP_DAYS(기본 30)
 어디까지 옮겼는지는 유지 폴더의 state/reqlog.pos(파일 번호 · 위치)에 적는다 — 새 환경이 떠도 이어서 옮긴다.
@@ -31,7 +32,7 @@ COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "mo
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
         "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for",
         "error_message", "kong_latency_ms", "ai_window", "ai_limit", "ai_remaining",
-        "correlation_id", "a2a_method", "a2a_task_id", "a2a_task_state")
+        "correlation_id", "a2a_method", "a2a_task_id", "a2a_task_state", "end_user")
 
 
 def log(*a):
@@ -234,6 +235,7 @@ def row_of(line):
         "a2a_method": rpc.get("method") if isinstance(rpc.get("method"), str) else None,
         "a2a_task_id": rpc.get("task_id") if isinstance(rpc.get("task_id"), str) else None,
         "a2a_task_state": rpc.get("task_state") if isinstance(rpc.get("task_state"), str) else None,
+        "end_user": end_user(req.get("headers"), resp.get("status"), d.get("error_body")),
     }
 
 
@@ -250,6 +252,23 @@ def error_message(body):
         e = j.get("error")
         text = j.get("message") or (e.get("message") if isinstance(e, dict) else e) or body
     return " ".join(str(text).split())[:300] or None
+
+
+def end_user(headers, status, error_body):
+    """SSO 사용자 — SSO(openid-connect)가 토큰의 사용자 이름으로 채우는 X-User (번들 2-1).
+    인증에 실패한 요청(401 · 토큰을 거절한 403 Forbidden)은 Kong 이 채우기 전에 끝나 부르는 쪽이 보낸 값이 남을 수 있어 비운다"""
+    st = as_int(status)
+    if st == 401 or (st == 403 and error_message(error_body) == "Forbidden"):
+        return None
+    return header_value(headers, "x-user")
+
+
+def header_value(headers, name):
+    """요청 헤더 한 개의 값 — 여러 번 오면 첫 값. SSO 를 켠 경로에서는 Kong 이 토큰 값으로 덮어써 부른 쪽이 바꿀 수 없다"""
+    v = (headers or {}).get(name) if isinstance(headers, dict) else None
+    if isinstance(v, list):
+        v = next((x for x in v if x), None)
+    return (str(v).strip()[:200] or None) if v else None
 
 
 def forwarded_for(headers):
@@ -356,9 +375,22 @@ def main():
         clean()
         print("옮김 %d건" % n)
         return
-    log("시작 — %s → DB reqlog (10초마다 · %d일 보관)" % (LOG, KEEP_DAYS))
-    last_clean, moved, last_report = 0.0, 0, time.time()
+    agents = None
+    if os.environ.get("ADMIN_PORT") and os.environ.get("KONG_ADMIN_PASSWORD"):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import agents
+    log("시작 — %s → DB reqlog (10초마다 · %d일 보관)%s" % (LOG, KEEP_DAYS, " · 에이전트 목록 1분마다" if agents else ""))
+    last_clean, moved, last_report, last_agents, agents_err = 0.0, 0, time.time(), 0.0, None
     while True:
+        if agents and time.time() - last_agents > 60:
+            last_agents = time.time()
+            try:
+                psql(agents.replace_sql(agents.collect()))
+                agents_err = None
+            except Exception as e:  # Kong 이 잠깐 내려간 때 등 — 같은 오류는 한 번만 적는다
+                if str(e) != agents_err:
+                    log("에이전트 목록을 읽지 못함 — %s" % e)
+                agents_err = str(e)
         try:
             moved += ingest()
             if time.time() - last_clean > 3600:

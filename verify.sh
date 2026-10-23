@@ -78,7 +78,7 @@ if [ "$DATA_DIR" != "$ROOT/data" ]; then
     if [ -n "$left" ]; then warn "스냅샷에 DB 사본·비밀값이 들어 있음: $left — 다음 빌드 전에 개발 파드의 저장소 폴더에서 지우세요"; fi
   elif [ -n "$left" ]; then
     warn "빌드 전에 저장소 폴더에서 치울 것: $left — 빌드하면 스냅샷에 그대로 들어감 (DB 사본·설정 백업·비밀값. .env 는 bash status.sh 한 번이면 옮겨짐)"
-  else ok "빌드 준비 — 저장소 폴더에 DB 사본·비밀값 없음 (.env 에는 유지 폴더 위치만)"; fi
+  else ok "빌드 준비 - 저장소 폴더에 DB 사본·비밀값 없음 (.env 에는 유지 폴더 위치만)"; fi
   if [ "$ROOT" != "$DATA_DIR/code" ] && [ -f "$DATA_DIR/code/run.sh" ]; then
     if [ -w "$ROOT" ]; then ok "유지 폴더에 코드 사본 있음 — $(code_info "$DATA_DIR/code") · 빌드한 새 환경은 이 코드로 돈다 (갱신: bash remote.sh update)"
     else warn "유지 폴더에 코드 사본이 있는데 빌드 스냅샷으로 돌고 있음 — 사본이 기동에 실패했을 수 있음 (연속 실패 $(cat "$DATA_DIR/code-fails" 2>/dev/null || echo 0)회 · bash remote.sh rollback 또는 고쳐서 update)"; fi
@@ -107,7 +107,7 @@ else bad "PostgreSQL 멈춤 — start.sh"; fi
 if pii_running && [ "$(code "http://127.0.0.1:$PII_PORT/healthz" 3)" = 200 ]; then ok "PII 가드 127.0.0.1:$PII_PORT"
 elif [ -f "$PII_APP" ]; then bad "PII 가드 멈춤 — start.sh"
 else warn "PII 가드 소스 없음 — PII 시나리오 제외"; fi
-if mock_running && [ "$(code "http://127.0.0.1:$MOCK_PORT/healthz" 3)" = 200 ]; then ok "모의 서버 127.0.0.1:$MOCK_PORT (가짜 LLM·OCR·Agent — 결과가 늘 같은 검증용)"
+if mock_running && [ "$(code "http://127.0.0.1:$MOCK_PORT/healthz" 3)" = 200 ]; then ok "모의 서버 127.0.0.1:$MOCK_PORT (모의 LLM · OCR · Agent - 고정 응답 검증용)"
 else warn "모의 서버 멈춤 — 모의 LLM(model=mock-llm)으로 하는 요구사항 점검을 쓸 수 없음 (bash start.sh)"; fi
 if kong_up; then
   c_no=$(code "http://127.0.0.1:$ADMIN_PORT/services")
@@ -415,7 +415,7 @@ print("OK" if rows == ["team-a-app→agent-a 200", "agent-a→agent-b 403", "age
   fi
   mt=$(curl -s -m 10 "http://127.0.0.1:$STATUS_PORT/metrics")
   if grep -q 'consumer="team-a-app"' <<<"$mt" && grep -q '^kong_ai_llm' <<<"$mt"; then
-    ok "3-3 지표 — :$STATUS_PORT/metrics 에 사용자별 호출·AI 토큰 지표 · 경보 규칙 예시 alerts/kong-alerts.yml"
+    ok "3-3 지표 — :$STATUS_PORT/metrics 에 사용자별 호출·AI 토큰 지표 · 알림 규칙 예시 alerts/kong-alerts.yml"
   else warn "3-3 지표 — 사용자별·AI 지표가 아직 없음 (요청이 있어야 생김) · :$STATUS_PORT/metrics"; fi
   # 3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모으고, Grafana 가 프록시의 /grafana 로 열리는지 (MONITORING=on)
   if mon_on; then
@@ -436,7 +436,7 @@ print("OK" if rows == ["team-a-app→agent-a 200", "agent-a→agent-b 403", "age
       else cp_bad="3-3 지표 기록 사본 — 15분 넘게 고쳐지지 않음 ($LOGS/prometheus-copy.log)"; fi
     fi
     if [ "$up" = 1 ] && [ "$gh" = 200 ] && [ "${nd:-0}" -ge 1 ]; then
-      ok "3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모음(경보 규칙 ${nr:-?}개 계산) · Grafana 프록시 /grafana 200 · 대시보드 ${nd}개${cp_msg}"
+      ok "3-3 모니터링 화면 — Prometheus 가 Kong 지표를 모음(알림 규칙 ${nr:-?}개 계산) · Grafana 프록시 /grafana 200 · 대시보드 ${nd}개${cp_msg}"
       if [ -n "$cp_bad" ]; then warn "$cp_bad"; fi
     else bad "3-3 모니터링 화면 — Prometheus up=${up:-?} · /grafana ${gh} · 대시보드 ${nd:-?}개 (bash status.sh · $LOGS/grafana.log · $LOGS/prometheus.log)"; fi
   fi

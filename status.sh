@@ -32,7 +32,7 @@ if mon_on; then
   if reqlog_on && pg_ready; then   # 요청 로그를 옮겨 둔 DB — Grafana 「요청 기록」 (addons/reqlog)
     r=$(psql_su -d reqlog -F ' ' -c "SELECT count(*), count(*) FILTER (WHERE question IS NOT NULL OR answer IS NOT NULL), coalesce(to_char(max(ts) AT TIME ZONE 'Asia/Seoul', 'MM-DD HH24:MI'), '-') FROM requests" 2>/dev/null) || r=""
     set -- $r
-    if [ -n "$r" ]; then note "요청 기록    ${1}건 (질문 · 답변 ${2}건) · 마지막 ${3} ${4:-} — Grafana 「요청 기록」$(if ! reqlog_running; then echo ' · 옮기는 프로세스가 멈춤 (다시 띄우면 돎)'; fi)"
+    if [ -n "$r" ]; then note "요청 기록    ${1}건 (프롬프트 · 응답 ${2}건) · 마지막 ${3} ${4:-} — Grafana 「요청 기록」$(if ! reqlog_running; then echo ' · 옮기는 프로세스가 멈춤 (다시 띄우면 돎)'; fi)"
     else note "요청 기록    DB 를 읽지 못함 ($LOGS/reqlog.log)"; fi
   fi
 fi

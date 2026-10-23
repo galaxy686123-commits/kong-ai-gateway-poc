@@ -66,7 +66,7 @@ plugins:
         response.headers: "return nil"
 
   # 3-3 지표 — 사용자·라우트별 호출 수·상태·지연·대역폭과 AI 토큰 · 에이전트 상태 점검 결과를 Prometheus 형식으로 낸다.
-  #     수집 주소: http://<파드>:8100/metrics  (경보 규칙 예시는 alerts/kong-alerts.yml)
+  #     수집 주소: http://<파드>:8100/metrics  (알림 규칙 예시는 alerts/kong-alerts.yml)
   - name: prometheus
     config:
       per_consumer: true
