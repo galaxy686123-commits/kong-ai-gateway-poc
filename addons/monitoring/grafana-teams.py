@@ -7,6 +7,8 @@
   조직 이름 = 팀 이름, 로그인 = 팀 이름 — 그 조직의 Viewer 로만 둔다 (다른 조직에 들어 있으면 뺀다)
   데이터 원본: Prometheus(기존과 같은 것) · 요청 기록(그 워크스페이스 행만 읽히는 DB 계정 — reqlog/schema.sql 의 행 단위 제한)
   대시보드: 기존 대시보드를 같은 uid 로 — 지표 쿼리마다 workspace="<워크스페이스>" 를 붙인다. 요청 기록은 DB 가 거른다
+    Upstream 상태 지표(kong_upstream_target_health)는 workspace 라벨이 없어 거를 수 없으므로 그 패널 · 변수는 팀 화면에서 뺀다
+    (다른 워크스페이스의 에이전트 이름 · 상태가 보이지 않게 — 팀 화면의 에이전트 상태는 에이전트 목록의 상태 열, DB 가 거름)
   지표 저장소(Prometheus)는 사용자별로 막지 못한다 → 팀 계정은 보기 전용(화면에서 쿼리를 고치거나 새로 쓰지 못함)
 Grafana 기록은 로컬 디스크라 새 환경이 뜨면 비어 있다 — 뜰 때마다 다시 맞춘다 (여러 번 돌려도 같음).
 """
@@ -70,6 +72,31 @@ def scope(expr, ws):
     return METRIC.sub(rep, expr)
 
 
+# workspace 라벨이 없어 팀별로 거를 수 없는 지표 — 이 지표를 쓰는 패널 · 변수는 팀 화면에서 뺀다
+UNSCOPED = re.compile(r"\bkong_upstream_target_health\b")
+
+
+def drop_unscoped(d):
+    """Upstream 상태 지표를 쓰는 패널(접힌 줄 안 포함) · 변수를 뺀다. 남는 패널은 Grafana 가 위로 당겨 빈자리를 메운다"""
+    def uses(p):
+        return any(UNSCOPED.search(t.get("expr") or "") for t in p.get("targets") or [] if isinstance(t, dict))
+
+    def prune(panels):
+        out = []
+        for p in panels:
+            if isinstance(p.get("panels"), list) and p["panels"]:
+                p["panels"] = prune(p["panels"])
+                if not p["panels"]:
+                    continue                      # 접힌 줄 안의 패널이 모두 빠지면 빈 줄도 뺀다
+            if not uses(p):
+                out.append(p)
+        return out
+    d["panels"] = prune(d.get("panels") or [])
+    tl = (d.get("templating") or {}).get("list")
+    if isinstance(tl, list):
+        d["templating"]["list"] = [v for v in tl if not UNSCOPED.search("%s %s" % (v.get("query") or "", v.get("definition") or ""))]
+
+
 def walk(o, ws):
     """패널 쿼리(expr) · 변수 쿼리(query · definition 의 kong_ 지표)에 워크스페이스를 붙인다. 요청 기록 SQL(rawSql)은 그대로"""
     if isinstance(o, dict):
@@ -112,6 +139,7 @@ def put_dashboards(org, ws):
         d = json.loads(f.read_text(encoding="utf-8"))
         d.pop("id", None)
         d.pop("version", None)
+        drop_unscoped(d)
         walk(d, ws)
         d["title"] = "%s (워크스페이스 %s)" % (d.get("title") or f.stem, ws)
         need(*api("POST", "/api/dashboards/db", {"dashboard": d, "folderUid": FOLDER_UID, "overwrite": True,

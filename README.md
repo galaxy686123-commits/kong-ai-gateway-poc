@@ -542,7 +542,7 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
 
 | 대시보드 | 내용 |
 |---|---|
-| Kong AI Gateway PoC (첫 화면) | 요청 · LLM 요청 · 토큰 · 차단율 · 게이트웨이 오버헤드(전체 · 성공 요청) · 라이선스 잔여 기간, 모델 · Consumer별 요청 수와 토큰, Consumer별 토큰 한도 잔여량(토큰 한도 적용 시), 응답 코드 분포, Consumer별 예상 비용, Route별 요청 수, 지연(Kong 처리 · 응답 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 활성 알림, 에이전트(목록 · 호출 관계도 · 가용률 · 상태 · 호출 현황 · A2A 작업 · 최종 사용자(SSO) 호출 현황), 월별 · Consumer별 사용량. 막대를 선택하면 해당 Consumer · 모델의 요청 기록 |
+| Kong AI Gateway PoC (첫 화면) | 요청 · LLM 요청 · 토큰 · 차단율 · 게이트웨이 오버헤드(전체 · 성공 요청) · 라이선스 잔여 기간, 모델 · Consumer별 요청 수와 토큰, Consumer별 토큰 한도 잔여량(토큰 한도 적용 시), 응답 코드 분포, Consumer별 예상 비용, Route별 요청 수, 지연(Kong 처리 · 응답 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 활성 알림, 에이전트(목록 - 호출 수 · 오류(5xx) · 지연 p95 포함 · 호출 관계도 · 가용률 - 헬스 체크를 켠 시간 기준, 비활성은 「비활성(가용률 제외)」 · 상태 · 상태 추이 · 호출 현황 · A2A 작업 · A2A 작업 상태 · A2A 응답 시간 p95 · 최종 사용자(SSO) 호출 현황), 월별 · Consumer별 사용량. 막대를 선택하면 해당 Consumer · 모델의 요청 기록 |
 | Kong (official) | Kong 공식 대시보드(Kong/kong 의 `kong-official.json`, Apache-2.0)에서 데이터 원본만 연결 |
 | 요청 기록 - 프롬프트 · 응답 | 요청 단위 목록 - 시각 · Consumer · 최종 사용자(SSO) · Route · 모델 · 상태 코드 · 차단 · 오류 사유 · A2A(메서드 · 작업 상태) · 토큰 · 지연 · 프롬프트 · 응답 · 추적 ID. 프롬프트 · 응답을 선택하면 하단에 전문, 추적 ID 를 선택하면 연결된 호출만 조회. Consumer · 모델 · Route · 상태 코드 · 검색어(추적 ID 포함)로 필터, 「표시 열」로 열 선택 |
 
@@ -572,6 +572,8 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   Grafana 조직과 보기 전용 계정(로그인 = 이름, 비밀번호 = 설정 파일의 `GRAFANA_TEAM_<이름>_PASSWORD` - 없으면 만들어 적음)이 생기고,
   대시보드 3개가 그 워크스페이스 데이터만 보여 준다. 지표는 쿼리마다 `workspace="<워크스페이스>"` 를 붙이고(요청 · 지연 · 대역폭 · AI 지표 - 
   연결 수 · 메모리 같은 노드 전체 지표는 그대로), 요청 기록은 그 워크스페이스 행만 읽히는 DB 계정(`reqlog_t_<이름>`, 행 단위 제한)으로 읽는다.
+  Upstream 상태 지표(`kong_upstream_target_health`)는 workspace 라벨이 없어 거를 수 없으므로, 팀 화면에서는 에이전트 상태(현재) · 가용률 · 상태 추이와
+  「Kong (official)」의 Upstream 줄 · `upstream` 변수를 뺀다 - 팀 화면의 에이전트 상태는 에이전트 목록의 「상태」 열(행 단위 제한으로 걸러짐).
   admin 은 기존 조직에서 전부 본다. 지표 저장소(Prometheus)는 사용자별로 막지 못해 팀 계정은 화면에서 쿼리를 쓰지 못하는 보기 전용으로만 둔다.
   Grafana 기록은 로컬 디스크라 새 환경이 뜰 때마다 `start.sh` 가 다시 맞춘다(`addons/monitoring/grafana-teams.py`).
 - 끄려면 `bash set-env.sh MONITORING off` 뒤 `bash stop.sh && bash start.sh && bash apply-config.sh` (`/grafana` 경로가 지워짐).

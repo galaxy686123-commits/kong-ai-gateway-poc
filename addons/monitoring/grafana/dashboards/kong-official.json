@@ -2562,7 +2562,8 @@
               }
             }
           ],
-          "type": "table"
+          "type": "table",
+          "title": "Upstream target health"
         }
       ],
       "title": "Upstream",
@@ -2694,71 +2695,18 @@
           }
         },
         {
-          "cacheTimeout": null,
-          "colorBackground": false,
-          "colorValue": false,
-          "colors": [
-            "#299c46",
-            "rgba(237, 129, 40, 0.89)",
-            "#d44a3a"
-          ],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "format": "none",
-          "gauge": {
-            "maxValue": 100,
-            "minValue": 0,
-            "show": false,
-            "thresholdLabels": false,
-            "thresholdMarkers": true
-          },
+          "id": 18,
+          "title": "Total Connections",
           "gridPos": {
             "h": 7,
             "w": 8,
             "x": 0,
             "y": 13
           },
-          "id": 18,
-          "interval": null,
-          "links": [],
-          "mappingType": 1,
-          "mappingTypes": [
-            {
-              "name": "value to text",
-              "value": 1
-            },
-            {
-              "name": "range to text",
-              "value": 2
-            }
-          ],
-          "maxDataPoints": 100,
-          "nullPointMode": "connected",
-          "nullText": null,
-          "postfix": "",
-          "postfixFontSize": "50%",
-          "prefix": "",
-          "prefixFontSize": "50%",
-          "rangeMaps": [
-            {
-              "from": "null",
-              "text": "N/A",
-              "to": "null"
-            }
-          ],
-          "sparkline": {
-            "fillColor": "#3f6833",
-            "full": true,
-            "lineColor": "rgb(31, 120, 193)",
-            "show": true
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
           },
-          "tableColumn": "",
           "targets": [
             {
               "exemplar": true,
@@ -2770,85 +2718,55 @@
               "refId": "A"
             }
           ],
-          "thresholds": "",
-          "title": "Total Connections",
-          "type": "singlestat",
-          "valueFontSize": "80%",
-          "valueMaps": [
-            {
-              "op": "=",
-              "text": "N/A",
-              "value": "null"
-            }
-          ],
-          "valueName": "current"
-        },
-        {
-          "cacheTimeout": null,
-          "colorBackground": false,
-          "colorValue": false,
-          "colors": [
-            "#299c46",
-            "rgba(237, 129, 40, 0.89)",
-            "#d44a3a"
-          ],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
+          "maxDataPoints": 100,
+          "type": "stat",
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
             "overrides": []
           },
-          "format": "none",
-          "gauge": {
-            "maxValue": 100,
-            "minValue": 0,
-            "show": false,
-            "thresholdLabels": false,
-            "thresholdMarkers": true
-          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 19,
+          "title": "Handled Connections",
           "gridPos": {
             "h": 7,
             "w": 8,
             "x": 8,
             "y": 13
           },
-          "id": 19,
-          "interval": null,
-          "links": [],
-          "mappingType": 1,
-          "mappingTypes": [
-            {
-              "name": "value to text",
-              "value": 1
-            },
-            {
-              "name": "range to text",
-              "value": 2
-            }
-          ],
-          "maxDataPoints": 100,
-          "nullPointMode": "connected",
-          "nullText": null,
-          "postfix": "",
-          "postfixFontSize": "50%",
-          "prefix": "",
-          "prefixFontSize": "50%",
-          "rangeMaps": [
-            {
-              "from": "null",
-              "text": "N/A",
-              "to": "null"
-            }
-          ],
-          "sparkline": {
-            "fillColor": "#3f6833",
-            "full": true,
-            "lineColor": "rgb(31, 120, 193)",
-            "show": true
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
           },
-          "tableColumn": "",
           "targets": [
             {
               "expr": "sum(kong_nginx_connections_total{state=\"handled\", instance=~\"$instance\"})",
@@ -2858,85 +2776,55 @@
               "refId": "A"
             }
           ],
-          "thresholds": "",
-          "title": "Handled Connections",
-          "type": "singlestat",
-          "valueFontSize": "80%",
-          "valueMaps": [
-            {
-              "op": "=",
-              "text": "N/A",
-              "value": "null"
-            }
-          ],
-          "valueName": "current"
-        },
-        {
-          "cacheTimeout": null,
-          "colorBackground": false,
-          "colorValue": false,
-          "colors": [
-            "#299c46",
-            "rgba(237, 129, 40, 0.89)",
-            "#d44a3a"
-          ],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "kong-poc-prometheus"
-          },
+          "maxDataPoints": 100,
+          "type": "stat",
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
             "overrides": []
           },
-          "format": "none",
-          "gauge": {
-            "maxValue": 100,
-            "minValue": 0,
-            "show": false,
-            "thresholdLabels": false,
-            "thresholdMarkers": true
-          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 20,
+          "title": "Accepted Connections",
           "gridPos": {
             "h": 7,
             "w": 8,
             "x": 16,
             "y": 13
           },
-          "id": 20,
-          "interval": null,
-          "links": [],
-          "mappingType": 1,
-          "mappingTypes": [
-            {
-              "name": "value to text",
-              "value": 1
-            },
-            {
-              "name": "range to text",
-              "value": 2
-            }
-          ],
-          "maxDataPoints": 100,
-          "nullPointMode": "connected",
-          "nullText": null,
-          "postfix": "",
-          "postfixFontSize": "50%",
-          "prefix": "",
-          "prefixFontSize": "50%",
-          "rangeMaps": [
-            {
-              "from": "null",
-              "text": "N/A",
-              "to": "null"
-            }
-          ],
-          "sparkline": {
-            "fillColor": "#3f6833",
-            "full": true,
-            "lineColor": "rgb(31, 120, 193)",
-            "show": true
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
           },
-          "tableColumn": "",
           "targets": [
             {
               "expr": "sum(kong_nginx_connections_total{state=\"accepted\", instance=~\"$instance\"})",
@@ -2946,18 +2834,41 @@
               "refId": "A"
             }
           ],
-          "thresholds": "",
-          "title": "Accepted Connections",
-          "type": "singlestat",
-          "valueFontSize": "80%",
-          "valueMaps": [
-            {
-              "op": "=",
-              "text": "N/A",
-              "value": "null"
-            }
-          ],
-          "valueName": "current"
+          "maxDataPoints": 100,
+          "type": "stat",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          }
         }
       ],
       "title": "Nginx",

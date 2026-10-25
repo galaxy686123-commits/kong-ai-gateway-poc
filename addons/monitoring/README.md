@@ -12,7 +12,7 @@
 
 | 대시보드 | 내용 |
 |---|---|
-| **Kong AI Gateway PoC** (첫 화면) | 요청 · LLM 요청 · 토큰 · 차단율 · 게이트웨이 오버헤드(전체 · 성공 요청) · 라이선스 잔여 기간, 모델 · Consumer별 요청 수와 토큰, Consumer별 토큰 한도 잔여량(토큰 한도 적용 시), 응답 코드 분포, Consumer별 예상 비용, Route별 요청 수, 지연(Kong 처리 · 응답 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 활성 알림, 에이전트(목록 · 호출 관계도 · 가용률 · 상태 · 호출 현황 · A2A 작업 · 최종 사용자(SSO) 호출 현황), 월별 · Consumer별 사용량. 막대를 선택하면 해당 Consumer · 모델의 요청 기록. **요청 수 · 토큰 · 비용은 요청 기록(DB)**, 지연 · 라이선스는 Prometheus 기준. 임베딩 모델(`__EMBED_MODEL__` → `start.sh` 가 `DECK_EMBED_MODEL` 로 설정)은 LLM 집계에서 제외 |
+| **Kong AI Gateway PoC** (첫 화면) | 요청 · LLM 요청 · 토큰 · 차단율 · 게이트웨이 오버헤드(전체 · 성공 요청) · 라이선스 잔여 기간, 모델 · Consumer별 요청 수와 토큰, Consumer별 토큰 한도 잔여량(토큰 한도 적용 시), 응답 코드 분포, Consumer별 예상 비용, Route별 요청 수, 지연(Kong 처리 · 응답 검사 · LLM 응답 · TTFT · TPOT), 시맨틱 캐시, 활성 알림, 에이전트(목록 - 호출 수 · 오류(5xx) · 지연 p95 포함 · 호출 관계도 · 가용률 - 헬스 체크를 켠 시간 기준, 비활성은 「비활성(가용률 제외)」 · 상태 · 상태 추이 · 호출 현황 · A2A 작업 · A2A 작업 상태 · A2A 응답 시간 p95 · 최종 사용자(SSO) 호출 현황), 월별 · Consumer별 사용량. 막대를 선택하면 해당 Consumer · 모델의 요청 기록. **요청 수 · 토큰 · 비용은 요청 기록(DB)**, 지연 · 라이선스는 Prometheus 기준. 임베딩 모델(`__EMBED_MODEL__` → `start.sh` 가 `DECK_EMBED_MODEL` 로 설정)은 LLM 집계에서 제외 |
 | **요청 기록 - 프롬프트 · 응답** | 요청 단위 목록 - 시각 · Consumer · 최종 사용자(SSO, X-User) · 모델 · 상태 코드 · 토큰 · 지연 · 프롬프트 · 응답(Target 의 Log payloads 활성 요청만). 상단 「표시 열」에서 목록에 표시할 열 선택(링크 이동 시 유지). 프롬프트 · 응답을 선택하면 하단에 전문, 접힌 행에 요청 · 응답 원문 JSON. 데이터 원본 「요청 기록」(PostgreSQL, 읽기 전용 계정 `reqlog_reader`) |
 | **Kong (official)** | Kong 공식 대시보드 그대로 - 요청·지연·대역폭·연결·메모리. [Kong/kong](https://github.com/Kong/kong/blob/master/kong/plugins/prometheus/grafana/kong-official.json) 의 `kong-official.json`(Apache-2.0, grafana.com 대시보드 7424 와 같은 계열)에서 데이터 원본만 연결. Upstream 줄 = 에이전트 Upstream 의 상태 점검 결과 |
 

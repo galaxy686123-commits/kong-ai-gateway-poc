@@ -113,7 +113,7 @@ for i in $(seq 1 12); do printf '%2d초 ' $i; st; sleep 1; done
 → 첫 줄: 셋 다 `['HEALTHY']`. 장애로 만들면 처음 몇 초는 에이전트가 직접 503(「모의 장애 …」)을 내다가, Kong 이 장애로 본 뒤(10초 안팎)부터는
 에이전트에 보내지 않고 **Kong 이 바로 503** `failure to get a peer from the ring-balancer` 를 돌려줍니다. 되살리면 10초 안팎 뒤 다시 정상 응답입니다.
 
-- Grafana 「Kong AI Gateway PoC」 맨 아래 에이전트 줄 - **에이전트 상태(현재)**(정상 · 장애) · **에이전트 상태 추이**. 지표를 15초마다 모으므로 화면은 조금 늦게 바뀝니다.
+- Grafana 「Kong AI Gateway PoC」 맨 아래 에이전트 줄 - **에이전트 상태(현재)**(정상 · 장애) · **에이전트 상태 추이**(정상 · 장애 · 헬스 체크 비활성) · **에이전트 가용률**(헬스 체크를 켠 시간 기준). 지표를 15초마다 모으므로 화면은 조금 늦게 바뀝니다.
 - 「요청 기록」 경로 `agent-b` - 차단·오류 사유 칸에서 에이전트가 낸 503(「모의 장애 …」)과 Kong 이 낸 503(「failure to get a peer …」)이 구분됩니다.
 - Kong Manager → Upstreams → `agent-b.kong-poc` - 점검 설정과 Target(실제 주소). Target 마다 Mark healthy · Mark unhealthy(손으로 상태를 정함)가 있고,
   지금 상태는 위 Admin API 와 Grafana 에서 봅니다.
@@ -466,6 +466,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "${A[@]}" -d "$(q hello)" $G/it-infra/p
 - Kong Manager 에 팀 계정(워크스페이스 `it-infra` · 역할 `workspace-admin`)으로 로그인 → 워크스페이스 목록에 자기 것만, 다른 워크스페이스 · 권한 설정(Teams)은 열리지 않음.
 - 요청 로그(`bash logs.sh`)와 Grafana 「요청 기록」에 워크스페이스가 남는다 - 요청 로그 `workspace_name`, 표의 「워크스페이스」 칸, 지표의 `workspace` 라벨.
 - 팀 Grafana(`GRAFANA_TEAMS`) - 팀 계정으로 `/grafana/` 로그인 → 대시보드 제목에 「(워크스페이스 it-infra)」, 그 워크스페이스 호출만 보임.
+  에이전트 상태(현재) · 가용률 · 상태 추이 패널은 팀 화면에 없음(Upstream 상태 지표에 workspace 라벨이 없음) - 에이전트 목록의 「상태」 열로 확인.
 - 설정 변경 이력(`bash logs.sh admin`)에 팀 계정의 변경이 경로(`/it-infra/…`)와 함께 남는다.
 
 ## 3. 외부에서 검증 (파드 밖 PC)
