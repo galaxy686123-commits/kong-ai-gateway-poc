@@ -2645,7 +2645,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "헬스 체크(Active health checks)를 켠 시간 중 정상 서버가 하나 이상 있던 비율. 헬스 체크가 비활성인 에이전트는 가용률을 계산하지 않고 「비활성(가용률 제외)」로 표시한다.",
+      "description": "헬스 체크(Active health checks)를 활성화한 시간 중 정상 서버가 하나 이상 있던 비율. 헬스 체크가 비활성인 에이전트는 가용률을 계산하지 않고 「비활성(가용률 제외)」로 표시한다.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -2858,7 +2858,7 @@
       "id": 30,
       "type": "table",
       "title": "에이전트 상태(현재)",
-      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). Upstream 의 헬스 체크 설정(간격 × 연속 실패 · 성공 횟수)대로 판정 - 번들 에이전트는 5초 × 2회, Kong Manager 기본값은 5회. 장애로 판정한 Target 으로는 전달하지 않고, 모두 장애면 즉시 503. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = Active health checks 꺼짐(간격 0)",
+      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). Upstream 의 헬스 체크 설정(간격 × 연속 실패 · 성공 횟수)대로 판정 - 번들 에이전트는 5초 × 2회, Kong Manager 기본값은 5회. 장애로 판정한 Target 으로는 전달하지 않고, 모두 장애면 즉시 503. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = Active health checks 비활성(간격 0)",
       "datasource": {
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
@@ -3371,7 +3371,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "AI A2A Proxy 가 내는 지표(kong_ai_a2a_task_states_total) - 응답에 작업 상태가 담긴 호출을 상태별로 센다. AI A2A Proxy 의 Log statistics 를 켜야 수집된다(끄면 요청 기록 · 지표 모두 남지 않음).",
+      "description": "AI A2A Proxy 가 내는 지표(kong_ai_a2a_task_states_total) - 응답에 작업 상태가 담긴 호출을 상태별로 센다. AI A2A Proxy 의 Log statistics 를 활성화해야 수집된다(비활성이면 요청 기록 · 지표 모두 남지 않음).",
       "gridPos": {
         "h": 7,
         "w": 12,
@@ -3531,7 +3531,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "AI A2A Proxy 지표(kong_ai_a2a_latency_ms) - 조회 기간 전체의 p95. 장시간 작업(message/stream 등)은 길게 나온다. AI A2A Proxy 의 Log statistics 를 켜야 수집된다.",
+      "description": "AI A2A Proxy 지표(kong_ai_a2a_latency_ms) - 조회 기간 전체의 p95. 장시간 작업(message/stream 등)은 길게 나온다. AI A2A Proxy 의 Log statistics 를 활성화해야 수집된다.",
       "gridPos": {
         "h": 7,
         "w": 12,
