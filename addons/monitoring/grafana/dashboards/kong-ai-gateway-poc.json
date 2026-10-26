@@ -2189,7 +2189,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "kong-poc-reqlog"
       },
-      "description": "이름이 agent- 로 시작하는 Route 를 1분 주기로 수집(addons/reqlog/agents.py, Kong Manager 등록분 포함). 호출 허용 Consumer = ACL 허용 그룹 구성원(Include consumer groups 적용 시 Consumer Group 구성원 포함). 식(allow_when · deny_when) 적용 시 접근 정책 열 참조. Agent Card 는 AI A2A Proxy 적용 에이전트만 수집(에이전트 서버에서 직접 조회). 호출 수 · 최근 호출은 요청 기록 기준",
+      "description": "이름이 agent- 로 시작하는 Route 를 1분 주기로 수집(addons/reqlog/agents.py, Kong Manager 등록분 포함). 호출 허용 Consumer = ACL 허용 그룹 구성원(Include consumer groups 적용 시 Consumer Group 구성원 포함). 식(allow_when · deny_when) 적용 시 접근 정책 열 참조. Agent Card 는 AI A2A Proxy 적용 에이전트만 수집(에이전트 서버에서 직접 조회). 호출 수 · 오류(5xx) · 지연 p95 · 최근 호출은 요청 기록 기준(오류 = 5xx - 긴급 차단 · Upstream 장애 포함)",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -2858,7 +2858,7 @@
       "id": 30,
       "type": "table",
       "title": "에이전트 상태(현재)",
-      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). 연속 2회 실패 시 장애로 판정하고 해당 Target 으로 전달하지 않음(즉시 503), 연속 2회 성공 시 정상 복귀. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = 점검 주기 0",
+      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). Upstream 의 헬스 체크 설정(간격 × 연속 실패 · 성공 횟수)대로 판정 - 번들 에이전트는 5초 × 2회, Kong Manager 기본값은 5회. 장애로 판정한 Target 으로는 전달하지 않고, 모두 장애면 즉시 503. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = Active health checks 꺼짐(간격 0)",
       "datasource": {
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
@@ -2998,7 +2998,7 @@
       "id": 31,
       "type": "state-timeline",
       "title": "에이전트 상태 추이",
-      "description": "에이전트별 정상(녹색) · 장애(적색) 구간. 지표 수집 주기(15초)보다 짧은 장애는 표시되지 않을 수 있음. 헬스 체크 비활성 · DNS 오류도 적색으로 표시(사유는 왼쪽 패널)",
+      "description": "에이전트별 정상(녹색) · 장애(적색) · 헬스 체크 비활성(회색) 구간. 지표 수집 주기(15초)보다 짧은 장애는 표시되지 않을 수 있음. DNS 오류도 적색으로 표시(사유는 「에이전트 상태(현재)」)",
       "datasource": {
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
@@ -3371,7 +3371,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "AI A2A Proxy 가 내는 지표(kong_ai_a2a_task_states_total) - 응답에 작업 상태가 담긴 호출을 상태별로 센다. Log statistics 와 관계없이 수집된다.",
+      "description": "AI A2A Proxy 가 내는 지표(kong_ai_a2a_task_states_total) - 응답에 작업 상태가 담긴 호출을 상태별로 센다. AI A2A Proxy 의 Log statistics 를 켜야 수집된다(끄면 요청 기록 · 지표 모두 남지 않음).",
       "gridPos": {
         "h": 7,
         "w": 12,
@@ -3531,7 +3531,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "AI A2A Proxy 지표(kong_ai_a2a_latency_ms) - 조회 기간 전체의 p95. 장시간 작업(message/stream 등)은 길게 나온다.",
+      "description": "AI A2A Proxy 지표(kong_ai_a2a_latency_ms) - 조회 기간 전체의 p95. 장시간 작업(message/stream 등)은 길게 나온다. AI A2A Proxy 의 Log statistics 를 켜야 수집된다.",
       "gridPos": {
         "h": 7,
         "w": 12,
