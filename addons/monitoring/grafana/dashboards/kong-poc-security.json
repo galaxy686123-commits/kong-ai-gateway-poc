@@ -80,7 +80,7 @@
             "$__all"
           ]
         },
-        "query": "시각,동작,플러그인,사유,Consumer,최종 사용자(SSO),Route,Workspace,상태 코드,마스킹 종류,마스킹 개수,답변 마스킹 개수,커스텀 가드레일,클라이언트 IP,추적 ID",
+        "query": "시각,동작,플러그인,사유,Consumer,최종 사용자(SSO),Route,Workspace,상태 코드,마스킹 종류,마스킹 개수,답변 마스킹 개수,클라이언트 IP,추적 ID",
         "options": [],
         "description": "보안 이벤트 목록에 표시할 열"
       }
@@ -565,14 +565,14 @@
       "type": "text",
       "title": "",
       "gridPos": {
-        "h": 3,
+        "h": 2,
         "w": 24,
         "x": 0,
         "y": 4
       },
       "options": {
         "mode": "markdown",
-        "content": "**보안 기록** - 가드레일 · 인증 · 접근 통제 · 사용량 한도 · 긴급 차단이 막은 요청과 개인정보 마스킹 기록입니다. Kong은 막은 플러그인 이름을 따로 기록하지 않으므로 응답 코드와 사유 문구(플러그인마다 다름)로 구분합니다. 마스킹은 번들 전용 플러그인(질문 pii-masking · 답변 response-masking)이 기록한 종류 · 개수입니다. 의미 기반 가드의 deny 문장 · 거리, 정규식 가드에 걸린 패턴, 가드에서 막힌 질문 원문은 Kong이 기록하지 않아 표시하지 않습니다.\n\n사유가 비어 있는 400 요청은 post-function block-message가 사유를 기록하기 전의 요청입니다. 목록의 **시각**을 선택하면 「요청 기록」에서 그 요청을, **추적 ID**를 선택하면 연결된 호출을 엽니다."
+        "content": "**보안 기록** - 가드레일 · 인증 · 접근 통제 · 사용량 한도 · 긴급 차단이 막은 요청과 개인정보 마스킹 기록입니다. 목록의 **시각**을 선택하면 「요청 기록」에서 그 요청을, **추적 ID**를 선택하면 연결된 호출을 엽니다."
       }
     },
     {
@@ -722,7 +722,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT ts AS \"시각\",\n  CASE WHEN status >= 400 THEN '차단' ELSE '마스킹' END AS \"동작\",\n  plugin AS \"플러그인\",\n  coalesce(error_message, '') AS \"사유\",\n  coalesce(consumer, '-') AS \"Consumer\",\n  coalesce(end_user, '') AS \"최종 사용자(SSO)\",\n  coalesce(route, '-') AS \"Route\",\n  coalesce(workspace, 'default') AS \"Workspace\",\n  status AS \"상태 코드\",\n  coalesce(pii_labels(masked_types), '') AS \"마스킹 종류\",\n  masked_count AS \"마스킹 개수\",\n  output_masked AS \"답변 마스킹 개수\",\n  coalesce(guardrail_block, '') AS \"커스텀 가드레일\",\n  coalesce(client_ip, '') AS \"클라이언트 IP\",\n  coalesce(correlation_id, '') AS \"추적 ID\",\n  request_id\nFROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nORDER BY ts DESC\nLIMIT 500"
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT ts AS \"시각\",\n  CASE WHEN status >= 400 THEN '차단' ELSE '마스킹' END AS \"동작\",\n  plugin AS \"플러그인\",\n  coalesce(error_message, '') AS \"사유\",\n  coalesce(consumer, '-') AS \"Consumer\",\n  coalesce(end_user, '') AS \"최종 사용자(SSO)\",\n  coalesce(route, '-') AS \"Route\",\n  coalesce(workspace, 'default') AS \"Workspace\",\n  status AS \"상태 코드\",\n  coalesce(pii_labels(masked_types), '') AS \"마스킹 종류\",\n  masked_count AS \"마스킹 개수\",\n  output_masked AS \"답변 마스킹 개수\",\n  coalesce(client_ip, '') AS \"클라이언트 IP\",\n  coalesce(correlation_id, '') AS \"추적 ID\",\n  request_id\nFROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nORDER BY ts DESC\nLIMIT 500"
         }
       ],
       "fieldConfig": {
