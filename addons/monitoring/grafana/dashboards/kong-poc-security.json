@@ -1,0 +1,1264 @@
+{
+  "uid": "kong-poc-security",
+  "title": "보안 기록",
+  "description": "가드레일 · 인증 · 접근 통제 · 사용량 한도 · 긴급 차단이 막은 요청과 개인정보 마스킹 기록",
+  "tags": [
+    "kong",
+    "ai-gateway",
+    "poc"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "graphTooltip": 0,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "label": "Consumer",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "kong-poc-reqlog"
+        },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1,
+        "query": "SELECT DISTINCT coalesce(consumer, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1",
+        "definition": "SELECT DISTINCT coalesce(consumer, '-') FROM requests WHERE $__timeFilter(ts) ORDER BY 1"
+      },
+      {
+        "name": "plugin",
+        "label": "플러그인",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "kong-poc-reqlog"
+        },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1,
+        "query": "SELECT DISTINCT security_plugin(status, error_message, guardrail_block, masked_count, output_masked) FROM requests WHERE $__timeFilter(ts) AND security_plugin(status, error_message, guardrail_block, masked_count, output_masked) IS NOT NULL ORDER BY 1",
+        "definition": "보안 기록 플러그인"
+      },
+      {
+        "name": "cols",
+        "label": "표시 열",
+        "type": "custom",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "query": "시각,동작,플러그인,사유,Consumer,최종 사용자(SSO),Route,Workspace,상태 코드,마스킹 종류,마스킹 개수,답변 마스킹 개수,커스텀 가드레일,클라이언트 IP,추적 ID",
+        "options": [],
+        "description": "보안 이벤트 목록에 표시할 열"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "통합 현황",
+      "type": "link",
+      "url": "/d/kong-ai-gateway-poc",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "에이전트",
+      "type": "link",
+      "url": "/d/kong-poc-agents",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "요청 기록 - 프롬프트 · 응답",
+      "type": "link",
+      "url": "/d/kong-poc-reqlog/request-log",
+      "keepTime": true,
+      "icon": "doc",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "보안 차단",
+      "description": "가드레일 · 인증 · 접근 통제 · 사용량 한도 · 긴급 차단이 막은 요청 수. 404 · 5xx 같은 일반 오류는 제외",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin IS NOT NULL AND status >= 400\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "가드레일 차단",
+      "description": "AI Prompt Guard · AI Semantic Prompt Guard · AI Semantic Response Guard · AI Custom Guardrail이 막은 요청 수",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin IN ('AI Prompt Guard', 'AI Semantic Prompt Guard', 'AI Semantic Response Guard', 'AI Custom Guardrail')\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "인증 실패",
+      "description": "키 · 토큰이 없거나 틀린 요청(401)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin = 'Key Authentication · OpenID Connect'\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "접근 거부",
+      "description": "허용 그룹 밖 Consumer 등 접근 통제로 거부된 요청(403)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin IN ('ACL', '접근 거부(기타)')\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "한도 초과",
+      "description": "요청 수 한도(Rate Limiting) · 토큰 한도(AI Rate Limiting Advanced)를 넘은 요청(429)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin IN ('Rate Limiting', 'AI Rate Limiting Advanced')\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "긴급 차단",
+      "description": "긴급 차단(Request Termination)이 503으로 막은 요청. 사유 문구에 「긴급 차단」이 들어간 503 기준",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE plugin = 'Request Termination(긴급 차단)'\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "질문 마스킹",
+      "description": "질문의 개인정보(주민등록번호 · 카드 · 전화 · 계좌 · 이메일)를 라벨로 바꾼 요청 수 - 번들 전용 플러그인 pii-masking",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE coalesce(masked_count, 0) > 0\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "답변 마스킹",
+      "description": "답변 속 사설 IP · API 키 · DB 접속 정보 · 비밀번호 값을 가린 요청 수 - 번들 전용 플러그인 response-masking",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT count(*) AS v FROM e WHERE coalesce(output_masked, 0) > 0\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**보안 기록** - 가드레일 · 인증 · 접근 통제 · 사용량 한도 · 긴급 차단이 막은 요청과 개인정보 마스킹 기록입니다. Kong은 막은 플러그인 이름을 따로 기록하지 않으므로 응답 코드와 사유 문구(플러그인마다 다름)로 구분합니다. 마스킹은 번들 전용 플러그인(질문 pii-masking · 답변 response-masking)이 기록한 종류 · 개수입니다. 의미 기반 가드의 deny 문장 · 거리, 정규식 가드에 걸린 패턴, 가드에서 막힌 질문 원문은 Kong이 기록하지 않아 표시하지 않습니다.\n\n사유가 비어 있는 400 요청은 post-function block-message가 사유를 기록하기 전의 요청입니다. 목록의 **시각**을 선택하면 「요청 기록」에서 그 요청을, **추적 ID**를 선택하면 연결된 호출을 엽니다."
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "플러그인별 차단 · 마스킹 건수",
+      "description": "막거나 가린 요청 수를 플러그인별로 표시",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "interval": "5m",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT $__timeGroupAlias(ts, $__interval, 0), plugin AS metric, count(*) AS v FROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nGROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "플러그인별 건수",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "선택한 기간에 플러그인별로 막거나 가린 요청 수",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "unit": "short",
+          "noValue": "차단 · 마스킹 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "values": true,
+          "calcs": [],
+          "fields": "/^건수$/"
+        },
+        "minVizHeight": 16,
+        "maxVizHeight": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT plugin AS \"플러그인\", count(*) AS \"건수\" FROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nGROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 7
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "보안 이벤트 목록(최근 500건)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT ts AS \"시각\",\n  CASE WHEN status >= 400 THEN '차단' ELSE '마스킹' END AS \"동작\",\n  plugin AS \"플러그인\",\n  coalesce(error_message, '') AS \"사유\",\n  coalesce(consumer, '-') AS \"Consumer\",\n  coalesce(end_user, '') AS \"최종 사용자(SSO)\",\n  coalesce(route, '-') AS \"Route\",\n  coalesce(workspace, 'default') AS \"Workspace\",\n  status AS \"상태 코드\",\n  coalesce(pii_labels(masked_types), '') AS \"마스킹 종류\",\n  masked_count AS \"마스킹 개수\",\n  output_masked AS \"답변 마스킹 개수\",\n  coalesce(guardrail_block, '') AS \"커스텀 가드레일\",\n  coalesce(client_ip, '') AS \"클라이언트 IP\",\n  coalesce(correlation_id, '') AS \"추적 ID\",\n  request_id\nFROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nORDER BY ts DESC\nLIMIT 500"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "inspect": true,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "시각"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "unit",
+                "value": "time:YYYY-MM-DD HH:mm:ss"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "요청 기록에서 보기",
+                    "url": "/d/kong-poc-reqlog/request-log?var-rid=${__data.fields.request_id}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태 코드"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 64
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 400
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "request_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "추적 ID"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "연결된 호출 보기",
+                    "url": "/d/kong-poc-reqlog/request-log?var-q=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "동작"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 64
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "차단": {
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "마스킹": {
+                        "color": "blue",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "사유"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "플러그인"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 250
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "시각",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "byVariable": true,
+            "include": {
+              "variable": "${cols:csv},request_id"
+            }
+          }
+        }
+      ],
+      "description": "막거나 가린 요청. 표시 열에서 볼 열을 선택합니다"
+    },
+    {
+      "id": 13,
+      "type": "bargauge",
+      "title": "개인정보 마스킹 종류별 건수",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "질문에서 가린 개인정보 종류별 요청 수 - 번들 전용 플러그인 pii-masking 기준",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "unit": "short",
+          "noValue": "마스킹 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "values": true,
+          "calcs": [],
+          "fields": "/^건수$/"
+        },
+        "minVizHeight": 16,
+        "maxVizHeight": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT pii_labels(t) AS \"종류\", count(*) AS \"건수\"\nFROM e, unnest(string_to_array(masked_types, ',')) AS t\nWHERE coalesce(masked_count, 0) > 0\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nGROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 27
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Consumer별 차단 · 마스킹 건수",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "Consumer와 플러그인 조합별 건수(상위 50)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
+          },
+          "noValue": "차단 · 마스킹 없음"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 발생"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "time:YYYY-MM-DD HH:mm:ss"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH e AS (SELECT *, security_plugin(status, error_message, guardrail_block, masked_count, output_masked) AS plugin FROM requests WHERE $__timeFilter(ts))\nSELECT coalesce(consumer, '-') AS \"Consumer\", plugin AS \"플러그인\", count(*) AS \"건수\", max(ts) AS \"최근 발생\"\nFROM e\nWHERE plugin IS NOT NULL\n  AND ('__all' IN (${user:sqlstring}) OR coalesce(consumer, '-') IN (${user:sqlstring}))\n  AND ('__all' IN (${plugin:sqlstring}) OR plugin IN (${plugin:sqlstring}))\nGROUP BY 1, 2 ORDER BY 3 DESC\nLIMIT 50"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 27
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "응답 코드 기준 - 전체 차단 · 오류",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "bargauge",
+      "title": "차단 · 오류 유형별 건수",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "4xx · 5xx 응답을 유형별로 집계(요청 기록 기준). 사유는 오른쪽 패널",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "unit": "short",
+          "noValue": "차단 · 오류 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "values": true,
+          "calcs": [],
+          "fields": "/^건수$/"
+        },
+        "minVizHeight": 16,
+        "maxVizHeight": 24
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT CASE WHEN status = 400 THEN '400 가드레일 · 잘못된 요청' WHEN status = 401 THEN '401 인증 실패(키 · 토큰)' WHEN status = 403 THEN '403 접근 거부(ACL · 사용자 차단)' WHEN status = 404 THEN '404 Route 없음' WHEN status = 413 THEN '413 요청 크기 초과' WHEN status = 426 THEN '426 HTTPS 필요' WHEN status = 429 THEN '429 사용량 한도 초과' WHEN status = 503 THEN '503 서비스 불가(긴급 차단 · Upstream 장애)' WHEN status >= 500 THEN status || ' 서버 · LLM 오류' ELSE status || ' 기타' END AS \"유형\", count(*) AS \"건수\"\nFROM requests WHERE $__timeFilter(ts) AND status >= 400\nGROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 9,
+        "x": 0,
+        "y": 36
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "차단 · 오류 사유 상위 20",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "응답 본문의 사유 메시지별 집계. 사유가 비어 있으면 사유 메시지 없이 차단된 요청(상태 코드로 유형 확인). 건수 선택 시 요청 기록(차단 · 오류)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
+          },
+          "noValue": "차단 · 오류 없음"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태 코드"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "건수"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Route"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Consumer"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 발생"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "건수"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "요청 기록(차단 · 오류)",
+                    "url": "/d/kong-poc-reqlog/request-log?var-status=err&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "사유"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 330
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT coalesce(nullif(error_message, ''), '(사유 없음)') AS \"사유\", status AS \"상태 코드\",\n  left(string_agg(DISTINCT coalesce(route, '-'), ', '), 80) AS \"Route\",\n  left(string_agg(DISTINCT coalesce(consumer, '(Consumer 없음)'), ', '), 80) AS \"Consumer\",\n  count(*) AS \"건수\", max(ts) AS \"최근 발생\"\nFROM requests WHERE $__timeFilter(ts) AND status >= 400\nGROUP BY 1, 2 ORDER BY 5 DESC LIMIT 20"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 15,
+        "x": 9,
+        "y": 36
+      }
+    }
+  ]
+}

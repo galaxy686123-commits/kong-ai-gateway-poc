@@ -4,6 +4,8 @@
 질문 · 답변은 Kong Manager 에서 대상(Target)의 Log payloads 를 켰을 때만 로그에 있다(ai.proxy.payload.request · response).
 스트리밍 답변도 Kong 이 하나로 이어 붙여 남긴다(choices[0].message.content).
 A2A 에이전트 경로(AI A2A Proxy)는 메서드 · 작업 ID · 작업 상태를 남기고(ai.a2a.rpc), log_payloads 를 켰으면 메시지 · 결과물도 질문 · 답변 칸에 넣는다.
+「보안 기록」 대시보드용으로 번들 마스킹 플러그인이 남긴 가린 종류 · 개수(pii_masked · output_masked)와
+AI Custom Guardrail 이 막은 쪽 · 출처(ai.proxy.custom-guardrail)도 옮긴다. 막은 플러그인 구분은 schema.sql 의 security_plugin().
 
   python3 reqlog.py          지금까지 쌓인 것을 옮기고 끝
   python3 reqlog.py --loop   10초마다 옮김 · 1시간마다 보관 기간이 지난 행을 지움 (start.sh 가 띄운다)
@@ -32,7 +34,8 @@ COLS = ("request_id", "ts", "consumer", "route", "method", "path", "status", "mo
         "prompt_tokens", "completion_tokens", "total_tokens", "latency_ms", "llm_latency_ms", "cache_status",
         "client_ip", "question", "answer", "request_body", "response_body", "cost", "workspace", "forwarded_for",
         "error_message", "kong_latency_ms", "ai_window", "ai_limit", "ai_remaining",
-        "correlation_id", "a2a_method", "a2a_task_id", "a2a_task_state", "end_user")
+        "correlation_id", "a2a_method", "a2a_task_id", "a2a_task_state", "end_user",
+        "masked_types", "masked_count", "output_masked", "guardrail_block")
 
 
 def log(*a):
@@ -202,6 +205,8 @@ def row_of(line):
     rid = req.get("id") or d.get("correlation_id") or hashlib.sha1(line.encode("utf-8", "replace")).hexdigest()
     lat = d.get("latencies") or {}
     rl = d.get("ai_ratelimit") if isinstance(d.get("ai_ratelimit"), dict) else {}   # 2-4 토큰 한도를 켰을 때만 (post-function block-message)
+    pm = d.get("pii_masked") if isinstance(d.get("pii_masked"), dict) else {}       # 질문 개인정보 마스킹(번들 pii-masking)이 가렸을 때만
+    cg = ai.get("custom-guardrail") if isinstance(ai.get("custom-guardrail"), dict) else {}
     return {
         "request_id": rid,
         "ts": d["started_at"] / 1000.0,
@@ -236,7 +241,21 @@ def row_of(line):
         "a2a_task_id": rpc.get("task_id") if isinstance(rpc.get("task_id"), str) else None,
         "a2a_task_state": rpc.get("task_state") if isinstance(rpc.get("task_state"), str) else None,
         "end_user": end_user(req.get("headers"), resp.get("status"), d.get("error_body")),
+        "masked_types": (pm.get("types") or None) if as_int(pm.get("count")) else None,
+        "masked_count": as_int(pm.get("count")) or None,
+        "output_masked": as_int(d.get("output_masked")) or None,     # 답변 마스킹(번들 response-masking)이 가렸을 때만
+        "guardrail_block": guardrail_block(cg),
     }
+
+
+def guardrail_block(cg):
+    """AI Custom Guardrail 이 막은 쪽 · 출처 · 사유 — 요청 로그 ai.proxy.custom-guardrail (막지 않았으면 칸이 모두 비어 있다)"""
+    out = []
+    for side, label in (("input", "질문"), ("output", "답변")):
+        src, why = cg.get(side + "_block_source"), cg.get(side + "_block_reason")
+        if isinstance(src, str) and src:
+            out.append(label + " - " + src + ((": " + why) if isinstance(why, str) and why else ""))
+    return " · ".join(out) or None
 
 
 def error_message(body):

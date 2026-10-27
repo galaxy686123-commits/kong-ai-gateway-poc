@@ -39,6 +39,36 @@ ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_method text;          -- A2A �
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_task_id text;         --   작업 ID
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS a2a_task_state text;      --   작업 상태 (working · completed …)
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS end_user text;            -- SSO 사용자 — openid-connect 가 토큰의 사용자 이름으로 채운 X-User 헤더 (에이전트 키 + 사용자 토큰을 함께 쓰면 consumer = 에이전트, 이 칸 = 사람)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS masked_types text;        -- 질문 개인정보 마스킹(번들 pii-masking)이 가린 종류 — 규칙 이름을 쉼표로 (rrn · card · mobile …)
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS masked_count integer;     --   가린 개수
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS output_masked integer;    -- 답변 마스킹(번들 response-masking)이 가린 개수
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS guardrail_block text;     -- AI Custom Guardrail 이 막은 쪽 · 출처 · 사유 (요청 로그 ai.proxy.custom-guardrail — 막지 않았으면 비어 있음)
+
+-- 보안 기록 대시보드 — 막거나 가린 플러그인. Kong 은 막은 플러그인 이름을 따로 남기지 않아, 플러그인마다 다른 응답 코드 · 사유 문구로 나눈다 (Kong 3.16 확인)
+--   사유 문구는 post-function block-message 가 남긴 error_body (reqlog.py error_message). 404 · 5xx 같은 일반 오류는 비워 둔다
+--   함수는 부르는 쪽 권한으로 돌므로 팀 계정(reqlog_*)의 행 단위 제한이 그대로 걸린다 — 보기(view)는 만든 계정 권한으로 돌아 제한을 넘으므로 쓰지 않는다
+CREATE OR REPLACE FUNCTION security_plugin(st integer, msg text, guardrail text, masked integer, out_masked integer)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE
+    WHEN coalesce(guardrail, '') <> '' THEN 'AI Custom Guardrail'
+    WHEN st = 400 AND (msg LIKE 'prompt pattern is blocked%' OR msg LIKE 'prompt doesn''t match any allowed pattern%') THEN 'AI Prompt Guard'
+    WHEN st = 400 AND msg = 'bad request' THEN 'AI Semantic Prompt Guard'
+    WHEN st = 400 AND msg = 'bad response' THEN 'AI Semantic Response Guard'
+    WHEN st = 401 THEN 'Key Authentication · OpenID Connect'
+    WHEN st = 403 AND msg LIKE 'You cannot consume this service%' THEN 'ACL'
+    WHEN st = 403 THEN '접근 거부(기타)'
+    WHEN st = 429 AND msg LIKE 'AI token rate limit%' THEN 'AI Rate Limiting Advanced'
+    WHEN st = 429 THEN 'Rate Limiting'
+    WHEN st = 503 AND msg LIKE '%긴급 차단%' THEN 'Request Termination(긴급 차단)'
+    WHEN st < 400 AND coalesce(masked, 0) > 0 THEN 'pii-masking(질문 마스킹)'
+    WHEN st < 400 AND coalesce(out_masked, 0) > 0 THEN 'response-masking(답변 마스킹)'
+  END $$;
+-- 마스킹 규칙 이름 → 화면 이름 (번들 전용 플러그인 pii-masking 의 기본 규칙. 고객이 더한 규칙은 이름 그대로)
+CREATE OR REPLACE FUNCTION pii_labels(types text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT nullif(array_to_string(ARRAY(
+    SELECT CASE t WHEN 'rrn' THEN '주민등록번호' WHEN 'card' THEN '카드번호' WHEN 'mobile' THEN '휴대전화'
+                  WHEN 'landline' THEN '전화번호' WHEN 'account' THEN '계좌번호' WHEN 'email' THEN '이메일' ELSE t END
+    FROM unnest(string_to_array(types, ',')) AS t), ', '), '') $$;
 
 -- 에이전트 목록 — agents.py 가 1분마다 Kong 설정(이름이 agent- 로 시작하는 경로)과 Agent Card 를 읽어 통째로 바꿔 넣는다
 CREATE TABLE IF NOT EXISTS agents (

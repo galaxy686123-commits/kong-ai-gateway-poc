@@ -522,6 +522,15 @@
               {
                 "id": "unit",
                 "value": "time:YYYY-MM-DD HH:mm:ss"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "요청 기록에서 보기",
+                    "url": "/d/kong-poc-reqlog/request-log?var-rid=${__data.fields.request_id}&${__url_time_range}"
+                  }
+                ]
               }
             ]
           },
@@ -947,6 +956,44 @@
           }
         }
       ]
+    }
+  ],
+  "links": [
+    {
+      "title": "통합 현황",
+      "type": "link",
+      "url": "/d/kong-ai-gateway-poc",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "에이전트",
+      "type": "link",
+      "url": "/d/kong-poc-agents",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "보안 기록",
+      "type": "link",
+      "url": "/d/kong-poc-security",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
     }
   ]
 }

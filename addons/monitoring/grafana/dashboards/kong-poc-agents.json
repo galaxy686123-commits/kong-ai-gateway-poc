@@ -1,0 +1,1727 @@
+{
+  "uid": "kong-poc-agents",
+  "title": "에이전트",
+  "description": "에이전트 목록 · 호출 관계도 · 상태 · A2A 작업 · 최종 사용자(SSO). 이름 규칙은 「AI 에이전트 모니터링 설정」 문서",
+  "tags": [
+    "kong",
+    "ai-gateway",
+    "poc"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "graphTooltip": 0,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "통합 현황",
+      "type": "link",
+      "url": "/d/kong-ai-gateway-poc",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "보안 기록",
+      "type": "link",
+      "url": "/d/kong-poc-security",
+      "keepTime": true,
+      "icon": "dashboard",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    },
+    {
+      "title": "요청 기록 - 프롬프트 · 응답",
+      "type": "link",
+      "url": "/d/kong-poc-reqlog/request-log",
+      "keepTime": true,
+      "icon": "doc",
+      "tooltip": "",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "tags": []
+    }
+  ],
+  "panels": [
+    {
+      "id": 37,
+      "type": "table",
+      "title": "에이전트 목록(등록 · 접근 정책 · 상태 · Agent Card)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "이름이 agent- 로 시작하는 Route 를 1분 주기로 수집(addons/reqlog/agents.py, Kong Manager 등록분 포함). 호출 허용 Consumer = ACL 허용 그룹 구성원(Include consumer groups 적용 시 Consumer Group 구성원 포함). 식(allow_when · deny_when) 적용 시 접근 정책 열 참조. Agent Card 는 AI A2A Proxy 적용 에이전트만 수집(에이전트 서버에서 직접 조회). 호출 수 · 오류(5xx) · 지연 p95 · 최근 호출은 요청 기록 기준(오류 = 5xx - 긴급 차단 · Upstream 장애 포함)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
+          },
+          "noValue": "등록된 에이전트 없음(agent- 로 시작하는 Route 기준)"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "경로(Path)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "유형"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "긴급 차단"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "인증 방식"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "접근 정책"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 허용 Consumer"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Agent Card"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "설명"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Skills"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 수"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "오류(5xx)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "지연 p95 ms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "noValue",
+                "value": "-"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "등록 방식"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "A2A 로깅"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Workspace"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "정상": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "장애": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "Target 없음": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "헬스 체크 비활성": {
+                        "color": "gray",
+                        "index": 2
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^일부 장애.*",
+                      "result": {
+                        "color": "orange",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "긴급 차단"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "활성(차단 중)": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "수집 시각"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm:ss"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT a.name AS \"에이전트\", a.paths AS \"경로(Path)\", a.kind AS \"유형\", a.health AS \"상태\",\n  s.calls AS \"호출 수\", s.err AS \"오류(5xx)\", s.p95 AS \"지연 p95 ms\",\n  (SELECT max(r.ts) FROM requests r WHERE r.route = a.name AND coalesce(r.workspace, 'default') = a.workspace) AS \"최근 호출\",\n  CASE WHEN a.kill_switch THEN '활성(차단 중)' ELSE '비활성' END AS \"긴급 차단\",\n  a.auth AS \"인증 방식\", a.access_rule AS \"접근 정책\", a.callers AS \"호출 허용 Consumer\",\n  coalesce(a.card_name, CASE WHEN a.kind = 'A2A' THEN '(Agent Card 조회 실패) ' || coalesce(a.card_error, '') ELSE '-' END) AS \"Agent Card\",\n  coalesce(a.card_description, '-') AS \"설명\", coalesce(a.card_skills, '-') AS \"Skills\",\n  a.registered_by AS \"등록 방식\", coalesce(a.a2a_logging, '-') AS \"A2A 로깅\", a.targets AS \"Target\", a.workspace AS \"Workspace\", a.updated_at AS \"수집 시각\"\nFROM agents a\nLEFT JOIN LATERAL (\n  SELECT count(*) AS calls, count(*) FILTER (WHERE r.status >= 500) AS err,\n    round((percentile_cont(0.95) WITHIN GROUP (ORDER BY r.latency_ms))::numeric) AS p95\n  FROM requests r WHERE r.route = a.name AND coalesce(r.workspace, 'default') = a.workspace AND $__timeFilter(r.ts)\n) s ON true\nORDER BY a.workspace, a.name"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 38,
+      "type": "nodeGraph",
+      "title": "에이전트 호출 관계도",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "노드 = 호출 Consumer · 에이전트 Route · LLM Route(조회 기간에 모델 기록이 있는 Route). 간선 = 호출(허용 · 차단(4xx) · 오류(5xx) 건수), 색상: 녹색 전체 허용 · 주황 일부 차단 · 오류 · 적색 전체 차단 · 오류. LLM Route 는 에이전트 Consumer 의 호출만 표시. 에이전트 Consumer 와 같은 이름의 에이전트 Route 는 하나의 노드로 표시. 키 없이 SSO 토큰으로만 호출한 경우 「최종 사용자(SSO)」, 키 · 토큰이 모두 없는 경우 「(미인증)」. 노드 수치 = 수신 · 발신 건수",
+      "options": {
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative",
+        "nodes": {},
+        "edges": {}
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "WITH llm AS (SELECT DISTINCT route FROM requests WHERE $__timeFilter(ts) AND model IS NOT NULL AND route IS NOT NULL)\n, e AS (\n  SELECT coalesce(consumer, CASE WHEN end_user IS NOT NULL THEN '최종 사용자(SSO)' END, '(미인증)') AS src, route AS dst,\n    count(*) FILTER (WHERE status < 400) AS ok, count(*) FILTER (WHERE status >= 400) AS bad\n  FROM requests WHERE $__timeFilter(ts) AND (route LIKE 'agent-%' OR (consumer LIKE 'agent-%' AND route IN (SELECT route FROM llm)))\n  GROUP BY 1, 2)\n, n AS (SELECT src AS id FROM e UNION SELECT dst FROM e)\nSELECT n.id AS id, CASE WHEN n.id IN (SELECT route FROM llm) AND n.id NOT LIKE 'agent-%' THEN 'LLM · ' || n.id ELSE n.id END AS title,\n  CASE WHEN n.id LIKE 'agent-%' THEN '에이전트' WHEN n.id IN (SELECT route FROM llm) THEN 'LLM Route' ELSE '호출 주체' END AS subtitle,\n  '수신 ' || coalesce((SELECT sum(ok + bad) FROM e WHERE e.dst = n.id), 0) AS mainstat,\n  '발신 ' || coalesce((SELECT sum(ok + bad) FROM e WHERE e.src = n.id), 0) AS secondarystat,\n  CASE WHEN n.id LIKE 'agent-%' THEN '#1e96cf' WHEN n.id IN (SELECT route FROM llm) THEN '#8e5bd6' ELSE '#8a8f98' END AS color\nFROM n"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "B",
+          "rawSql": "WITH llm AS (SELECT DISTINCT route FROM requests WHERE $__timeFilter(ts) AND model IS NOT NULL AND route IS NOT NULL)\n, e AS (\n  SELECT coalesce(consumer, CASE WHEN end_user IS NOT NULL THEN '최종 사용자(SSO)' END, '(미인증)') AS src, route AS dst,\n    count(*) FILTER (WHERE status < 400) AS ok, count(*) FILTER (WHERE status >= 400) AS bad,\n    count(*) FILTER (WHERE status >= 400 AND status < 500) AS blk, count(*) FILTER (WHERE status >= 500) AS err\n  FROM requests WHERE $__timeFilter(ts) AND (route LIKE 'agent-%' OR (consumer LIKE 'agent-%' AND route IN (SELECT route FROM llm)))\n  GROUP BY 1, 2)\nSELECT src || ' → ' || dst AS id, src AS source, dst AS target,\n  '허용 ' || ok AS mainstat, concat_ws(' · ', CASE WHEN blk > 0 THEN '차단 ' || blk END, CASE WHEN err > 0 THEN '오류 ' || err END) AS secondarystat,\n  CASE WHEN ok = 0 THEN '#d44a3a' WHEN bad > 0 THEN '#e08a1e' ELSE '#3f9b4f' END AS color,\n  least(1 + (ok + bad) / 5.0, 6) AS thickness\nFROM e"
+        }
+      ],
+      "gridPos": {
+        "h": 11,
+        "w": 16,
+        "x": 0,
+        "y": 9
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "filter": {
+            "id": "byRefId",
+            "options": "A"
+          },
+          "options": {
+            "renameByName": {
+              "mainstat": "수신",
+              "secondarystat": "발신",
+              "color": "색상(파랑 에이전트 · 보라 LLM · 회색 호출 주체)"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "table",
+      "title": "에이전트 가용률(헬스 체크 기준)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "description": "헬스 체크(Active health checks)를 활성화한 시간 중 정상 서버가 하나 이상 있던 비율. 헬스 체크가 비활성인 에이전트는 가용률을 계산하지 않고 「비활성(가용률 제외)」로 표시한다.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
+          },
+          "noValue": "헬스 체크 데이터 없음"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "가용률(%)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 99
+                    },
+                    {
+                      "color": "green",
+                      "value": 99.9
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "noValue",
+                "value": "-"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "장애 시간(분)"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "-"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "헬스 체크"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "활성",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "비활성(가용률 제외)",
+                        "color": "text",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "noValue",
+                "value": "-"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "가용률(%)",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "(100 * sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) / sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m])) >= 0"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "sum_over_time(((1 - max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\"))) * max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) and on (upstream) (sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) > 0)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "min by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthchecks_off\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\"))"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "upstream": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3
+            },
+            "renameByName": {
+              "upstream": "에이전트",
+              "Value #A": "가용률(%)",
+              "Value #B": "장애 시간(분)",
+              "Value #C": "헬스 체크"
+            }
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 11,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      }
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "에이전트 상태(현재)",
+      "description": "Kong 능동 헬스 체크 결과(Kong Manager → Upstreams → agent-… 의 Target). Upstream 의 헬스 체크 설정(간격 × 연속 실패 · 성공 횟수)대로 판정 - 번들 에이전트는 5초 × 2회, Kong Manager 기본값은 5회. 장애로 판정한 Target 으로는 전달하지 않고, 모두 장애면 즉시 503. DNS 오류 = Target 이름 해석 실패, 헬스 체크 비활성 = Active health checks 비활성(간격 0)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "label_replace(kong_upstream_target_health{upstream=~\"agent-.*\"} == 1, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "subsystem": true,
+              "address": true
+            },
+            "indexByName": {
+              "upstream": 0,
+              "state": 1,
+              "target": 2
+            },
+            "renameByName": {
+              "upstream": "에이전트",
+              "state": "상태",
+              "target": "Target"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "healthy": {
+                        "text": "정상",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "unhealthy": {
+                        "text": "장애",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "dns_error": {
+                        "text": "DNS 오류",
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "healthchecks_off": {
+                        "text": "헬스 체크 비활성",
+                        "color": "text",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 230
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "에이전트",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": "state-timeline",
+      "title": "에이전트 상태 추이",
+      "description": "에이전트별 정상(녹색) · 장애(적색) · 헬스 체크 비활성(회색) 구간. 지표 수집 주기(15초)보다 짧은 장애는 표시되지 않을 수 있음. DNS 오류도 적색으로 표시(사유는 「에이전트 상태(현재)」)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 20
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{upstream}}",
+          "expr": "max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")) + 2 * min by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthchecks_off\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\"))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "#8a8f98",
+                "value": 2
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "장애",
+                  "color": "red",
+                  "index": 1
+                },
+                "1": {
+                  "text": "정상",
+                  "color": "green",
+                  "index": 0
+                },
+                "2": {
+                  "text": "헬스 체크 비활성",
+                  "color": "#8a8f98",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "table",
+      "title": "에이전트 호출 현황(Consumer × 에이전트)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "description": "에이전트 Route(agent-…)별 호출 Consumer 와 허용 · 차단 건수. 에이전트 간 호출은 각 에이전트 Consumer(agent-a · agent-b · agent-c)로 표시. 차단 = 인증 실패 · ACL 거부(401 · 403), 오류 = 5xx(긴급 차단 · Upstream 장애 포함). 키 없이 SSO 토큰으로만 호출한 경우 「최종 사용자(SSO)」",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "차단"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "허용"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "오류(5xx)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm:ss"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 Consumer"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "대상 에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT coalesce(consumer, CASE WHEN end_user IS NOT NULL THEN '최종 사용자(SSO)' END, '(미인증)') AS \"호출 Consumer\", route AS \"대상 에이전트\",\n  count(*) FILTER (WHERE status < 400) AS \"허용\",\n  count(*) FILTER (WHERE status >= 400 AND status < 500) AS \"차단\",\n  count(*) FILTER (WHERE status >= 500) AS \"오류(5xx)\",\n  coalesce(string_agg(DISTINCT a2a_method, ' · '), '') AS \"A2A 메서드\",\n  max(ts) AS \"최근 호출\"\nFROM requests WHERE $__timeFilter(ts) AND route LIKE 'agent-%'\nGROUP BY 1, 2 ORDER BY 1, 2"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "table",
+      "title": "A2A 작업 최근 20건",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "description": "AI A2A Proxy 가 요청 로그에 기록한 A2A 호출(메서드 · 작업 상태 · 작업 ID 앞 8자리). 접수(message/send, working)와 조회(tasks/get, completed)가 같은 작업 ID 로 연결",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "시각"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm:ss"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "작업 상태"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "지연 ms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출 Consumer"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "메서드"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "시각",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT ts AS \"시각\", coalesce(consumer, '-') AS \"호출 Consumer\", route AS \"에이전트\", a2a_method AS \"메서드\",\n  coalesce(a2a_task_state, '-') AS \"작업 상태\", coalesce(left(a2a_task_id, 8), '-') AS \"작업 ID\", latency_ms AS \"지연 ms\"\nFROM requests WHERE $__timeFilter(ts) AND a2a_method IS NOT NULL\nORDER BY ts DESC LIMIT 20"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "table",
+      "title": "A2A 작업 상태(에이전트별, 지표 기준)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "description": "AI A2A Proxy 가 내는 지표(kong_ai_a2a_task_states_total) - 응답에 작업 상태가 담긴 호출을 상태별로 센다. AI A2A Proxy 의 Log statistics 를 활성화해야 수집된다(비활성이면 요청 기록 · 지표 모두 남지 않음).",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "round(sum by (route, state) (increase(kong_ai_a2a_task_states_total{route=~\"agent-.*\"}[$__range]))) > 0"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "route": 0,
+              "state": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "route": "에이전트",
+              "state": "작업 상태",
+              "Value": "건수"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "A2A 작업 없음"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "작업 상태"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "completed": {
+                        "text": "완료",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "working": {
+                        "text": "처리 중",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "submitted": {
+                        "text": "접수",
+                        "color": "blue",
+                        "index": 2
+                      },
+                      "input-required": {
+                        "text": "입력 대기",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "auth-required": {
+                        "text": "인증 필요",
+                        "color": "orange",
+                        "index": 4
+                      },
+                      "failed": {
+                        "text": "실패",
+                        "color": "red",
+                        "index": 5
+                      },
+                      "rejected": {
+                        "text": "거부",
+                        "color": "red",
+                        "index": 6
+                      },
+                      "canceled": {
+                        "text": "취소",
+                        "color": "#8a8f98",
+                        "index": 7
+                      },
+                      "unknown": {
+                        "text": "알 수 없음",
+                        "color": "#8a8f98",
+                        "index": 8
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "에이전트",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "type": "table",
+      "title": "A2A 응답 시간 p95(에이전트 · 메서드별, 지표 기준)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "kong-poc-prometheus"
+      },
+      "description": "AI A2A Proxy 지표(kong_ai_a2a_latency_ms) - 조회 기간 전체의 p95. 장시간 작업(message/stream 등)은 길게 나온다. AI A2A Proxy 의 Log statistics 를 활성화해야 수집된다.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "round(histogram_quantile(0.95, sum by (le, route, method) (increase(kong_ai_a2a_latency_ms_bucket{route=~\"agent-.*\"}[$__range])))) >= 0"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "kong-poc-prometheus"
+          },
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "expr": "round(sum by (route, method) (increase(kong_ai_a2a_latency_ms_count{route=~\"agent-.*\"}[$__range]))) > 0"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "fieldName": "Value #B",
+                "config": {
+                  "id": "greater",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              }
+            ],
+            "type": "include",
+            "match": "all"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "route": 0,
+              "method": 1,
+              "Value #A": 2,
+              "Value #B": 3
+            },
+            "renameByName": {
+              "route": "에이전트",
+              "method": "메서드",
+              "Value #A": "p95 ms",
+              "Value #B": "호출 수"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "A2A 호출 없음"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에이전트"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "메서드"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95 ms"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "-"
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "에이전트",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": "table",
+      "title": "에이전트별 최종 사용자(SSO) 호출 현황",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "kong-poc-reqlog"
+      },
+      "description": "에이전트 키와 사용자 SSO 토큰을 함께 전달하는 구성에서 openid-connect 가 토큰의 사용자 이름을 X-User 로 전달하면 「최종 사용자(SSO)」로 기록. Consumer = 키 소유자(에이전트), 키 없이 SSO 토큰으로만 호출한 경우 (Consumer 없음). SSO 미적용 Route 에서는 호출 측이 전송한 X-User 가 기록될 수 있음. 인증 실패(401 · 403 Forbidden) 요청은 제외. 차단 = 4xx(ACL 거부 · 전역 차단 등), 오류 = 5xx(긴급 차단 · Upstream 장애 포함)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
+          },
+          "noValue": "최종 사용자(SSO) 기록 없음(Route 에 openid-connect 를 적용해 X-User 를 전달하면 표시)"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "허용"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "토큰"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "차단"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "오류(5xx)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 호출"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "unit",
+                "value": "time:MM-DD HH:mm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "kong-poc-reqlog"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT coalesce(consumer, '(Consumer 없음)') AS \"호출 Consumer\", end_user AS \"최종 사용자(SSO)\", coalesce(route, '-') AS \"Route\",\n  count(*) AS \"호출\", count(*) FILTER (WHERE status < 400) AS \"허용\", count(*) FILTER (WHERE status >= 400 AND status < 500) AS \"차단\", count(*) FILTER (WHERE status >= 500) AS \"오류(5xx)\",\n  coalesce(sum(total_tokens), 0) AS \"토큰\", max(ts) AS \"최근 호출\"\nFROM requests WHERE $__timeFilter(ts) AND end_user IS NOT NULL\nGROUP BY 1, 2, 3 ORDER BY 4 DESC LIMIT 200"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      }
+    }
+  ]
+}
