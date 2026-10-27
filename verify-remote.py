@@ -302,8 +302,9 @@ else:
 sec("4. 가드레일 (켜져 있는 것만)")
 r = mchat("주민번호 900101-1234567, 연락처 010-1234-5678, 계좌 110-123-456789, 메일 hong@test.com 고객 문의")
 t = r.text()
-if r.code == 200 and "900101" not in t and "1234-5678" not in t and "[주민등록번호]" in t:
-    ok("4-1 개인정보 마스킹 — LLM 이 받은 질문: \"%s\"" % short(t, 70))
+pm = r.hdr("X-PII-Masked")   # LLM 에는 번호 붙은 라벨이 가고 답은 원래 값으로 되돌아오므로(recover_redacted) 밖에서는 헤더 · 답으로 본다
+if r.code == 200 and "rrn" in pm and ("[주민등록번호1]" in t or "900101-1234567" in t):
+    ok("4-1 개인정보 마스킹 — 가린 종류 %s · 답: \"%s\" (%s)" % (pm, short(t, 60), "원래 값으로 되돌아옴" if "900101" in t else "라벨 그대로"))
 elif r.code == 200 and off("pii-masking"):
     note("4-1 개인정보 마스킹 — 꺼져 있음 (질문이 그대로 전달됨) · 켜기: Kong Manager → Routes → poc → Plugins 또는 FEATURE_MASKING")
 else:

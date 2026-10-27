@@ -336,9 +336,12 @@ curl -s -D /tmp/h $G/poc "${A[@]}" -d "$(q '주민번호 900101-1234567 연락�
 grep -i '^x-pii-masked' /tmp/h
 bash switch.sh pii-masking off
 ```
-→ LLM 이 수신한 질문이 `주민번호 [주민등록번호] 연락처 [휴대전화] 계좌 [계좌번호] 메일 [이메일]` 로 돌아옵니다
-(모의 LLM 이 수신한 그대로 응답하므로). 무엇을 가렸는지는 응답 헤더 `X-PII-Masked: rrn,mobile,account,email` 과 요청 로그에 남습니다.
-끈 상태로 같은 요청을 보내면 숫자가 그대로 돌아옵니다.
+→ 답은 보낸 질문 그대로(원래 값) 돌아옵니다. LLM 에는 `주민번호 [주민등록번호1] 연락처 [휴대전화1] 계좌 [계좌번호1] 메일 [이메일1]` 이 가고,
+답 속 라벨은 사용자에게 돌려줄 때 원래 값으로 되돌립니다(설정 `recover_redacted`, 기본 켬 - Kong AI Sanitizer 의 자리 표시 · Recover redacted 와 같은 방식).
+같은 값은 같은 번호, 다른 값은 다른 번호이고 스트리밍 답도 되돌립니다. LLM 이 받은 글은 Kong 이 도는 환경에서 `curl -s 127.0.0.1:$MOCK_PORT/last`
+(모의 LLM 이 마지막으로 받은 질문)로, 빌드한 새 환경이면 `bash remote.sh verify` 의 4-1 결과로 봅니다.
+무엇을 가렸는지는 응답 헤더 `X-PII-Masked: rrn,mobile,account,email` 과 요청 로그에 남습니다.
+되돌리기를 끄면(Kong Manager → pii-masking → Recover redacted 해제) 답에도 라벨이 그대로 나옵니다.
 가리는 규칙(형식)은 Kong Manager 의 Routes → `poc` → Plugins → `pii-masking` → Rules 에서 보고 고칩니다 - README 「개인정보 마스킹 규칙」.
 
 ### 4-2 기밀 키워드 외부 전송 차단

@@ -3,7 +3,8 @@
 
   POST /v1/chat/completions        OpenAI 호환 가짜 LLM. 받은 마지막 사용자 메시지를 그대로 답한다
                                    ("stream": true 면 SSE 로 나눠 보냄). 게이트웨이가 LLM 에 실제로
-                                   무엇을 보냈는지(마스킹 여부 등)를 답변으로 확인할 수 있다.
+                                   무엇을 보냈는지 답변으로 확인할 수 있다 (4-1 개인정보 마스킹은 답이 원래 값으로
+                                   되돌아오므로 LLM 이 받은 글은 GET /last 로 본다).
                                    모델 이름에 down 이 들어 있거나, 요청 헤더 X-Mock-Down 에 그 모델 이름이
                                    오면 503 — 장애 대체(fallback) 시험용 (/poc 에 model=mock-llm 으로 보낼 때 주 모델 장애 재현).
                                    질문에 "점검 결과" 가 있으면 내부 IP·API 키·DB 접속 정보가 든 예시 답변
@@ -24,6 +25,7 @@
   POST /v1/traces                  OTLP/HTTP 수신 흉내 — 받은 건수만 센다
   POST /logs                       중앙 로그 저장소 흉내 — 최근 200건 보관
   GET  /stats                      위 수신 현황 · GET /logs 최근 로그 · GET /healthz
+  GET  /last                       모의 LLM 이 마지막으로 받은 사용자 메시지 — 4-1 마스킹 점검(응답은 원래 값으로 되돌아오므로 LLM 이 받은 글은 여기서 본다)
 
 표준 라이브러리만 사용한다. 시험 전용 — 운영 백엔드가 아니다.
 """
@@ -47,6 +49,7 @@ FIRST_TOKEN_DELAY = float(os.getenv("MOCK_FIRST_TOKEN_DELAY", "0.2"))
 _lock = threading.Lock()
 STATS = {"traces": 0, "trace_bytes": 0, "logs": 0, "chat": 0, "ocr": 0, "agents": 0, "a2a": 0}
 LOGS = []
+LAST_CHAT = {"text": ""}   # 모의 LLM 이 마지막으로 받은 사용자 메시지 (GET /last)
 # 에이전트가 다른 에이전트를 부를 때 — Kong 주소와 에이전트마다의 호출 키 (start.sh 가 넣음: "a=<키> b=<키> c=<키>")
 KONG_URL = os.getenv("MOCK_KONG_URL", "").rstrip("/")
 AGENT_KEYS = dict(x.split("=", 1) for x in os.getenv("MOCK_AGENT_KEYS", "").split() if "=" in x and x.split("=", 1)[1])
@@ -221,6 +224,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": {"message": "invalid json"}})
         bump("chat")
         text = last_user_text(body)
+        with _lock:
+            LAST_CHAT["text"] = text
         answer = text if text else "(빈 질문)"
         if "점검 결과" in text:   # 4-5 시험 — 답변에 내부 정보가 섞여 나오는 상황
             answer = SYSTEM_INFO_ANSWER
@@ -442,6 +447,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/logs":
             with _lock:
                 return self._json(200, LOGS[-int((qs.get("n") or ["20"])[0]):])
+        if u.path == "/last":
+            with _lock:
+                return self._json(200, dict(LAST_CHAT))
         if u.path.startswith("/agents/"):
             return self._agent(u, qs)
         return self._json(404, {"error": "not found"})

@@ -53,6 +53,10 @@ return {
                       } } } },
           { response_header = { type = "boolean", default = true,
                                 description = "가린 종류를 응답 헤더 X-PII-Masked 로 알린다" } },
+          -- Kong AI Sanitizer 의 Recover redacted 와 같음 — LLM 에는 번호 붙은 라벨([휴대전화1] …)을 보내고, 답에서는 원래 값으로 돌려준다
+          { recover_redacted = { type = "boolean", default = true,
+                                 description = "LLM 답 속 라벨([휴대전화1] 등)을 사용자에게 돌려줄 때 원래 값으로 되돌린다(스트리밍 답 포함). "
+                                            .. "끄면 사용자도 라벨을 그대로 받는다." } },
         },
     } },
   },

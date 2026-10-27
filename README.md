@@ -119,7 +119,7 @@ bash set-env.sh KONG_MANAGER_PASSWORD
 | 3-2 | Correlation ID 분산 추적 (MN-06-86) | `X-Correlation-ID`(`correlation-id`) · OpenTelemetry(`opentelemetry`) | 00 · 60 | Agent 까지 같은 ID · 사용자 → 에이전트 A → B · C 가 한 ID 로 |
 | 3-3 | 이상 징후 알림 (MN-03-79) | 사용자·경로별 지표(`prometheus`) + 알림 규칙 예시 + 번들 Prometheus·Grafana 대시보드(`/grafana`) | 00 · 80 · `alerts/` · `addons/monitoring/` | `:8100/metrics` · Grafana |
 | 3-4 | Kill-Switch (MN-01-73) | 경로·계정·서비스마다 꺼 둔 `request-termination` - Manager 에서 켜면 즉시 차단, 적용해도 그대로 | 00 · 10 · 40 | `kill-switch--poc` 를 켜서 503 · 끄면 200 |
-| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → `[주민등록번호]` 등 (이 번들 전용 플러그인 `pii-masking` - 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 수신한 질문 확인 |
+| 4-1 | 개인정보 마스킹 (PO-02-59) | 주민·카드·전화·계좌·이메일 → LLM 에는 `[주민등록번호1]` 처럼 번호 붙은 라벨, 답에서는 원래 값으로 되돌림(Kong AI Sanitizer 의 자리 표시 · Recover redacted 와 같은 방식, 스트리밍 포함) (이 번들 전용 플러그인 `pii-masking` - 규칙은 Kong Manager 의 Rules 에서 보고 고침) | 10 · `addons/kong-plugins` | 모의 LLM 이 받은 질문(`GET /last`) · 헤더 `X-PII-Masked` |
 | 4-2 | 기밀 키워드 외부 전송 차단 (PO-02-60) | `대외비`·`기밀` 등 → 400 (`ai-prompt-guard`) - 켜면 어느 모델로 가든 막음 | 10 | 400 · 일반 질문 200 |
 | 4-3 | 프롬프트 인젝션 차단 (PO-01-57) | 정규식(`ai-prompt-guard`) + 의미 기반(`ai-semantic-prompt-guard`) | 10 · 70 | 400 - 의미 기반은 임베딩이 있을 때 |
 | 4-4 | 유해 답변 → 표준 문구 (PO-05-65) | 키워드(PII 가드 `ai-custom-guardrail`) + 의미 기반(`ai-semantic-response-guard`) | 10 · 70 | 표준 문구 - 의미 기반은 임베딩이 있을 때 |

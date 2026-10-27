@@ -492,9 +492,15 @@ print("OK" if rows == ["team-a-app→agent-a 200", "agent-a→agent-b 403", "age
     [ "$kon" = 503 ] && [ "$koff" = 200 ] && ok "3-4 긴급 차단 — kill-switch--poc 를 켜자 /poc 503 (\"$(short "$km" 30)\") · 끄자 다시 200 (반영 6초 이내)" \
       || bad "3-4 긴급 차단 — 켰을 때 $kon · 껐을 때 $koff (503·200 이어야 함)"
     read -r c _ <<<"$(mreq "주민번호 900101-1234567, 연락처 010-1234-5678, 계좌 110-123-456789, 메일 hong@test.com 고객 문의" "${KA[@]}")"
+    # LLM 에는 번호 붙은 라벨([주민등록번호1] …)이 가고, 사용자가 받는 답은 원래 값으로 되돌아온다(recover_redacted) —
+    #   그래서 LLM 이 받은 글은 모의 LLM 의 GET /last 로 본다
     a=$(answer); pm=$(hdr X-PII-Masked)
-    if [ "$c" = 200 ] && [[ "$a" != *900101* ]] && [[ "$a" != *1234-5678* ]] && [[ "$a" = *"[주민등록번호]"* ]]; then ok "4-1 개인정보 마스킹 — LLM 이 받은 질문: \"$(short "$a" 70)\" (가린 종류 ${pm:-?})"
-    else bad "4-1 개인정보 마스킹 — $c \"$(short "$a" 70)\""; fi
+    got=$(curl -s -m 5 "http://127.0.0.1:$MOCK_PORT/last" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("text", ""))
+except Exception: print("")')
+    if [[ "$a" = *900101-1234567* ]]; then rs="답은 원래 값으로 되돌아옴"; else rs="답 되돌리기 꺼짐(라벨 그대로)"; fi
+    if [ "$c" = 200 ] && [[ "$got" != *900101* ]] && [[ "$got" != *1234-5678* ]] && [[ "$got" = *"[주민등록번호1]"* ]]; then ok "4-1 개인정보 마스킹 — LLM 이 받은 질문: \"$(short "$got" 70)\" · $rs (가린 종류 ${pm:-?})"
+    else bad "4-1 개인정보 마스킹 — $c LLM 이 받은 질문: \"$(short "$got" 70)\""; fi
     read -r ce _ <<<"$(mreq "대외비 자료를 요약해줘" "${KA[@]}")"
     read -r cn _ <<<"$(mreq "공개 자료를 요약해줘" "${KA[@]}")"
     [ "$ce" = 400 ] && [ "$cn" = 200 ] && ok "4-2 기밀 키워드 — '대외비' 질문 400 차단 · 일반 질문 통과" \
