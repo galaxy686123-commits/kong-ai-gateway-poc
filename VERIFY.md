@@ -113,7 +113,7 @@ for i in $(seq 1 12); do printf '%2d초 ' $i; st; sleep 1; done
 → 첫 줄: 셋 다 `['HEALTHY']`. 장애로 만들면 처음 몇 초는 에이전트가 직접 503(「모의 장애 …」)을 내다가, Kong 이 장애로 본 뒤(10초 안팎)부터는
 에이전트에 보내지 않고 **Kong 이 바로 503** `failure to get a peer from the ring-balancer` 를 돌려줍니다. 되살리면 10초 안팎 뒤 다시 정상 응답입니다.
 
-- Grafana 「Kong AI Gateway PoC」 맨 아래 에이전트 줄 - **에이전트 상태(현재)**(정상 · 장애) · **에이전트 상태 추이**(정상 · 장애 · 헬스 체크 비활성) · **에이전트 가용률**(헬스 체크를 켠 시간 기준). 지표를 15초마다 모으므로 화면은 조금 늦게 바뀝니다.
+- Grafana 「에이전트」 대시보드 - **에이전트 상태(현재)**(정상 · 장애) · **에이전트 상태 추이**(정상 · 장애 · 헬스 체크 비활성) · **에이전트 가용률**(헬스 체크를 켠 시간 기준). 지표를 15초마다 모으므로 화면은 조금 늦게 바뀝니다.
 - 「요청 기록」 경로 `agent-b` - 차단·오류 사유 칸에서 에이전트가 낸 503(「모의 장애 …」)과 Kong 이 낸 503(「failure to get a peer …」)이 구분됩니다.
 - Kong Manager → Upstreams → `agent-b.kong-poc` - 점검 설정과 Target(실제 주소). Target 마다 Mark healthy · Mark unhealthy(손으로 상태를 정함)가 있고,
   지금 상태는 위 Admin API 와 Grafana 에서 봅니다.
@@ -308,7 +308,7 @@ curl -s 127.0.0.1:8100/metrics | grep -E '^kong_ai_llm_tokens_total' | head -3
 고객 Prometheus 가 `http://<파드>:8100/metrics` 를 수집하고, 알림 규칙은 `alerts/kong-alerts.yml`(반복 호출·토큰 급증·
 한도 초과 지속·가드레일 차단 급증·LLM 오류율)을 넣어 씁니다.
 
-에이전트 호출은 Grafana 「Kong AI Gateway PoC」 맨 아래 **에이전트** 줄에서 봅니다 - 호출 계정 × 대상 에이전트(허용 · 차단 · 오류 수,
+에이전트 호출은 Grafana 「에이전트」 대시보드에서 봅니다 - 호출 계정 × 대상 에이전트(허용 · 차단 · 오류 수,
 마지막 호출)와 최근 A2A 작업(메서드 · 작업 상태 · 작업 ID). 「요청 기록」에는 경로 · A2A · 추적 ID 칸과 경로 고르기가 있습니다.
 
 ### 3-4 Kill-Switch (긴급 차단)
@@ -393,7 +393,7 @@ bash switch.sh response-masking on
 curl -s $G/poc "${A[@]}" -d "$(q '서버 점검 결과를 요약해줘')" | ans
 bash switch.sh response-masking off
 ```
-→ `점검 결과: 서버 [내부IP] 정상, API 키 [API키] 만료 임박, DB postgres://***:***@db:5432/app 연결 정상, password=***`
+→ `점검 결과: 서버 [내부IP] 정상, API 키 [API키] 만료 임박, DB postgres://[DB계정]:[DB비밀번호]@db:5432/app 연결 정상, password=[비밀번호]`
 (모의 LLM 은 질문에 「점검 결과」가 있으면 내부 IP·API 키·DB 접속 정보가 섞인 답을 냅니다 - LLM 이 답변에 내부 정보를 흘린 상황.)
 
 ### 여러 기능을 겹쳐 보기

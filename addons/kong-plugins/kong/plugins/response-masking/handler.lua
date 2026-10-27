@@ -1,4 +1,6 @@
 -- response-masking — 4-5 LLM 답변 속 사설 IP · API 키 · DB 접속 정보 · password 값을 가린다 (이 번들 전용 플러그인)
+--   가린 값은 종류를 알 수 있는 라벨([내부IP] · [API키] · [DB계정] · [DB비밀번호] · [비밀번호])로 바꾼다 —
+--   Kong AI Sanitizer 의 자리 표시(placeholder) 방식처럼 별표(***)로 가리지 않는다 (10-27 사용자 결정)
 --   답변을 다 받은 뒤 고치므로 스트리밍 답변에는 걸리지 않는다 (켤 때는 AI Proxy Advanced 의 스트리밍을 끈다 — 설정 파일 스위치가 함께 끔).
 --   다른 플러그인처럼 Kong Manager 에서 켜고 끈다. 순서: 답변 검사(가드레일) 뒤, 표준 문구 바꾸기(post-function) 앞.
 local ResponseMasking = { PRIORITY = -900, VERSION = "1.0.0" }
@@ -18,10 +20,10 @@ local RULES = {
     { "xox[abpr]%-[%w%-]+", "[API키]" },
   },
   db_url = {
-    { "(%a[%w%+%.%-]*://)[^:/@%s\"]+:[^@%s\"]+@", "%1***:***@" },
+    { "(%a[%w%+%.%-]*://)[^:/@%s\"]+:[^@%s\"]+@", "%1[DB계정]:[DB비밀번호]@" },
   },
   password = {
-    { "([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]%s*[=:]%s*)[^%s,;\"\\]+", "%1***" },
+    { "([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]%s*[=:]%s*)[^%s,;\"\\]+", "%1[비밀번호]" },
   },
 }
 local ORDER = { "ip", "api_key", "db_url", "password" }
