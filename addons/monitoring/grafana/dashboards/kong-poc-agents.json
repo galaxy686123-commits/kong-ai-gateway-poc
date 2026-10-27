@@ -525,7 +525,7 @@
         "type": "prometheus",
         "uid": "kong-poc-prometheus"
       },
-      "description": "헬스 체크(Active health checks)를 활성화한 시간 중 정상 서버가 하나 이상 있던 비율. 헬스 체크가 비활성인 에이전트는 가용률을 계산하지 않고 「비활성(가용률 제외)」로 표시한다.",
+      "description": "헬스 체크(Active health checks)를 활성화한 시간 중 정상 서버가 하나 이상 있던 비율. 헬스 체크가 비활성인 에이전트는 가용률을 계산하지 않고 「비활성(가용률 제외)」로 표시한다. 지금 등록되어 있는 에이전트(Upstream)만 표시합니다.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -676,7 +676,7 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "expr": "(100 * sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) / sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m])) >= 0"
+          "expr": "(100 * sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) / sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m])) >= 0 and on (upstream) (max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))"
         },
         {
           "refId": "B",
@@ -687,7 +687,7 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "expr": "sum_over_time(((1 - max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\"))) * max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) and on (upstream) (sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) > 0)"
+          "expr": "sum_over_time(((1 - max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=\"healthy\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\"))) * max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) and on (upstream) (sum_over_time((max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\", state=~\"healthy|unhealthy|dns_error\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))[$__range:1m]) > 0) and on (upstream) (max by (upstream) (label_replace(kong_upstream_target_health{upstream=~\"agent-.*\"}, \"upstream\", \"$1\", \"upstream\", \"(agent-[^.]+)\\\\..+\")))"
         },
         {
           "refId": "C",

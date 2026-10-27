@@ -1017,7 +1017,7 @@
         "x": 0,
         "y": 29
       },
-      "description": "AI Rate Limiting Advanced 적용 시 응답 헤더 기준 한도 · 잔여량. 잔여 토큰은 해당 Consumer 의 최근 호출 시점 값이며 한도 기간(예: 1분) 경과 후 초기화. 미적용 시 데이터 없음",
+      "description": "AI Rate Limiting Advanced 적용 시 응답 헤더 기준 한도와 최근 호출 시점의 잔여량. 한도 기간이 지나 다시 채워진 Consumer는 상태 「초기화됨」(잔여율 표시 안 함). 미적용 시 데이터 없음",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1077,6 +1077,30 @@
                 "value": 180
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상태"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최근 호출 시점 잔여"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
           }
         ]
       },
@@ -1097,7 +1121,7 @@
           "format": "table",
           "rawQuery": true,
           "refId": "A",
-          "rawSql": "WITH last AS (\n  SELECT DISTINCT ON (consumer) consumer, ts, ai_window, ai_limit, ai_remaining\n  FROM requests\n  WHERE $__timeFilter(ts) AND ai_limit IS NOT NULL AND consumer IS NOT NULL\n  ORDER BY consumer, ts DESC),\ntoday AS (\n  SELECT consumer, sum(total_tokens) AS t FROM requests\n  WHERE ts >= (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul') AND consumer IS NOT NULL\n  GROUP BY consumer)\nSELECT l.consumer AS \"Consumer\",\n  CASE WHEN l.ai_window LIKE 'second%' THEN '1초' WHEN l.ai_window LIKE 'minute%' THEN '1분' WHEN l.ai_window LIKE 'hour%' THEN '1시간'\n       WHEN l.ai_window LIKE 'day%' THEN '1일' WHEN l.ai_window LIKE 'month%' THEN '1개월' ELSE l.ai_window END AS \"한도 기간\",\n  l.ai_limit AS \"한도(토큰)\", l.ai_remaining AS \"잔여 토큰\",\n  round(100.0 * l.ai_remaining / nullif(l.ai_limit, 0)) AS \"잔여율 %\",\n  l.ts AS \"최근 호출\", coalesce(t.t, 0) AS \"금일 사용 토큰\"\nFROM last l LEFT JOIN today t USING (consumer)\nORDER BY 5, 1"
+          "rawSql": "WITH last AS (\n  SELECT DISTINCT ON (consumer) consumer, ts, ai_window, ai_limit, ai_remaining\n  FROM requests\n  WHERE $__timeFilter(ts) AND ai_limit IS NOT NULL AND consumer IS NOT NULL\n  ORDER BY consumer, ts DESC),\ntoday AS (\n  SELECT consumer, sum(total_tokens) AS t FROM requests\n  WHERE ts >= (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul') AND consumer IS NOT NULL\n  GROUP BY consumer),\nx AS (\n  SELECT l.*, CASE WHEN l.ai_window LIKE 'second%' THEN 1 WHEN l.ai_window LIKE 'minute%' THEN 60 WHEN l.ai_window LIKE 'hour%' THEN 3600\n                   WHEN l.ai_window LIKE 'day%' THEN 86400 WHEN l.ai_window LIKE 'month%' THEN 2592000 END AS sec\n  FROM last l)\nSELECT x.consumer AS \"Consumer\",\n  CASE WHEN x.ai_window LIKE 'second%' THEN '1초' WHEN x.ai_window LIKE 'minute%' THEN '1분' WHEN x.ai_window LIKE 'hour%' THEN '1시간'\n       WHEN x.ai_window LIKE 'day%' THEN '1일' WHEN x.ai_window LIKE 'month%' THEN '1개월' ELSE x.ai_window END AS \"한도 기간\",\n  x.ai_limit AS \"한도(토큰)\", x.ai_remaining AS \"최근 호출 시점 잔여\",\n  CASE WHEN reset THEN NULL ELSE round(100.0 * x.ai_remaining / nullif(x.ai_limit, 0)) END AS \"잔여율 %\",\n  x.ts AS \"최근 호출\",\n  CASE WHEN reset THEN '초기화됨' ELSE '' END AS \"상태\",\n  coalesce(t.t, 0) AS \"금일 사용 토큰\"\nFROM x\nCROSS JOIN LATERAL (SELECT x.sec IS NOT NULL AND now() - x.ts >= make_interval(secs => 2 * x.sec) AS reset) r\nLEFT JOIN today t USING (consumer)\nORDER BY 5, 1"
         }
       ]
     },
