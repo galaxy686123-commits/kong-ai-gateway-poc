@@ -8,7 +8,9 @@
 --   막힐 요청은 손대지 않는다 — 질문 가드(775·771)·AI 프록시(770)·시맨틱 캐시(765) 앞이라 가드·캐시·LLM 은 가린 질문을 본다.
 --   되돌리기는 이 플러그인의 header_filter · body_filter 에서 한다. 스트리밍은 OpenAI 형식(choices[].delta.content)의
 --   조각을 이어 붙여, 라벨이 여러 조각에 걸쳐 와도 원래 값으로 바꾼다 (라벨 앞부분만 온 조각은 다음 조각까지 잠시 붙잡아 둠).
-local PiiMasking = { PRIORITY = 800, VERSION = "1.2.0" }
+--   원래 값은 사용자에게 보내는 답에만 넣는다 — 요청 로그(Log payloads)의 응답과 시맨틱 캐시에는 LLM 이 준 답 그대로(라벨)
+--   남기고(log 단계), 캐시에서 꺼낸 답도 그 요청의 값으로 되돌린다 (10-28 사용자 「Grafana 응답은 LLM 이 준 원문으로」).
+local PiiMasking = { PRIORITY = 800, VERSION = "1.3.0" }
 
 -- 규칙은 설정(config.rules)에서 읽는다 — Kong Manager 에서 보고 고친다. 비어 있으면 기본 6종(defaults.lua)
 --   기본 규칙(rrn·card·mobile·landline·account·email)은 config.types 로 켜고 끄고, 직접 더한 규칙은 늘 적용한다
@@ -42,14 +44,14 @@ local function replace_all(s, pattern, fn)
   return table.concat(out), n
 end
 
--- 라벨을 원래 값으로 (긴 라벨부터 — ] 로 끝나지 않는 라벨끼리 앞부분이 겹쳐도 맞게)
-local function restore_text(s, ctx)
+-- s 안의 keys 를 map[key] 로 모두 바꾼다 (keys 는 긴 것부터 — 앞부분이 겹치는 것끼리도 맞게)
+local function swap_all(s, keys, map)
   if type(s) ~= "string" or s == "" then return s end
-  for _, lb in ipairs(ctx.labels) do
-    if s:find(lb, 1, true) then
-      local v, out, i = ctx.restore[lb], {}, 1
+  for _, k in ipairs(keys) do
+    if s:find(k, 1, true) then
+      local v, out, i = map[k], {}, 1
       while true do
-        local a, b = s:find(lb, i, true)
+        local a, b = s:find(k, i, true)
         if not a then break end
         out[#out + 1] = s:sub(i, a - 1)
         out[#out + 1] = v
@@ -62,24 +64,32 @@ local function restore_text(s, ctx)
   return s
 end
 
--- JSON 안의 모든 글자 값을 되돌린다
-local function restore_json(v, ctx)
-  if type(v) == "string" then return restore_text(v, ctx) end
+-- 라벨을 원래 값으로 (긴 라벨부터 — ] 로 끝나지 않는 라벨끼리 앞부분이 겹쳐도 맞게)
+local function restore_text(s, ctx) return swap_all(s, ctx.labels, ctx.restore) end
+
+-- 원래 값을 라벨로 되바꾼다 (요청 로그 · 시맨틱 캐시용, 긴 값부터)
+local function mask_back_text(s, ctx) return swap_all(s, ctx.values, ctx.masked) end
+
+-- JSON 안의 모든 글자 값을 fn 으로 바꾼다
+local function map_json(v, fn, ctx)
+  if type(v) == "string" then return fn(v, ctx) end
   if type(v) == "table" then
-    for k, x in pairs(v) do v[k] = restore_json(x, ctx) end
+    for k, x in pairs(v) do v[k] = map_json(x, fn, ctx) end
   end
   return v
 end
 
--- 본문 전체(JSON 이면 모든 글자 값, 아니면 글 그대로)를 되돌린다
-local function restore_body(body, ctx)
+-- 본문 전체(JSON 이면 모든 글자 값, 아니면 글 그대로)를 fn 으로 바꾼다
+local function map_body(body, fn, ctx)
   local obj = cjson.decode(body)
   if type(obj) == "table" then
-    local out = cjson.encode(restore_json(obj, ctx))
+    local out = cjson.encode(map_json(obj, fn, ctx))
     if out then return out end
   end
-  return restore_text(body, ctx)
+  return fn(body, ctx)
 end
+
+local function restore_body(body, ctx) return map_body(body, restore_text, ctx) end
 
 -- 스트리밍: 끝부분이 어떤 라벨의 앞부분이면 다음 조각까지 붙잡아 둔다 → (지금 보낼 글, 붙잡아 둘 글)
 local function split_hold(text, ctx)
@@ -191,13 +201,17 @@ function PiiMasking:access(conf)
     if conf.response_header then kong.response.set_header("X-PII-Masked", table.concat(kinds, ",")) end
     kong.log.set_serialize_value("pii_masked", { count = total, types = table.concat(kinds, ",") })
     if conf.recover_redacted then
-      local labels, maxlen = {}, 0
-      for lb in pairs(restore) do
+      local labels, values, masked, maxlen = {}, {}, {}, 0
+      for lb, v in pairs(restore) do
         labels[#labels + 1] = lb
+        values[#values + 1] = v
+        masked[v] = lb
         if #lb > maxlen then maxlen = #lb end
       end
       table.sort(labels, function(a, b) return #a > #b end)
-      kong.ctx.plugin.recover = { restore = restore, labels = labels, maxlen = maxlen, pending = {}, buf = "" }
+      table.sort(values, function(a, b) return #a > #b end)
+      kong.ctx.plugin.recover = { restore = restore, labels = labels, values = values, masked = masked,
+                                  maxlen = maxlen, pending = {}, buf = "" }
       kong.service.request.clear_header("Accept-Encoding")   -- 압축된 답은 글자를 바꿀 수 없다
     end
   end
@@ -213,12 +227,13 @@ function PiiMasking:header_filter(conf)
   --   그래서 body_filter 에서 바꾸면 덮어써진다 → AI Proxy(770)보다 먼저 도는 여기서(800) 모은 LLM 답 원본을 되돌려 둔다.
   --   쓰는 자리는 PDK 가 response 단계 set_raw_body 로 쓰는 ngx.ctx.buffered_body
   --   (response 단계는 header_filter · body_filter 와 한 플러그인에 둘 수 없어 쓰지 않음)
+  --   모은 본문이 없으면(시맨틱 캐시가 저장한 답을 돌려줌 등 — LLM 을 부르지 않은 응답) body_filter 에서 조각을 모아 되돌린다
   if not ctx.sse and ngx.ctx.buffered_proxying then
     local body = kong.service.response.get_raw_body()
     if type(body) == "string" and body ~= "" then
       ngx.ctx.buffered_body = restore_body(body, ctx)
+      ctx.done = true
     end
-    ctx.done = true
   end
 end
 
@@ -266,6 +281,28 @@ function PiiMasking:body_filter(conf)
   local body = table.concat(ctx.parts or {})
   ctx.parts = nil
   ngx.arg[1] = restore_body(body, ctx)
+end
+
+-- 요청 로그 · 시맨틱 캐시에는 LLM 이 준 답 그대로(라벨)를 남긴다
+--   AI Proxy 는 되돌린 답을 공용 응답 본문(kong.llm.plugin.ctx 의 _global.response_body)에 두고 응답 기록(Log payloads)에 쓰며,
+--   시맨틱 캐시는 로그 단계에서 그 본문을 저장한다(3.16 확인). 그대로 두면 Grafana 「요청 기록」 응답 칸에 원래 값이 보이고,
+--   가리면 같은 질문이 되는 다른 사용자가 캐시에서 이 값을 받는다 → 로그 단계에서 AI Proxy(770) · 시맨틱 캐시(765) ·
+--   로그 플러그인보다 먼저 도는 여기서(800) 원래 값을 라벨로 되바꾼다. 응답 기록은 Log payloads 를 켠 대상만 있으므로 있을 때만 바꾼다
+local ai_ctx
+function PiiMasking:log(conf)
+  local ctx = kong.ctx.plugin.recover
+  if not ctx then return end
+  if ai_ctx == nil then
+    local ok, m = pcall(require, "kong.llm.plugin.ctx")
+    ai_ctx = ok and m or false
+  end
+  if not ai_ctx then return end
+  local ok, body = pcall(ai_ctx.get_namespaced_ctx, "_global", "response_body")
+  if not ok or type(body) ~= "string" or body == "" then return end
+  local back = map_body(body, mask_back_text, ctx)
+  if back == body then return end
+  pcall(ai_ctx.set_namespaced_ctx, "_global", "response_body", back)
+  kong.log.set_serialize_value("ai.proxy.payload.response", back, { mode = "replace" })
 end
 
 return PiiMasking
