@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import time
+import zlib
 
 LOG = os.path.join(os.environ["LOGS"], "audit.log")
 POS = os.path.join(os.environ["DATA_DIR"], "state", "reqlog.pos")
@@ -207,6 +208,7 @@ def row_of(line):
     rl = d.get("ai_ratelimit") if isinstance(d.get("ai_ratelimit"), dict) else {}   # 2-4 토큰 한도를 켰을 때만 (post-function block-message)
     pm = d.get("pii_masked") if isinstance(d.get("pii_masked"), dict) else {}       # 질문 개인정보 마스킹(번들 pii-masking)이 가렸을 때만
     cg = ai.get("custom-guardrail") if isinstance(ai.get("custom-guardrail"), dict) else {}
+    eb = unzip_body(d.get("error_body"))
     return {
         "request_id": rid,
         "ts": d["started_at"] / 1000.0,
@@ -231,7 +233,7 @@ def row_of(line):
         "cost": usage.get("cost") if isinstance(usage.get("cost"), (int, float)) and not isinstance(usage.get("cost"), bool) else None,
         "workspace": d.get("workspace_name") or None,   # 팀 워크스페이스(workspace-copy.sh)의 호출도 같은 요청 로그에 쌓인다
         "forwarded_for": forwarded_for(req.get("headers")),
-        "error_message": error_message(d.get("error_body")) if as_int(resp.get("status")) and as_int(resp.get("status")) >= 400 else None,
+        "error_message": error_message(eb) if as_int(resp.get("status")) and as_int(resp.get("status")) >= 400 else None,
         "kong_latency_ms": as_int(lat.get("kong")),
         "ai_window": rl.get("window"),
         "ai_limit": as_int(rl.get("limit")),
@@ -240,12 +242,30 @@ def row_of(line):
         "a2a_method": rpc.get("method") if isinstance(rpc.get("method"), str) else None,
         "a2a_task_id": rpc.get("task_id") if isinstance(rpc.get("task_id"), str) else None,
         "a2a_task_state": rpc.get("task_state") if isinstance(rpc.get("task_state"), str) else None,
-        "end_user": end_user(req.get("headers"), resp.get("status"), d.get("error_body")),
+        "end_user": end_user(req.get("headers"), resp.get("status"), eb),
         "masked_types": (pm.get("types") or None) if as_int(pm.get("count")) else None,
         "masked_count": as_int(pm.get("count")) or None,
         "output_masked": as_int(d.get("output_masked")) or None,     # 답변 마스킹(번들 response-masking)이 가렸을 때만
         "guardrail_block": guardrail_block(cg),
     }
+
+
+def unzip_body(body):
+    """block-message 가 남긴 오류 본문(error_body) → 글. 호출 측이 Accept-Encoding: gzip 을 보내면 Kong AI 프록시가
+    LLM 응답(오류 포함)을 gzip 으로 압축해 돌려주므로(Kong 3.16 kong/llm/plugin/base.lua) 본문이 압축된 채 남는다 → 풀어서 읽는다.
+    줄을 surrogateescape 로 읽어 두어 원래 바이트로 되돌릴 수 있다. 300바이트에서 잘렸으면 앞부분만 풀린다."""
+    if not isinstance(body, str) or not body.startswith("\x1f"):
+        return body
+    try:
+        raw = body.encode("utf-8", "surrogateescape")
+    except UnicodeEncodeError:
+        return body
+    if raw[:2] != b"\x1f\x8b":
+        return body
+    try:
+        return zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw).decode("utf-8", "replace")
+    except zlib.error:
+        return "(압축된 응답 - 사유를 읽지 못함)"
 
 
 def guardrail_block(cg):
@@ -308,7 +328,12 @@ def lit(v):
         return str(v)
     if isinstance(v, float):
         return repr(v)
-    s = str(v).replace("\x00", "")
+    s = str(v)
+    try:   # 줄을 surrogateescape 로 읽음 — UTF-8 이 아닌 바이트는 예전처럼 �
+        s = s.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    except UnicodeEncodeError:
+        s = s.encode("utf-8", "replace").decode("utf-8")
+    s = s.replace("\x00", "")
     if len(s) > MAX_FIELD:
         s = s[:MAX_FIELD] + "\n…(이후 생략)"
     return "'" + s.replace("'", "''") + "'"
@@ -373,7 +398,7 @@ def ingest():
                 continue
             rows = []
             for line in chunk[:end + 1].splitlines():
-                r = row_of(line.decode("utf-8", "replace"))
+                r = row_of(line.decode("utf-8", "surrogateescape"))   # 원래 바이트 보존 — 압축된 오류 본문을 풀려고 (unzip_body)
                 if r and r["ts"] >= oldest:
                     rows.append(r)
             if rows:

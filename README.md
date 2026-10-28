@@ -567,6 +567,8 @@ https://<8000 외부 주소>/grafana/        admin / 설정 파일의 GRAFANA_AD
   막히거나 실패한 요청(4xx · 5xx)은 **차단 · 오류 사유**(응답 본문의 메시지 - 예: `request blocked by ACL`, `No API key found in request`)가,
   모든 요청은 **Kong ms**(그 가운데 Kong 이 쓴 시간)가 남습니다. 사유와 토큰 한도의 남은 양은 전역 플러그인 `post-function`
   (`block-message`)이 만들어 남기므로, 이 플러그인을 고친 판을 적용한 뒤 들어온 요청부터 보입니다.
+  호출 측이 `Accept-Encoding: gzip` 을 보내면 AI 프록시가 LLM 의 오류 응답도 gzip 으로 압축해 돌려주므로, 수집기가 압축된 사유를 풀어서 기록합니다
+  (수집기를 고치기 전에 들어온 행은 깨진 채 남음).
   DB 에는 `REQLOG_KEEP_DAYS`(30)일만 두고 지난 것은 지웁니다 - 요청 로그 파일은 그대로입니다. `REQLOG=off` 면 옮기지 않습니다.
   Grafana 는 읽기 전용 계정 `reqlog_reader`(비밀번호 `REQLOG_DB_PASSWORD`, 처음 기동할 때 만듦)로 읽습니다.
   프롬프트 · 응답 원문이 그대로 저장되므로 조회 권한(Grafana 계정)과 보관 기간을 정해 두세요. 상태는 `bash status.sh` 의 「요청 기록」 줄 · `logs/reqlog.log`.
