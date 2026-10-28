@@ -67,22 +67,326 @@
         "definition": "보안 기록 플러그인"
       },
       {
-        "name": "cols",
-        "label": "표시 열",
-        "type": "custom",
-        "multi": true,
-        "includeAll": true,
+        "type": "switch",
+        "name": "c01",
+        "label": "시각",
+        "hide": 0,
+        "query": "",
         "current": {
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "text": "시각",
+          "value": "시각"
         },
-        "query": "시각,동작,플러그인,사유,Consumer,최종 사용자(SSO),Route,Workspace,상태 코드,마스킹 종류,마스킹 개수,답변 마스킹 개수,클라이언트 IP,추적 ID",
-        "options": [],
-        "description": "보안 이벤트 목록에 표시할 열"
+        "options": [
+          {
+            "text": "시각",
+            "value": "시각",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c02",
+        "label": "동작",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "동작",
+          "value": "동작"
+        },
+        "options": [
+          {
+            "text": "동작",
+            "value": "동작",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c03",
+        "label": "플러그인",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "플러그인",
+          "value": "플러그인"
+        },
+        "options": [
+          {
+            "text": "플러그인",
+            "value": "플러그인",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c04",
+        "label": "사유",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "사유",
+          "value": "사유"
+        },
+        "options": [
+          {
+            "text": "사유",
+            "value": "사유",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c05",
+        "label": "Consumer",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Consumer",
+          "value": "Consumer"
+        },
+        "options": [
+          {
+            "text": "Consumer",
+            "value": "Consumer",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c06",
+        "label": "최종 사용자(SSO)",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "최종 사용자(SSO)",
+          "value": "최종 사용자(SSO)"
+        },
+        "options": [
+          {
+            "text": "최종 사용자(SSO)",
+            "value": "최종 사용자(SSO)",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c07",
+        "label": "Route",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Route",
+          "value": "Route"
+        },
+        "options": [
+          {
+            "text": "Route",
+            "value": "Route",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c08",
+        "label": "Workspace",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Workspace",
+          "value": "Workspace"
+        },
+        "options": [
+          {
+            "text": "Workspace",
+            "value": "Workspace",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c09",
+        "label": "상태 코드",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "상태 코드",
+          "value": "상태 코드"
+        },
+        "options": [
+          {
+            "text": "상태 코드",
+            "value": "상태 코드",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c10",
+        "label": "마스킹 종류",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "마스킹 종류",
+          "value": "마스킹 종류"
+        },
+        "options": [
+          {
+            "text": "마스킹 종류",
+            "value": "마스킹 종류",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c11",
+        "label": "마스킹 개수",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "마스킹 개수",
+          "value": "마스킹 개수"
+        },
+        "options": [
+          {
+            "text": "마스킹 개수",
+            "value": "마스킹 개수",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c12",
+        "label": "답변 마스킹 개수",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "답변 마스킹 개수",
+          "value": "답변 마스킹 개수"
+        },
+        "options": [
+          {
+            "text": "답변 마스킹 개수",
+            "value": "답변 마스킹 개수",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c13",
+        "label": "클라이언트 IP",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "클라이언트 IP",
+          "value": "클라이언트 IP"
+        },
+        "options": [
+          {
+            "text": "클라이언트 IP",
+            "value": "클라이언트 IP",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c14",
+        "label": "추적 ID",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "추적 ID",
+          "value": "추적 ID"
+        },
+        "options": [
+          {
+            "text": "추적 ID",
+            "value": "추적 ID",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
       }
     ]
   },
@@ -909,12 +1213,12 @@
           "options": {
             "byVariable": true,
             "include": {
-              "variable": "${cols:csv},request_id"
+              "variable": "${c01},${c02},${c03},${c04},${c05},${c06},${c07},${c08},${c09},${c10},${c11},${c12},${c13},${c14},request_id"
             }
           }
         }
       ],
-      "description": "막거나 가린 요청. 표시 열에서 볼 열을 선택합니다"
+      "description": "막거나 가린 요청. 상단의 열 이름 스위치로 표시할 열을 켜고 끕니다"
     },
     {
       "id": 13,

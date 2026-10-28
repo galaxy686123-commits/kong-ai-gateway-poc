@@ -111,116 +111,6 @@
         "includeAll": false
       },
       {
-        "type": "custom",
-        "name": "cols",
-        "label": "표시 열",
-        "description": "요청 목록에 표시할 열(복수 선택, All = 전체 열)",
-        "query": "시각,Consumer,최종 사용자(SSO),Route,Workspace,클라이언트 IP,원 IP(XFF),모델,상태 코드,차단 · 오류 사유,A2A,토큰,지연 ms,Kong ms,프롬프트,응답,추적 ID",
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "options": [
-          {
-            "selected": true,
-            "text": "All",
-            "value": "$__all"
-          },
-          {
-            "selected": false,
-            "text": "시각",
-            "value": "시각"
-          },
-          {
-            "selected": false,
-            "text": "Consumer",
-            "value": "Consumer"
-          },
-          {
-            "selected": false,
-            "text": "최종 사용자(SSO)",
-            "value": "최종 사용자(SSO)"
-          },
-          {
-            "selected": false,
-            "text": "Route",
-            "value": "Route"
-          },
-          {
-            "selected": false,
-            "text": "Workspace",
-            "value": "Workspace"
-          },
-          {
-            "selected": false,
-            "text": "클라이언트 IP",
-            "value": "클라이언트 IP"
-          },
-          {
-            "selected": false,
-            "text": "원 IP(XFF)",
-            "value": "원 IP(XFF)"
-          },
-          {
-            "selected": false,
-            "text": "모델",
-            "value": "모델"
-          },
-          {
-            "selected": false,
-            "text": "상태 코드",
-            "value": "상태 코드"
-          },
-          {
-            "selected": false,
-            "text": "차단 · 오류 사유",
-            "value": "차단 · 오류 사유"
-          },
-          {
-            "selected": false,
-            "text": "A2A",
-            "value": "A2A"
-          },
-          {
-            "selected": false,
-            "text": "토큰",
-            "value": "토큰"
-          },
-          {
-            "selected": false,
-            "text": "지연 ms",
-            "value": "지연 ms"
-          },
-          {
-            "selected": false,
-            "text": "Kong ms",
-            "value": "Kong ms"
-          },
-          {
-            "selected": false,
-            "text": "프롬프트",
-            "value": "프롬프트"
-          },
-          {
-            "selected": false,
-            "text": "응답",
-            "value": "응답"
-          },
-          {
-            "selected": false,
-            "text": "추적 ID",
-            "value": "추적 ID"
-          }
-        ],
-        "multi": true,
-        "includeAll": true
-      },
-      {
         "type": "textbox",
         "name": "q",
         "label": "검색(프롬프트 · 응답 · 추적 ID)",
@@ -239,6 +129,397 @@
           "text": "",
           "value": ""
         }
+      },
+      {
+        "type": "switch",
+        "name": "c01",
+        "label": "시각",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "시각",
+          "value": "시각"
+        },
+        "options": [
+          {
+            "text": "시각",
+            "value": "시각",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c02",
+        "label": "Consumer",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Consumer",
+          "value": "Consumer"
+        },
+        "options": [
+          {
+            "text": "Consumer",
+            "value": "Consumer",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c03",
+        "label": "최종 사용자(SSO)",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "최종 사용자(SSO)",
+          "value": "최종 사용자(SSO)"
+        },
+        "options": [
+          {
+            "text": "최종 사용자(SSO)",
+            "value": "최종 사용자(SSO)",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c04",
+        "label": "Route",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Route",
+          "value": "Route"
+        },
+        "options": [
+          {
+            "text": "Route",
+            "value": "Route",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c05",
+        "label": "Workspace",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Workspace",
+          "value": "Workspace"
+        },
+        "options": [
+          {
+            "text": "Workspace",
+            "value": "Workspace",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c06",
+        "label": "클라이언트 IP",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "클라이언트 IP",
+          "value": "클라이언트 IP"
+        },
+        "options": [
+          {
+            "text": "클라이언트 IP",
+            "value": "클라이언트 IP",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c07",
+        "label": "원 IP(XFF)",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "원 IP(XFF)",
+          "value": "원 IP(XFF)"
+        },
+        "options": [
+          {
+            "text": "원 IP(XFF)",
+            "value": "원 IP(XFF)",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c08",
+        "label": "모델",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "모델",
+          "value": "모델"
+        },
+        "options": [
+          {
+            "text": "모델",
+            "value": "모델",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c09",
+        "label": "상태 코드",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "상태 코드",
+          "value": "상태 코드"
+        },
+        "options": [
+          {
+            "text": "상태 코드",
+            "value": "상태 코드",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c10",
+        "label": "차단 · 오류 사유",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "차단 · 오류 사유",
+          "value": "차단 · 오류 사유"
+        },
+        "options": [
+          {
+            "text": "차단 · 오류 사유",
+            "value": "차단 · 오류 사유",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c11",
+        "label": "A2A",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "A2A",
+          "value": "A2A"
+        },
+        "options": [
+          {
+            "text": "A2A",
+            "value": "A2A",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c12",
+        "label": "토큰",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "토큰",
+          "value": "토큰"
+        },
+        "options": [
+          {
+            "text": "토큰",
+            "value": "토큰",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c13",
+        "label": "지연 ms",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "지연 ms",
+          "value": "지연 ms"
+        },
+        "options": [
+          {
+            "text": "지연 ms",
+            "value": "지연 ms",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c14",
+        "label": "Kong ms",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "Kong ms",
+          "value": "Kong ms"
+        },
+        "options": [
+          {
+            "text": "Kong ms",
+            "value": "Kong ms",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c15",
+        "label": "프롬프트",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "프롬프트",
+          "value": "프롬프트"
+        },
+        "options": [
+          {
+            "text": "프롬프트",
+            "value": "프롬프트",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c16",
+        "label": "응답",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "응답",
+          "value": "응답"
+        },
+        "options": [
+          {
+            "text": "응답",
+            "value": "응답",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "name": "c17",
+        "label": "추적 ID",
+        "hide": 0,
+        "query": "",
+        "current": {
+          "text": "추적 ID",
+          "value": "추적 ID"
+        },
+        "options": [
+          {
+            "text": "추적 ID",
+            "value": "추적 ID",
+            "selected": true
+          },
+          {
+            "text": "-",
+            "value": "-",
+            "selected": false
+          }
+        ]
       }
     ]
   },
@@ -256,7 +537,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 0
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -309,7 +590,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 0
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -362,7 +643,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 0
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -415,7 +696,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 0
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -463,12 +744,12 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 0
+        "y": 15
       },
       "transparent": true,
       "options": {
         "mode": "markdown",
-        "content": "**사용 안내** - 요청 목록의 프롬프트 · 응답을 선택하면 하단에 전문이 표시됩니다(값 보기 아이콘으로도 확인 가능). **표시 열**에서 목록에 표시할 열을 선택합니다.\n\n프롬프트 · 응답은 Kong Manager 에서 Target 의 **Log payloads** 를 활성화한 요청만 기록됩니다. 요청 로그는 10초 주기로 수집하며 30일 보관합니다. **추적 ID** 를 선택하면 연결된 호출만 조회합니다."
+        "content": "**사용 안내** - 요청 목록의 프롬프트 · 응답을 선택하면 하단에 전문이 표시됩니다(값 보기 아이콘으로도 확인 가능). 상단의 열 이름 스위치로 목록에 표시할 열을 켜고 끕니다.\n\n프롬프트 · 응답은 Kong Manager 에서 Target 의 **Log payloads** 를 활성화한 요청만 기록됩니다. 요청 로그는 10초 주기로 수집하며 30일 보관합니다. **추적 ID** 를 선택하면 연결된 호출만 조회합니다."
       }
     },
     {
@@ -483,7 +764,7 @@
         "h": 15,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 0
       },
       "targets": [
         {
@@ -647,7 +928,7 @@
                 "value": [
                   {
                     "title": "전문 보기",
-                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${route:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${cols:queryparam}&${__url_time_range}"
+                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${route:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${c01:queryparam}&${c02:queryparam}&${c03:queryparam}&${c04:queryparam}&${c05:queryparam}&${c06:queryparam}&${c07:queryparam}&${c08:queryparam}&${c09:queryparam}&${c10:queryparam}&${c11:queryparam}&${c12:queryparam}&${c13:queryparam}&${c14:queryparam}&${c15:queryparam}&${c16:queryparam}&${c17:queryparam}&${__url_time_range}"
                   }
                 ]
               }
@@ -668,7 +949,7 @@
                 "value": [
                   {
                     "title": "전문 보기",
-                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${route:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${cols:queryparam}&${__url_time_range}"
+                    "url": "/d/kong-poc-reqlog/request-log?${user:queryparam}&${model:queryparam}&${route:queryparam}&${status:queryparam}&${q:queryparam}&var-rid=${__data.fields.request_id}&${c01:queryparam}&${c02:queryparam}&${c03:queryparam}&${c04:queryparam}&${c05:queryparam}&${c06:queryparam}&${c07:queryparam}&${c08:queryparam}&${c09:queryparam}&${c10:queryparam}&${c11:queryparam}&${c12:queryparam}&${c13:queryparam}&${c14:queryparam}&${c15:queryparam}&${c16:queryparam}&${c17:queryparam}&${__url_time_range}"
                   }
                 ]
               }
@@ -773,7 +1054,7 @@
                 "value": [
                   {
                     "title": "동일 추적 ID 호출 조회",
-                    "url": "/d/kong-poc-reqlog/request-log?var-q=${__value.raw}&${cols:queryparam}&${__url_time_range}"
+                    "url": "/d/kong-poc-reqlog/request-log?var-q=${__value.raw}&${c01:queryparam}&${c02:queryparam}&${c03:queryparam}&${c04:queryparam}&${c05:queryparam}&${c06:queryparam}&${c07:queryparam}&${c08:queryparam}&${c09:queryparam}&${c10:queryparam}&${c11:queryparam}&${c12:queryparam}&${c13:queryparam}&${c14:queryparam}&${c15:queryparam}&${c16:queryparam}&${c17:queryparam}&${__url_time_range}"
                   }
                 ]
               }
@@ -812,7 +1093,7 @@
           "options": {
             "byVariable": true,
             "include": {
-              "variable": "${cols:csv},request_id"
+              "variable": "${c01},${c02},${c03},${c04},${c05},${c06},${c07},${c08},${c09},${c10},${c11},${c12},${c13},${c14},${c15},${c16},${c17},request_id"
             }
           }
         }
